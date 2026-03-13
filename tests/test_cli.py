@@ -100,3 +100,63 @@ class TestCliRunner:
             )
         assert "max_retries=3" in result.output
         assert "max_turns=200" in result.output
+
+    def test_help_shows_verbose_and_dry_run(self) -> None:
+        result = runner.invoke(app, ["run", "--help"])
+        assert result.exit_code == 0
+        assert "--verbose" in result.output
+        assert "--dry-run" in result.output
+
+    def test_verbose_flag_reserved(self, fake_repo: Path) -> None:
+        """Verbose flag is accepted; behavior added when pipeline stages exist."""
+        with patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"):
+            result = runner.invoke(
+                app,
+                ["run", "--change", "test-change", "--repo", str(fake_repo), "--verbose"],
+            )
+        assert result.exit_code == 0
+
+    def test_dry_run_prints_full_plan(self, fake_repo: Path) -> None:
+        with patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"):
+            result = runner.invoke(
+                app,
+                ["run", "--change", "test-change", "--repo", str(fake_repo), "--dry-run"],
+            )
+        assert result.exit_code == 0
+        assert "test-change" in result.output
+        assert "harness/test-change" in result.output
+        assert "uv run pytest -v" in result.output
+        assert "uv run ruff check" in result.output
+        assert "uv run ruff format" in result.output
+        assert "uv run mypy src/" in result.output
+        assert "claude --output-format json" in result.output
+        assert "[harness] test-change" in result.output
+        assert "max retries: 3" in result.output
+
+    def test_dry_run_reflects_custom_options(self, fake_repo: Path) -> None:
+        with patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"):
+            result = runner.invoke(
+                app,
+                [
+                    "run",
+                    "--change",
+                    "test-change",
+                    "--repo",
+                    str(fake_repo),
+                    "--dry-run",
+                    "--max-retries",
+                    "7",
+                    "--max-turns",
+                    "50",
+                ],
+            )
+        assert result.exit_code == 0
+        assert "max retries: 7" in result.output
+        assert "--max-turns 50" in result.output
+
+    def test_dry_run_invalid_inputs(self) -> None:
+        result = runner.invoke(
+            app,
+            ["run", "--change", "nonexistent", "--repo", "/nonexistent", "--dry-run"],
+        )
+        assert result.exit_code == 1

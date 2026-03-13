@@ -40,6 +40,11 @@ Requires Python 3.13+ and `uv`.
 - **Claude Code is the agent runtime.** No custom LLM client or agent loop. The harness dispatches Claude Code CLI and benefits from every upstream improvement.
 - **Workers are stateless.** Each dispatch is a fresh Claude Code invocation. Context comes from the repo and the prompt.
 - **Minimal abstraction.** Functions that call subprocess.run and parse JSON. No framework.
+- **Agent-debuggable by default.** Every function that performs I/O (subprocess, git, file) logs to stderr and returns a structured result. No fire-and-forget. Pipeline stages are independently callable with explicit typed parameters. stderr is the diagnostic channel (progress, timing, outcomes); stdout is reserved for final output (exception: `--dry-run` prints the plan to stdout).
+
+### Logging conventions
+
+Use `typer.echo(..., err=True)` for stderr output. One line at stage entry (stage name + key inputs), one line at stage exit (stage name + outcome). Default is concise. `--verbose` adds subprocess command details, working directories, and output previews.
 
 ## CLI documentation
 

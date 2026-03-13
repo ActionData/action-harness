@@ -11,6 +11,13 @@ app = typer.Typer(
     rich_markup_mode="markdown",
 )
 
+BOOTSTRAP_EVAL_COMMANDS = [
+    "uv run pytest -v",
+    "uv run ruff check .",
+    "uv run ruff format --check .",
+    "uv run mypy src/",
+]
+
 
 @app.callback()
 def main() -> None:
@@ -63,6 +70,10 @@ def run(
     repo: Path = typer.Option(..., help="Path to the target repository"),
     max_retries: int = typer.Option(3, help="Maximum eval retry attempts"),
     max_turns: int = typer.Option(200, help="Maximum Claude Code turns per dispatch"),
+    verbose: bool = typer.Option(False, help="Show detailed subprocess output on stderr"),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Validate and print plan without executing"
+    ),
 ) -> None:
     """Run the action-harness pipeline for an OpenSpec change.
 
@@ -79,5 +90,19 @@ def run(
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(code=1) from None
 
-    typer.echo(f"Starting pipeline for change '{change}' in {repo}")
-    typer.echo(f"  max_retries={max_retries}, max_turns={max_turns}")
+    if dry_run:
+        worktree_path = f"/tmp/action-harness/worktrees/harness/{change}"
+        typer.echo(f"Dry-run plan for change '{change}':")
+        typer.echo(f"  repo: {repo}")
+        typer.echo(f"  worktree: {worktree_path}")
+        typer.echo(f"  branch: harness/{change}")
+        typer.echo(f"  worker: claude --output-format json --max-turns {max_turns}")
+        typer.echo("  eval commands:")
+        for cmd in BOOTSTRAP_EVAL_COMMANDS:
+            typer.echo(f"    - {cmd}")
+        typer.echo(f"  pr title: [harness] {change}")
+        typer.echo(f"  max retries: {max_retries}")
+        raise typer.Exit(code=0) from None
+
+    typer.echo(f"Starting pipeline for change '{change}' in {repo}", err=True)
+    typer.echo(f"  max_retries={max_retries}, max_turns={max_turns}", err=True)

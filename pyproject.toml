@@ -1,0 +1,44 @@
+[project]
+name = "action-harness"
+version = "0.1.0"
+description = "Autonomous engineering pipeline — deterministic orchestration of Claude Code workers through the full development lifecycle"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "pydantic>=2.12",
+    "typer>=0.24",
+    "pyyaml>=6.0",
+]
+
+[project.scripts]
+action-harness = "action_harness.cli:app"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0",
+    "pytest-asyncio>=0.25",
+    "ruff>=0.11",
+    "mypy>=1.15",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/action_harness"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"

@@ -41,6 +41,10 @@ Requires Python 3.13+ and `uv`.
 - **Workers are stateless.** Each dispatch is a fresh Claude Code invocation. Context comes from the repo and the prompt.
 - **Minimal abstraction.** Functions that call subprocess.run and parse JSON. No framework.
 
+## CLI documentation
+
+The CLI help text (`--help`) is the API documentation. When adding or changing commands, flags, or behavior, update the typer docstrings, option help strings, and epilog to match. No separate usage docs — keep the help output as the single source of truth.
+
 ## Code quality rules
 
 - **Never propagate bad patterns.** Fix or track as tech debt — don't copy.

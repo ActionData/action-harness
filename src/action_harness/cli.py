@@ -5,18 +5,13 @@ from pathlib import Path
 
 import typer
 
+from action_harness.evaluator import BOOTSTRAP_EVAL_COMMANDS
+
 app = typer.Typer(
     name="action-harness",
     add_completion=False,
     rich_markup_mode="markdown",
 )
-
-BOOTSTRAP_EVAL_COMMANDS = [
-    "uv run pytest -v",
-    "uv run ruff check .",
-    "uv run ruff format --check .",
-    "uv run mypy src/",
-]
 
 
 @app.callback()

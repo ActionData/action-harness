@@ -5,7 +5,23 @@ from pathlib import Path
 
 import typer
 
-app = typer.Typer(name="action-harness", add_completion=False)
+app = typer.Typer(
+    name="action-harness",
+    add_completion=False,
+    rich_markup_mode="markdown",
+)
+
+
+@app.callback()
+def main() -> None:
+    """Autonomous engineering pipeline powered by Claude Code.
+
+    Orchestrates Claude Code workers through: task intake, implementation
+    in isolated worktrees, external evaluation, retry with structured
+    feedback, and PR creation.
+
+    Requires **claude** and **gh** CLIs in PATH.
+    """
 
 
 class ValidationError(Exception):
@@ -48,7 +64,14 @@ def run(
     max_retries: int = typer.Option(3, help="Maximum eval retry attempts"),
     max_turns: int = typer.Option(200, help="Maximum Claude Code turns per dispatch"),
 ) -> None:
-    """Run the action-harness pipeline for an OpenSpec change."""
+    """Run the action-harness pipeline for an OpenSpec change.
+
+    Validates inputs, creates an isolated git worktree, dispatches a Claude Code
+    worker to implement the change via opsx:apply, runs eval (pytest, ruff, mypy),
+    retries with structured feedback on failure, and opens a PR for human review.
+
+    The change must exist at REPO/openspec/changes/NAME/.
+    """
     repo = repo.resolve()
 
     try:

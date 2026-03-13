@@ -1,12 +1,13 @@
 """Git worktree management."""
 
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
 
 import typer
 
-from action_harness.models import WorktreeResult
+from action_harness.models import StageResult, WorktreeResult
 
 
 def _get_default_branch(repo: Path) -> str:
@@ -35,6 +36,14 @@ def _get_default_branch(repo: Path) -> str:
 
 def _cleanup_existing_branch(repo: Path, branch: str, verbose: bool = False) -> None:
     """Remove existing worktree and branch if they exist from a prior run."""
+    # Prune stale worktree metadata first (handles manually deleted worktree dirs)
+    subprocess.run(
+        ["git", "worktree", "prune"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+    )
+
     # Remove worktree if it exists
     list_result = subprocess.run(
         ["git", "worktree", "list", "--porcelain"],
@@ -55,12 +64,18 @@ def _cleanup_existing_branch(repo: Path, branch: str, verbose: bool = False) -> 
             if check.returncode == 0 and check.stdout.strip() == branch:
                 if verbose:
                     typer.echo(f"  removing existing worktree at {wt_path}", err=True)
-                subprocess.run(
+                rm_result = subprocess.run(
                     ["git", "worktree", "remove", "--force", wt_path],
                     cwd=repo,
                     capture_output=True,
                     text=True,
                 )
+                if rm_result.returncode != 0:
+                    typer.echo(
+                        f"[worktree] warning: failed to remove worktree: "
+                        f"{rm_result.stderr.strip()}",
+                        err=True,
+                    )
 
     # Delete branch if it exists
     check = subprocess.run(
@@ -72,12 +87,17 @@ def _cleanup_existing_branch(repo: Path, branch: str, verbose: bool = False) -> 
     if check.returncode == 0:
         if verbose:
             typer.echo(f"  deleting existing branch {branch}", err=True)
-        subprocess.run(
+        del_result = subprocess.run(
             ["git", "branch", "-D", branch],
             cwd=repo,
             capture_output=True,
             text=True,
         )
+        if del_result.returncode != 0:
+            typer.echo(
+                f"[worktree] warning: failed to delete branch: {del_result.stderr.strip()}",
+                err=True,
+            )
 
 
 def create_worktree(change_name: str, repo: Path, verbose: bool = False) -> WorktreeResult:
@@ -112,6 +132,8 @@ def create_worktree(change_name: str, repo: Path, verbose: bool = False) -> Work
 
     if result.returncode != 0:
         typer.echo(f"[worktree] failed: {result.stderr.strip()}", err=True)
+        # Clean up the leaked temp directory
+        shutil.rmtree(worktree_dir, ignore_errors=True)
         return WorktreeResult(
             success=False,
             stage="worktree",
@@ -134,7 +156,7 @@ def cleanup_worktree(
     branch: str,
     preserve_branch: bool = True,
     verbose: bool = False,
-) -> None:
+) -> StageResult:
     """Remove a worktree. Optionally preserve the branch for inspection.
 
     On terminal failure: remove worktree, preserve branch for inspection.
@@ -148,17 +170,31 @@ def cleanup_worktree(
         capture_output=True,
         text=True,
     )
-    if result.returncode != 0 and verbose:
-        typer.echo(f"  worktree remove warning: {result.stderr.strip()}", err=True)
+    if result.returncode != 0:
+        typer.echo(
+            f"[worktree] warning: worktree remove failed: {result.stderr.strip()}",
+            err=True,
+        )
+
+    # Clean up parent temp directory
+    parent = worktree_path.parent
+    if parent.name.startswith("action-harness-") and parent.exists():
+        shutil.rmtree(parent, ignore_errors=True)
 
     if not preserve_branch:
-        subprocess.run(
+        del_result = subprocess.run(
             ["git", "branch", "-D", branch],
             cwd=repo,
             capture_output=True,
             text=True,
         )
-        if verbose:
+        if del_result.returncode != 0:
+            typer.echo(
+                f"[worktree] warning: branch delete failed: {del_result.stderr.strip()}",
+                err=True,
+            )
+        elif verbose:
             typer.echo(f"  deleted branch {branch}", err=True)
 
     typer.echo("[worktree] cleanup complete", err=True)
+    return StageResult(success=True, stage="worktree-cleanup")

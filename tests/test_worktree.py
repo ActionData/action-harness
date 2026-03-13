@@ -91,6 +91,18 @@ class TestCreateWorktree:
 
         assert isinstance(result, WorktreeResult)
 
+    def test_failure_returns_error_result(self, tmp_path: Path) -> None:
+        """create_worktree on a non-git directory returns failure result."""
+        # tmp_path is not a git repo, so git worktree add will fail
+        # Need to at least make it look like a git repo for _cleanup to not crash
+        subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
+        # No commits — base branch doesn't exist, so worktree add fails
+        result = create_worktree("test-change", tmp_path)
+        assert result.success is False
+        assert result.error is not None
+        assert "Failed to create worktree" in result.error
+        assert result.worktree_path is None
+
 
 class TestCleanupWorktree:
     def test_cleanup_removes_worktree(self, git_repo: Path) -> None:
@@ -99,9 +111,10 @@ class TestCleanupWorktree:
         assert result.worktree_path is not None
         assert result.worktree_path.exists()
 
-        cleanup_worktree(git_repo, result.worktree_path, result.branch)
+        cleanup_result = cleanup_worktree(git_repo, result.worktree_path, result.branch)
 
         assert not result.worktree_path.exists()
+        assert cleanup_result.success is True
 
     def test_cleanup_preserves_branch_by_default(self, git_repo: Path) -> None:
         result = create_worktree("preserve-test", git_repo)

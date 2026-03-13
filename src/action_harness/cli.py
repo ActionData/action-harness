@@ -27,7 +27,10 @@ def validate_inputs(change: str, repo: Path) -> None:
     if not (repo / ".git").exists():
         raise ValidationError(f"Not a git repository: {repo}")
 
-    change_dir = repo / "openspec" / "changes" / change
+    changes_root = repo / "openspec" / "changes"
+    change_dir = (changes_root / change).resolve()
+    if not change_dir.is_relative_to(changes_root.resolve()):
+        raise ValidationError(f"Invalid change name (path traversal): {change}")
     if not change_dir.exists():
         raise ValidationError(f"Change directory not found: {change_dir}")
 

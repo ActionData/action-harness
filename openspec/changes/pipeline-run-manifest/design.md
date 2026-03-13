@@ -39,9 +39,9 @@ As each stage completes, append its result to a list. After the run (success or 
 
 ### 4. Return manifest from run_pipeline alongside PrResult
 
-Change `run_pipeline` return type to a tuple `(PrResult, RunManifest)` or add a `manifest` field to `PrResult`. The CLI can log the manifest path. Downstream consumers (PR body, review agents) receive the manifest directly.
+Change `run_pipeline` return type to a tuple `(PrResult, RunManifest)`. The CLI unpacks the tuple, logs the manifest path, and uses `pr_result.success` for exit code. Downstream consumers (PR body, review agents) receive the manifest directly.
 
-**Why:** The manifest is the canonical record of the run. Every consumer should get it from the pipeline, not reconstruct it from scattered results.
+**Why:** The manifest is the canonical record of the run. Every consumer should get it from the pipeline, not reconstruct it from scattered results. A tuple is chosen over adding a field to PrResult because the manifest is a pipeline-level concern, not a PR-level one.
 
 ### 5. Manifest written on both success and failure
 

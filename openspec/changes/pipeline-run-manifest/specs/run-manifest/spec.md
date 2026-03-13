@@ -8,8 +8,8 @@ The pipeline SHALL collect all stage results during execution and produce a `Run
 - **THEN** the manifest contains all stage results in execution order, `success: true`, the PR URL, and total cost/duration
 
 #### Scenario: Failed run produces manifest
-- **WHEN** the pipeline fails at the eval stage after 2 retries
-- **THEN** the manifest contains stage results up to and including the failure, `success: false`, retry count of 2, and the error message
+- **WHEN** the pipeline fails at the eval stage with max_retries=2 (initial attempt + 2 re-attempts)
+- **THEN** the manifest contains stage results up to and including the failure, `success: false`, `retries: 2` (counting re-attempts, not the initial attempt), and the error message
 
 ### Requirement: Manifest persisted to disk
 The pipeline SHALL write the manifest as JSON to `.action-harness/runs/<ISO-timestamp>-<change-name>.json` in the repo directory. The manifest SHALL be written on both success and failure. The `.action-harness/` directory SHALL be created if it does not exist.
@@ -25,6 +25,10 @@ The pipeline SHALL write the manifest as JSON to `.action-harness/runs/<ISO-time
 #### Scenario: Directory created if missing
 - **WHEN** the pipeline runs for the first time and `.action-harness/runs/` does not exist
 - **THEN** the directory is created before writing the manifest
+
+#### Scenario: Manifest filename follows convention
+- **WHEN** the pipeline completes for change "test-feature"
+- **THEN** the manifest filename matches the pattern `*-test-feature.json` in `.action-harness/runs/`
 
 ### Requirement: Manifest directory is gitignored
 The `.action-harness/` directory SHALL be added to `.gitignore` so manifests are not committed to the repository.

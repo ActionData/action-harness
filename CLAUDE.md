@@ -2,26 +2,23 @@
 
 ## Vision
 
-Action-harness is an autonomous engineering pipeline that orchestrates Claude Code workers through the full development lifecycle — from task intake to merge. It is a **deterministic Python state machine** that decides *what* to run, *when*, and *in what order*. Claude Code decides *how*.
+Action-harness is a self-hosting harness. It automates the task-to-merge workflow by orchestrating Claude Code workers: task intake, implementation in isolated worktrees, external evaluation, retry with structured feedback, and PR creation.
 
-The system acts as your engineering manager and engineering team. You interact conversationally via Claude Code to explore, plan, and write specs. When implementation is needed, the harness takes over: dispatching coding agents in isolated worktrees, running real eval (build, test, lint), feeding back failures, managing retries, opening PRs, dispatching specialized review agents, iterating on feedback, and merging — escalating to a human only when judgment is required.
+The organizing goal is self-hosting: build the minimum loop by hand, then the harness builds everything else — review agents, auto-merge, observability, repo profiling — as tasks on its own codebase.
+
+See `PROJECT_VISION.md` for the full vision and core beliefs. See `openspec/ROADMAP.md` for the self-hosted backlog.
 
 ```
-You (human)
+Human (intent, judgment, taste)
   ↕
-Claude Code (interactive lead — you already use this)
+Claude Code (interactive lead)
   ↕
-action-harness (autonomous pipeline — this is what we're building)
+action-harness (autonomous pipeline — self-hosting)
   ↕
-External systems (GitHub, Linear, CI, production)
+Target repositories (starting with itself)
+  ↕
+External systems (GitHub, CI)
 ```
-
-### What this is NOT
-
-- **Not a custom agent framework.** No custom LLM client, no custom tool system, no custom agent loop. Claude Code is the agent.
-- **Not an IDE.** The interactive lead experience is Claude Code itself. The harness is the headless pipeline.
-- **Not a CI/CD system.** It uses CI as a signal and gate, not a replacement for GitHub Actions.
-- **Not multi-tenant.** Single operator, multiple repos.
 
 ## Build & Test
 
@@ -35,48 +32,29 @@ uv run mypy src/                  # type check
 
 Requires Python 3.13+ and `uv`.
 
-## Architecture
+## Key design rules
 
-### Module layout
-
-```
-src/action_harness/
-├── __init__.py
-├── cli.py             # CLI entrypoint (typer)
-├── supervisor.py      # Deterministic state machine
-├── worker.py          # Claude Code wrapper (CLI or SDK)
-├── evaluator.py       # Subprocess eval runner
-├── onboard.py         # Repo profile detection
-├── worktree.py        # Git worktree management
-├── state.py           # Pydantic models + JSON persistence
-├── guardrails.py      # Budget/safety limits
-├── prompt.py          # Role-specific prompt builder
-└── feedback.py        # Eval failure → structured feedback
-```
-
-### Key design rules
-
-- **Supervisor is deterministic.** Zero LLM calls in orchestration logic. It reads events, transitions state, and dispatches workers. All decisions are based on observable state — repo profile, eval results, git status, task metadata. Testable without mocking LLMs.
-- **External evaluation.** The agent doesn't grade its own homework. The harness runs eval commands as subprocesses and checks exit codes. Agent self-assessment is captured for context but doesn't determine pass/fail.
-- **Worktree isolation.** Every task gets its own git worktree. Workers operate in isolation, not the main repo checkout.
-- **Smart dispatch.** Skip phases based on repo context. No test infra → skip tests. No code changes → skip review. Don't waste API calls on agents with nothing to do.
-- **Workers are stateless.** Each dispatch is a fresh Claude Code invocation. No memory bleed between tasks.
-- **Claude Code is the agent runtime.** Every worker invocation uses Claude Code programmatically. Rather than maintaining a custom agent loop with these capabilities, the harness uses Claude Code directly and benefits from all current and future improvements.
+- **External evaluation.** The agent doesn't grade its own homework. The harness runs eval commands as subprocesses and checks exit codes. Agent self-assessment is context, not the gate.
+- **Deterministic orchestration.** Zero LLM calls in the orchestration layer. It reads state, runs subprocesses, checks exit codes, and dispatches workers. Testable without mocking LLMs.
+- **Worktree isolation.** Every task gets its own git worktree. Workers never touch the main checkout.
+- **Claude Code is the agent runtime.** No custom LLM client or agent loop. The harness dispatches Claude Code CLI and benefits from every upstream improvement.
+- **Workers are stateless.** Each dispatch is a fresh Claude Code invocation. Context comes from the repo and the prompt.
+- **Minimal abstraction.** Functions that call subprocess.run and parse JSON. No framework.
 
 ## Code quality rules
 
-- **Never propagate bad patterns.** "It already exists elsewhere" is not justification. Fix it or track it as tech debt — don't copy it.
-- **No silent failures.** Log errors that affect task flow. The supervisor should log worker output on every phase transition.
-- **Proposal-first development.** Every non-trivial change starts with an OpenSpec proposal. The proposal, design, and task artifacts must exist before implementation begins.
-- **Self-validation is required.** Every proposal must include validation steps runnable without human involvement.
-- **Agent independence.** The implementing agent must be able to build, test, and validate its own work. A separate agent should perform review — don't let the same agent mark its own homework.
+- **Never propagate bad patterns.** Fix or track as tech debt — don't copy.
+- **No silent failures.** Log errors that affect task flow.
+- **Proposal-first development.** Every non-trivial change starts with an OpenSpec proposal.
+- **Self-validation is required.** Every proposal includes validation steps.
+- **Agent independence.** The implementing agent validates its own work. A separate agent reviews.
 
 ## OpenSpec workflow
 
-All features and fixes follow the OpenSpec lifecycle. This is mandatory, not optional.
+All features follow the OpenSpec lifecycle:
 
 ```
 propose → [resolve prerequisites] → implement → self-validate → archive
 ```
 
-See `openspec/ROADMAP.md` for the current change sequence and dependencies.
+See `openspec/ROADMAP.md` for the current change sequence.

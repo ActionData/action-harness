@@ -66,9 +66,8 @@ def run(
 ) -> None:
     """Run the action-harness pipeline for an OpenSpec change.
 
-    Validates inputs, creates an isolated git worktree, dispatches a Claude Code
-    worker to implement the change via opsx:apply, runs eval (pytest, ruff, mypy),
-    retries with structured feedback on failure, and opens a PR for human review.
+    Currently validates inputs and exits. The full pipeline (worktree isolation,
+    Claude Code worker dispatch, eval, retry, PR creation) is under construction.
 
     The change must exist at REPO/openspec/changes/NAME/.
     """

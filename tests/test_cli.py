@@ -72,6 +72,15 @@ def test_missing_gh_cli(fake_repo: Path) -> None:
 class TestCliRunner:
     """Test the typer CLI command via CliRunner."""
 
+    def test_top_level_help(self) -> None:
+        result = runner.invoke(app, ["--help"])
+        assert result.exit_code == 0
+        assert "run" in result.output
+
+    def test_run_subcommand_required(self) -> None:
+        result = runner.invoke(app, ["--change", "x", "--repo", "/some/path"])
+        assert result.exit_code != 0
+
     def test_run_valid_inputs(self, fake_repo: Path) -> None:
         with patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"):
             result = runner.invoke(

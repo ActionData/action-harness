@@ -30,30 +30,25 @@ def count_commits_ahead(worktree_path: Path, base_branch: str) -> int:
         text=True,
     )
     if result.returncode != 0:
+        typer.echo(
+            f"[worker] warning: git rev-list failed: {result.stderr.strip()}",
+            err=True,
+        )
         return 0
     try:
         return int(result.stdout.strip())
     except ValueError:
-        return 0
-
-
-def _get_base_branch(worktree_path: Path) -> str:
-    """Determine the base branch for commit counting."""
-    for branch in ("main", "master"):
-        check = subprocess.run(
-            ["git", "rev-parse", "--verify", branch],
-            cwd=worktree_path,
-            capture_output=True,
-            text=True,
+        typer.echo(
+            f"[worker] warning: unexpected git rev-list output: {result.stdout.strip()}",
+            err=True,
         )
-        if check.returncode == 0:
-            return branch
-    return "main"
+        return 0
 
 
 def dispatch_worker(
     change_name: str,
     worktree_path: Path,
+    base_branch: str = "main",
     max_turns: int = 200,
     verbose: bool = False,
 ) -> WorkerResult:
@@ -61,13 +56,20 @@ def dispatch_worker(
 
     Invokes the claude CLI as a subprocess in the worktree directory.
     Captures JSON output and verifies the worker produced commits.
+
+    Note: claude CLI availability is validated by cli.validate_inputs before
+    the pipeline starts. This function assumes claude is in PATH.
     """
     typer.echo(f"[worker] dispatching for '{change_name}'", err=True)
 
     system_prompt = build_system_prompt(change_name)
+    # claude CLI: -p sends the user prompt, --system-prompt sets the system prompt.
+    # The system prompt provides role instructions; the user prompt is the task directive.
     cmd = [
         "claude",
         "-p",
+        f"Implement the OpenSpec change '{change_name}' using the opsx:apply skill.",
+        "--system-prompt",
         system_prompt,
         "--output-format",
         "json",
@@ -112,8 +114,7 @@ def dispatch_worker(
             worker_output=worker_output,
         )
 
-    # Check for commits
-    base_branch = _get_base_branch(worktree_path)
+    # Check for commits against the base branch (provided by the pipeline from worktree creation)
     commits = count_commits_ahead(worktree_path, base_branch)
 
     if commits == 0:

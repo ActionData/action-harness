@@ -34,6 +34,7 @@ class TestCountCommitsAhead:
         mock_result = MagicMock()
         mock_result.returncode = 1
         mock_result.stdout = ""
+        mock_result.stderr = "fatal: bad ref"
         with patch("action_harness.worker.subprocess.run", return_value=mock_result):
             assert count_commits_ahead(Path("/fake"), "main") == 0
 
@@ -53,7 +54,7 @@ class TestDispatchWorker:
         claude_stderr: str = "",
         commits_ahead: int = 1,
     ) -> MagicMock:
-        """Create a mock that handles claude CLI, git rev-parse, and git rev-list calls."""
+        """Create a mock that handles claude CLI and git rev-list calls."""
         mock = MagicMock()
 
         def side_effect(cmd: list[str], **kwargs: object) -> MagicMock:
@@ -62,16 +63,14 @@ class TestDispatchWorker:
                 result.returncode = claude_returncode
                 result.stdout = claude_stdout
                 result.stderr = claude_stderr
-            elif "rev-parse" in cmd:
-                # _get_base_branch check
-                result.returncode = 0
-                result.stdout = "main\n"
             elif "rev-list" in cmd:
                 result.returncode = 0
                 result.stdout = f"{commits_ahead}\n"
+                result.stderr = ""
             else:
                 result.returncode = 0
                 result.stdout = ""
+                result.stderr = ""
             return result
 
         mock.side_effect = side_effect
@@ -100,6 +99,9 @@ class TestDispatchWorker:
 
         assert result.success is False
         assert "exited with code 1" in (result.error or "")
+        assert result.duration_seconds is not None
+        assert result.cost_usd is None
+        assert result.worker_output is None
 
     def test_no_commits_detected(self) -> None:
         json_output = json.dumps({"cost_usd": 0.10, "result": "did nothing"})
@@ -112,7 +114,7 @@ class TestDispatchWorker:
         assert "No commits were produced" in (result.error or "")
         assert result.commits_ahead == 0
 
-    def test_invocation_args(self) -> None:
+    def test_invocation_uses_system_prompt_flag(self) -> None:
         json_output = json.dumps({"cost_usd": 0.05, "result": "ok"})
         mock = self._mock_subprocess(claude_stdout=json_output)
 
@@ -128,11 +130,28 @@ class TestDispatchWorker:
                 break
         assert claude_call is not None
         cmd = claude_call[0][0]
+        # Verify --system-prompt flag is used (not just -p for everything)
+        assert "--system-prompt" in cmd
         assert "--output-format" in cmd
-        assert "json" in cmd
-        assert "--max-turns" in cmd
-        assert "50" in cmd
+        idx = cmd.index("--max-turns")
+        assert cmd[idx + 1] == "50"
         assert claude_call[1]["cwd"] == Path("/fake/wt")
+
+    def test_base_branch_passed_to_commit_count(self) -> None:
+        json_output = json.dumps({"cost_usd": 0.05, "result": "ok"})
+        mock = self._mock_subprocess(claude_stdout=json_output, commits_ahead=1)
+
+        with patch("action_harness.worker.subprocess.run", mock):
+            dispatch_worker("test-change", Path("/fake/wt"), base_branch="develop")
+
+        # Find the rev-list call and verify base_branch is used
+        for call in mock.call_args_list:
+            cmd = call[0][0]
+            if "rev-list" in cmd:
+                assert "develop..HEAD" in cmd
+                break
+        else:
+            raise AssertionError("git rev-list was never called")
 
     def test_invalid_json_output(self) -> None:
         mock = self._mock_subprocess(claude_stdout="not valid json", commits_ahead=1)

@@ -7,7 +7,7 @@ import pytest
 from typer.testing import CliRunner
 
 from action_harness.cli import ValidationError, app, validate_inputs
-from action_harness.models import PrResult
+from action_harness.models import PrResult, RunManifest
 
 runner = CliRunner()
 
@@ -82,13 +82,25 @@ class TestCliRunner:
         result = runner.invoke(app, ["--change", "x", "--repo", "/some/path"])
         assert result.exit_code != 0
 
-    def _mock_pipeline_success(self) -> PrResult:
-        return PrResult(
+    def _mock_pipeline_success(self) -> tuple[PrResult, RunManifest]:
+        pr_result = PrResult(
             success=True,
             stage="pipeline",
             pr_url="https://github.com/test/repo/pull/1",
             branch="harness/test",
         )
+        manifest = RunManifest(
+            change_name="test-change",
+            repo_path="/tmp/repo",
+            started_at="2026-01-01T00:00:00+00:00",
+            completed_at="2026-01-01T00:01:00+00:00",
+            success=True,
+            stages=[],
+            total_duration_seconds=60.0,
+            pr_url="https://github.com/test/repo/pull/1",
+            manifest_path="/tmp/repo/.action-harness/runs/test.json",
+        )
+        return pr_result, manifest
 
     def test_run_valid_inputs(self, fake_repo: Path) -> None:
         with (

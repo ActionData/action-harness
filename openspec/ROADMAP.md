@@ -1,37 +1,21 @@
 # Action-Harness Roadmap
 
-Vision: an autonomous engineering pipeline that orchestrates Claude Code workers through the full development lifecycle — from task intake to merge — with increasing levels of autonomy.
+Goal: self-hosting. Build the minimum loop by hand, then the harness builds everything else.
 
-## Phase 0: Core Pipeline
+## Bootstrap (build by hand)
 
-- `core-pipeline` — Single-phase pipeline: Claude Code coder → subprocess eval → feedback → retry
-  - CLI: `action-harness run "task description" --repo ./path`
-  - Worktree isolation
-  - Repo onboarding (auto-detect build/test/lint)
-  - JSON state persistence
-  - Guardrails (max iterations, max files, cost budget, timeout)
-  - Validate CLI vs SDK for Claude Code invocation
+- `reframe-pipeline` — Minimum self-hosting loop: CLI intake → worktree → code agent (opsx:apply) → eval → retry → PR creation. Human reviews and merges.
 
-## Phase 1: Multi-Phase Pipeline
+## Self-Hosted Backlog (harness builds these)
 
-- `multi-phase` — Full coder → eval → review pipeline
-  - Smart dispatch (skip phases based on repo profile and change type)
-  - PR manager (open PR, push updates)
-  - Specialized review agents (bug hunter, quality, test coverage)
-  - Review finding triage and auto-fix
+Priority order. Each is an OpenSpec change the harness implements on itself.
 
-## Phase 2: Planning & OpenSpec
-
-- `openspec-integration` — Planning and OpenSpec-aware execution
-  - Planner agent for complex goal decomposition
-  - OpenSpec-aware task creation (read proposals, generate tasks)
-  - Multi-task execution (dependency ordering, parallel where possible)
-
-## Phase 3: Always-On
-
-- `always-on` — Server mode with channel intake
-  - Event loop with async task processing
-  - GitHub webhook intake (issues, PR comments, CI failures)
-  - Linear integration
-  - Cron-based monitoring (watch for new issues, stale PRs)
-  - Escalation protocol (auto-handle → notify lead → escalate to human)
+1. `structured-logging` — JSON logs for phase transitions, dispatches, eval results
+2. `review-agents` — Bug hunter, test reviewer, quality reviewer as independent Claude Code dispatches
+3. `protected-paths` — Guardrails: files/modules that always escalate to human review
+4. `auto-merge` — Merge after review agents approve + CI passes (requires review-agents, protected-paths)
+5. `repo-profiling` — Detect eval capabilities and context quality before dispatch (needed for other repos)
+6. `github-issue-intake` — Parse GitHub issues for OpenSpec references, dispatch from issues
+7. `unspecced-tasks` — Support simple fixes from issue descriptions without OpenSpec changes
+8. `failure-reporting` — Aggregate failure logs, identify systemic patterns
+9. `always-on` — Event-driven intake from webhooks, recurring maintenance, Slack escalation

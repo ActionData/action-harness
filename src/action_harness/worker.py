@@ -50,6 +50,7 @@ def dispatch_worker(
     worktree_path: Path,
     base_branch: str = "main",
     max_turns: int = 200,
+    feedback: str | None = None,
     verbose: bool = False,
 ) -> WorkerResult:
     """Dispatch a Claude Code worker to implement a change.
@@ -65,10 +66,13 @@ def dispatch_worker(
     system_prompt = build_system_prompt(change_name)
     # claude CLI: -p sends the user prompt, --system-prompt sets the system prompt.
     # The system prompt provides role instructions; the user prompt is the task directive.
+    user_prompt = f"Implement the OpenSpec change '{change_name}' using the opsx:apply skill."
+    if feedback:
+        user_prompt = f"{user_prompt}\n\n{feedback}"
     cmd = [
         "claude",
         "-p",
-        f"Implement the OpenSpec change '{change_name}' using the opsx:apply skill.",
+        user_prompt,
         "--system-prompt",
         system_prompt,
         "--output-format",

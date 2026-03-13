@@ -5,6 +5,7 @@ from pathlib import Path
 
 import typer
 
+from action_harness import __version__
 from action_harness.evaluator import BOOTSTRAP_EVAL_COMMANDS
 
 app = typer.Typer(
@@ -14,8 +15,22 @@ app = typer.Typer(
 )
 
 
+def _version_callback(value: bool) -> None:
+    if value:
+        typer.echo(f"action-harness {__version__}")
+        raise typer.Exit()
+
+
 @app.callback()
-def main() -> None:
+def main(
+    version: bool | None = typer.Option(
+        None,
+        "--version",
+        callback=_version_callback,
+        is_eager=True,
+        help="Show version and exit.",
+    ),
+) -> None:
     """Autonomous engineering pipeline powered by Claude Code.
 
     Orchestrates Claude Code workers through: task intake, implementation

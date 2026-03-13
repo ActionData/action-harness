@@ -5,6 +5,7 @@ Goal: self-hosting. Build the minimum loop by hand, then the harness builds ever
 ## Bootstrap (build by hand)
 
 - `reframe-pipeline` — Minimum self-hosting loop: CLI intake → worktree → code agent (opsx:apply) → eval → retry → PR creation. Human reviews and merges.
+- `agent-debuggability` — Design rules, result models, and CLI flags (--verbose, --dry-run) that make the harness observable and testable by agents. Prerequisite for reliable self-hosting.
 
 ## Self-Hosted Backlog (harness builds these)
 

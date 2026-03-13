@@ -52,6 +52,7 @@ def run_pipeline(
             worktree_path,
             base_branch=_get_worktree_base(repo),
             max_turns=max_turns,
+            feedback=feedback,
             verbose=verbose,
         )
 
@@ -112,8 +113,10 @@ def run_pipeline(
     if not pr_result.success:
         typer.echo(f"[pipeline] PR creation failed: {pr_result.error}", err=True)
         cleanup_worktree(repo, worktree_path, branch, verbose=verbose)
+        typer.echo("[pipeline] complete (failed)", err=True)
+    else:
+        typer.echo("[pipeline] complete (success)", err=True)
 
-    typer.echo("[pipeline] complete", err=True)
     return pr_result
 
 

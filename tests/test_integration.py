@@ -178,7 +178,7 @@ class TestPipelineFailure:
             result = run_pipeline("test-change", test_repo, max_retries=2)
 
         assert result.success is False
-        assert "Worker failed" in (result.error or "") or "No commits" in (result.error or "")
+        assert "No commits" in (result.error or "")
 
     def test_max_retries_respected(self, test_repo: Path) -> None:
         mock = _make_claude_mock(commits=False)
@@ -189,6 +189,38 @@ class TestPipelineFailure:
         # Count claude invocations — should be max_retries + 1 (initial + retries)
         claude_calls = [c for c in mock.call_args_list if c[0][0][0] == "claude"]
         assert len(claude_calls) == 3  # 1 initial + 2 retries
+
+    def test_eval_failure_then_retry_succeeds(self, test_repo: Path) -> None:
+        """Eval fails on first attempt, retry succeeds."""
+        mock = _make_claude_mock(commits=True)
+        fail_eval = EvalResult(
+            success=False,
+            stage="eval",
+            error="Eval failed: uv run pytest -v",
+            commands_run=1,
+            commands_passed=0,
+            failed_command="uv run pytest -v",
+            feedback_prompt="## Eval Failure\n\n### Command: uv run pytest -v\n...",
+        )
+        pass_eval = EvalResult(success=True, stage="eval", commands_run=4, commands_passed=4)
+
+        with (
+            patch("action_harness.worker.subprocess.run", mock),
+            patch("action_harness.pipeline.run_eval", side_effect=[fail_eval, pass_eval]),
+            patch("action_harness.pr.subprocess.run", mock),
+        ):
+            result = run_pipeline("test-change", test_repo, max_retries=3)
+
+        assert result.success is True
+        assert result.pr_url is not None
+
+        # Verify worker was called twice (initial + retry)
+        claude_calls = [c for c in mock.call_args_list if c[0][0][0] == "claude"]
+        assert len(claude_calls) == 2
+
+        # Verify the second call includes feedback in the user prompt
+        second_prompt = claude_calls[1][0][0][2]  # cmd[2] is the -p argument
+        assert "Eval Failure" in second_prompt
 
     def test_worktree_failure_returns_error(self, tmp_path: Path) -> None:
         """Pipeline fails gracefully when worktree creation fails."""

@@ -72,18 +72,31 @@ def test_missing_gh_cli(fake_repo: Path) -> None:
 class TestCliRunner:
     """Test the typer CLI command via CliRunner."""
 
+    def test_top_level_help(self) -> None:
+        result = runner.invoke(app, ["--help"])
+        assert result.exit_code == 0
+        assert "run" in result.output
+
+    def test_run_subcommand_required(self) -> None:
+        result = runner.invoke(app, ["--change", "x", "--repo", "/some/path"])
+        assert result.exit_code != 0
+
     def test_run_valid_inputs(self, fake_repo: Path) -> None:
         with patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"):
-            result = runner.invoke(app, ["--change", "test-change", "--repo", str(fake_repo)])
+            result = runner.invoke(
+                app, ["run", "--change", "test-change", "--repo", str(fake_repo)]
+            )
         assert result.exit_code == 0
         assert "Starting pipeline" in result.output
 
     def test_run_missing_repo(self) -> None:
-        result = runner.invoke(app, ["--change", "x", "--repo", "/nonexistent/path"])
+        result = runner.invoke(app, ["run", "--change", "x", "--repo", "/nonexistent/path"])
         assert result.exit_code == 1
 
     def test_run_default_options(self, fake_repo: Path) -> None:
         with patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"):
-            result = runner.invoke(app, ["--change", "test-change", "--repo", str(fake_repo)])
+            result = runner.invoke(
+                app, ["run", "--change", "test-change", "--repo", str(fake_repo)]
+            )
         assert "max_retries=3" in result.output
         assert "max_turns=200" in result.output

@@ -7,6 +7,7 @@ import pytest
 from typer.testing import CliRunner
 
 from action_harness.cli import ValidationError, app, validate_inputs
+from action_harness.models import PrResult
 
 runner = CliRunner()
 
@@ -81,25 +82,29 @@ class TestCliRunner:
         result = runner.invoke(app, ["--change", "x", "--repo", "/some/path"])
         assert result.exit_code != 0
 
+    def _mock_pipeline_success(self) -> PrResult:
+        return PrResult(
+            success=True,
+            stage="pipeline",
+            pr_url="https://github.com/test/repo/pull/1",
+            branch="harness/test",
+        )
+
     def test_run_valid_inputs(self, fake_repo: Path) -> None:
-        with patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"):
+        with (
+            patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"),
+            patch(
+                "action_harness.pipeline.run_pipeline", return_value=self._mock_pipeline_success()
+            ),
+        ):
             result = runner.invoke(
                 app, ["run", "--change", "test-change", "--repo", str(fake_repo)]
             )
         assert result.exit_code == 0
-        assert "Starting pipeline" in result.output
 
     def test_run_missing_repo(self) -> None:
         result = runner.invoke(app, ["run", "--change", "x", "--repo", "/nonexistent/path"])
         assert result.exit_code == 1
-
-    def test_run_default_options(self, fake_repo: Path) -> None:
-        with patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"):
-            result = runner.invoke(
-                app, ["run", "--change", "test-change", "--repo", str(fake_repo)]
-            )
-        assert "max_retries=3" in result.output
-        assert "max_turns=200" in result.output
 
     def test_help_shows_verbose_and_dry_run(self) -> None:
         result = runner.invoke(app, ["run", "--help"])
@@ -107,9 +112,13 @@ class TestCliRunner:
         assert "--verbose" in result.output
         assert "--dry-run" in result.output
 
-    def test_verbose_flag_reserved(self, fake_repo: Path) -> None:
-        """Verbose flag is accepted; behavior added when pipeline stages exist."""
-        with patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"):
+    def test_verbose_flag_accepted(self, fake_repo: Path) -> None:
+        with (
+            patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"),
+            patch(
+                "action_harness.pipeline.run_pipeline", return_value=self._mock_pipeline_success()
+            ),
+        ):
             result = runner.invoke(
                 app,
                 ["run", "--change", "test-change", "--repo", str(fake_repo), "--verbose"],

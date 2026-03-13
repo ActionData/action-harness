@@ -72,8 +72,9 @@ def run(
 ) -> None:
     """Run the action-harness pipeline for an OpenSpec change.
 
-    Currently validates inputs and exits. The full pipeline (worktree isolation,
-    Claude Code worker dispatch, eval, retry, PR creation) is under construction.
+    Validates inputs, creates an isolated worktree, dispatches a Claude Code
+    worker via opsx:apply, runs eval (pytest, ruff, mypy), retries with
+    structured feedback on failure, and opens a PR for human review.
 
     The change must exist at REPO/openspec/changes/NAME/.
     """
@@ -99,5 +100,15 @@ def run(
         typer.echo(f"  max retries: {max_retries}")
         raise typer.Exit(code=0)
 
-    typer.echo(f"Starting pipeline for change '{change}' in {repo}", err=True)
-    typer.echo(f"  max_retries={max_retries}, max_turns={max_turns}", err=True)
+    from action_harness.pipeline import run_pipeline
+
+    result = run_pipeline(
+        change_name=change,
+        repo=repo,
+        max_retries=max_retries,
+        max_turns=max_turns,
+        verbose=verbose,
+    )
+
+    if not result.success:
+        raise typer.Exit(code=1)

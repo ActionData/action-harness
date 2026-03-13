@@ -102,7 +102,7 @@ def run(
             typer.echo(f"    - {cmd}")
         typer.echo(f"  pr title: [harness] {change}")
         typer.echo(f"  max retries: {max_retries}")
-        raise typer.Exit(code=0) from None
+        raise typer.Exit(code=0)
 
     typer.echo(f"Starting pipeline for change '{change}' in {repo}", err=True)
     typer.echo(f"  max_retries={max_retries}, max_turns={max_turns}", err=True)

@@ -32,6 +32,7 @@ class TestWorktreeResult:
         )
         assert result.worktree_path == Path("/tmp/wt")
         assert result.branch == "harness/foo"
+        assert result.error is None
         assert isinstance(result, StageResult)
 
     def test_failure(self) -> None:
@@ -48,6 +49,7 @@ class TestWorkerResult:
         )
         assert result.commits_ahead == 3
         assert result.cost_usd == 0.12
+        assert result.error is None
         assert isinstance(result, StageResult)
 
     def test_failure(self) -> None:
@@ -63,6 +65,7 @@ class TestEvalResult:
         assert result.commands_run == 4
         assert result.commands_passed == 4
         assert result.failed_command is None
+        assert result.error is None
         assert isinstance(result, StageResult)
 
     def test_failure(self) -> None:
@@ -78,7 +81,7 @@ class TestEvalResult:
         assert result.success is False
         assert result.error == "pytest failed"
         assert result.failed_command == "uv run pytest -v"
-        assert result.feedback_prompt is not None
+        assert result.feedback_prompt == "## Eval Failure\n..."
 
 
 class TestPrResult:
@@ -91,6 +94,7 @@ class TestPrResult:
         )
         assert result.pr_url == "https://github.com/org/repo/pull/1"
         assert result.branch == "harness/foo"
+        assert result.error is None
         assert isinstance(result, StageResult)
 
     def test_failure(self) -> None:

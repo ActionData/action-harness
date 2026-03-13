@@ -9,7 +9,8 @@
 ## 2. Worker Dispatch
 
 - [ ] 2.1 In `worker.py`: add `model: str | None = None`, `effort: str | None = None`, `max_budget_usd: float | None = None`, `permission_mode: str = "bypassPermissions"` parameters to `dispatch_worker`. For `model`, `effort`, and `max_budget_usd`: only append the flag to the `cmd` list when the value is not None. For `permission_mode`: always append `--permission-mode <value>` to the `cmd` list (it has a non-None default).
-- [ ] 2.2 In `pipeline.py`: add `model: str | None = None`, `effort: str | None = None`, `max_budget_usd: float | None = None`, `permission_mode: str = "bypassPermissions"` to the `run_pipeline` signature. Pass these to `dispatch_worker()`. Also update `cli.py`'s `run_pipeline(...)` call to pass the new values from CLI options.
+- [ ] 2.2 In `pipeline.py`: add `model: str | None = None`, `effort: str | None = None`, `max_budget_usd: float | None = None`, `permission_mode: str = "bypassPermissions"` to the `run_pipeline` signature. Pass these to `dispatch_worker()`.
+- [ ] 2.3 In `cli.py`: update the `run_pipeline(...)` call inside the `run` command to pass `model`, `effort`, `max_budget_usd`, and `permission_mode` from the CLI options.
 
 ## 3. Tests
 

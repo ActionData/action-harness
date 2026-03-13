@@ -72,3 +72,7 @@ The review agent SHALL output a JSON block as its final message containing: `sta
 #### Scenario: Findings result
 - **WHEN** the agent finds incomplete tasks
 - **THEN** the output JSON has `status: "findings"`, `archived: false`, and `findings` listing the issues
+
+#### Scenario: Output parse failure
+- **WHEN** the review agent's output cannot be parsed as the expected JSON format
+- **THEN** the harness returns a findings result with an error indicating parse failure

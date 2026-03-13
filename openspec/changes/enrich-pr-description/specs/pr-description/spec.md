@@ -22,6 +22,10 @@ The PR body SHALL include the output of `git diff --stat` showing files changed,
 - **WHEN** a PR is created for a branch with diff stat output exceeding 30 lines
 - **THEN** the Changes section includes only the first 30 lines followed by "... (truncated)"
 
+#### Scenario: Git diff command fails
+- **WHEN** `git diff --stat` fails in the worktree (non-zero exit code)
+- **THEN** the Changes section is omitted without crashing PR creation
+
 ### Requirement: PR body includes commit messages
 The PR body SHALL include the output of `git log --oneline` for commits on the branch. This shows the worker's incremental progress.
 

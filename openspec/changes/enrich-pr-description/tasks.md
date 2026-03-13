@@ -1,10 +1,13 @@
 ## 1. Enrich _build_pr_body
 
 - [ ] 1.1 In `pr.py`: add `_read_proposal_why(worktree_path, change_name)` helper that reads `openspec/changes/<name>/proposal.md` from the worktree. Extract text between the `## Why` heading and the next `##`-level heading (or end of file). Strip leading/trailing whitespace. Returns `None` if file missing or section not found.
-- [ ] 1.2 In `pr.py`: add `_get_diff_stat(worktree_path, base_branch)` helper that runs `git diff --stat origin/<base_branch>..HEAD` in the worktree and returns the output. Use `origin/<base_branch>` because worktrees may not have a local ref for the base branch. If output exceeds 30 lines, truncate and append `\n... (truncated)`.
-- [ ] 1.3 In `pr.py`: add `_get_commit_log(worktree_path, base_branch)` helper that runs `git log --oneline origin/<base_branch>..HEAD` in the worktree and returns the output. If empty, return `None`.
-- [ ] 1.4 In `pr.py`: update `_build_pr_body` signature to accept `worktree_path: Path`, `base_branch: str`, and `worker_result: WorkerResult` in addition to existing params. Build the body with sections: Background (from proposal, omit if None), Changes (diff stat), Commits (log, omit if None), Worker (cost from `worker_result.cost_usd` if not None, duration from `worker_result.duration_seconds` if not None, observations from `worker_result.worker_output` truncated to 500 chars with `... (truncated)` if longer), Eval Results (existing), and footer.
-- [ ] 1.5 In `pr.py`: update `create_pr` signature to accept `worker_result: WorkerResult` and `base_branch: str`. Pass them through to `_build_pr_body` along with `worktree_path`.
+- [ ] 1.2 In `pr.py`: add `_get_diff_stat(worktree_path, base_branch)` helper that runs `git diff --stat origin/<base_branch>..HEAD` in the worktree and returns the output. Use `origin/<base_branch>` because worktrees may not have a local ref for the base branch. If output exceeds 30 lines, truncate and append `\n... (truncated)`. If the git command fails, return `None`.
+- [ ] 1.3 In `pr.py`: add `_get_commit_log(worktree_path, base_branch)` helper that runs `git log --oneline origin/<base_branch>..HEAD` in the worktree and returns the output. If empty or command fails, return `None`.
+- [ ] 1.4 In `pr.py`: update `_build_pr_body` signature to accept `worktree_path: Path`, `base_branch: str`, and `worker_result: WorkerResult` in addition to existing params.
+- [ ] 1.5 In `pr.py`: build the enriched body in `_build_pr_body` with sections in order: Background (from `_read_proposal_why`, omit section if None), Changes (from `_get_diff_stat`, omit if None), Commits (from `_get_commit_log`, omit if None), Worker (cost from `worker_result.cost_usd` if not None, duration from `worker_result.duration_seconds` if not None, observations from `worker_result.worker_output` truncated to 500 chars with `... (truncated)` if longer), Eval Results (existing), and footer.
+- [ ] 1.6 In `pr.py`: update `create_pr` signature to accept `worker_result: WorkerResult` and `base_branch: str`. Pass them through to `_build_pr_body` along with `worktree_path`.
+
+Prerequisites: implement after `worker-config` (which also modifies pipeline.py).
 
 ## 2. Update pipeline wiring
 

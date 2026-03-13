@@ -6,6 +6,9 @@ Goal: self-hosting. Build the minimum loop by hand, then the harness builds ever
 
 - `reframe-pipeline` — Minimum self-hosting loop: CLI intake → worktree → code agent (opsx:apply) → eval → retry → PR creation. Human reviews and merges.
 - `agent-debuggability` — Design rules, result models, and CLI flags (--verbose, --dry-run) that make the harness observable and testable by agents. Prerequisite for reliable self-hosting.
+- `worker-config` — CLI flags for --model, --effort, --max-budget-usd, --permission-mode. Implement first (additive, no signature conflicts).
+- `enrich-pr-description` — Richer PR body with proposal context, diff stat, commit log, worker metadata. Implement second (modifies create_pr signature).
+- `openspec-review-agent` — Final gate agent: spec validation, semantic review, automated archival. Implement third (adds stage after PR creation, depends on enriched signature).
 
 ## Self-Hosted Backlog (harness builds these)
 

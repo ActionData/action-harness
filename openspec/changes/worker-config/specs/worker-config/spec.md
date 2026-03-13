@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: CLI accepts model flag
-The CLI SHALL accept a `--model` flag that specifies the Claude model to use. When provided, the flag SHALL be passed to the `claude` CLI as `--model <value>`. When omitted, the `--model` flag SHALL NOT be included in the `claude` command.
+The CLI SHALL accept a `--model` flag that specifies the Claude model to use. When provided, the flag SHALL be passed to the `claude` CLI as `--model <value>`. When omitted, the `--model` flag SHALL NOT be included in the `claude` command. The value is pass-through — the `claude` CLI validates model names, not the harness.
 
 #### Scenario: Model specified
 - **WHEN** the operator runs `action-harness run --model opus --change foo --repo .`
@@ -52,7 +52,7 @@ The CLI SHALL accept a `--permission-mode` flag. The default SHALL be `bypassPer
 The `--dry-run` output SHALL include all worker configuration values so the operator can verify before executing. All four config lines SHALL always be shown (using "default" or "none" for unset values).
 
 #### Scenario: Dry-run with custom config
-- **WHEN** the operator runs `--dry-run --model sonnet --effort high --max-budget-usd 2.00`
+- **WHEN** the operator runs `--dry-run --model sonnet --effort high --max-budget-usd 2.0`
 - **THEN** the dry-run output contains `model: sonnet`, `effort: high`, `max-budget-usd: 2.0`, and `permission-mode: bypassPermissions`
 
 #### Scenario: Dry-run with defaults

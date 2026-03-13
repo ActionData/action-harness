@@ -61,7 +61,7 @@ src/action_harness/
 - **Worktree isolation.** Every task gets its own git worktree. Workers operate in isolation, not the main repo checkout.
 - **Smart dispatch.** Skip phases based on repo context. No test infra → skip tests. No code changes → skip review. Don't waste API calls on agents with nothing to do.
 - **Workers are stateless.** Each dispatch is a fresh Claude Code invocation. No memory bleed between tasks.
-- **Claude Code is the agent runtime.** Every worker invocation uses Claude Code programmatically. The harness gets prompt caching, planning, parallel tool calls, MCP servers, and everything Anthropic ships in the future — for free.
+- **Claude Code is the agent runtime.** Every worker invocation uses Claude Code programmatically. Rather than maintaining a custom agent loop with these capabilities, the harness uses Claude Code directly and benefits from all current and future improvements.
 
 ## Code quality rules
 

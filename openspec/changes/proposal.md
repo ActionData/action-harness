@@ -10,7 +10,7 @@ Building AI-powered development infrastructure requires two fundamentally differ
 
 Current approaches fall short:
 
-- **nullharness** — correct pipeline design (multi-phase, smart dispatch, worktree isolation, repo onboarding) but coupled to a custom agent loop that lacks caching, planning, and parallel tool calls. The lead agent can't work in it.
+- **nullharness** — correct pipeline design (multi-phase, smart dispatch, worktree isolation, repo onboarding) but coupled to nullclaw's agent loop, which currently lacks token caching, planning, and parallel tool calls. Adding these to the Zig agent loop is possible but would take significant effort, and Claude Code already provides all of them today.
 - **ai-harness** — right idea using Claude Code as the agent runtime, but only implements a single eval→retry loop. No pipeline phases, no review agents, no channels, no always-on operation.
 - **Claude Code alone** — excellent interactive agent, but no structured pipeline, no automated eval/retry, no multi-agent review, no always-on channel intake.
 
@@ -34,7 +34,7 @@ External systems (GitHub, Linear, CI, production)
 
 ### Claude Code as the agent runtime
 
-Every worker invocation uses Claude Code programmatically. No custom agent loop, no custom LLM client, no custom tool system. Claude Code already has prompt caching, planning, parallel tool calls, MCP servers, file I/O, shell access, and web search. The harness gets all of that for free, plus everything Anthropic ships in the future.
+Every worker invocation uses Claude Code programmatically. Claude Code already has prompt caching, planning, parallel tool calls, MCP servers, file I/O, shell access, and web search. Rather than rebuilding these capabilities in a custom agent loop, the harness uses Claude Code directly and gets all current and future capabilities for free.
 
 The harness's job is orchestration, not agent execution. It decides *what* to run, *when*, and *in what order*. Claude Code decides *how*.
 
@@ -199,7 +199,7 @@ State survives process restarts. The harness can resume in-progress work after a
 
 ## What This Is NOT
 
-- **Not a custom agent framework.** No custom LLM client, no custom tool system, no custom agent loop. Claude Code is the agent.
+- **Not a custom agent framework.** Claude Code is the agent runtime. The harness is orchestration only.
 - **Not an IDE.** The interactive lead experience is Claude Code itself. The harness is the headless pipeline that Claude Code triggers.
 - **Not a CI/CD system.** It doesn't replace GitHub Actions. It uses CI as a signal (detect failures, auto-fix) and as a gate (CI must pass before merge).
 - **Not multi-tenant.** Single operator, multiple repos. Not a SaaS platform.
@@ -306,7 +306,7 @@ harness/
 - Python + pydantic is the right stack for the orchestration layer.
 - Protocol-based agent interface makes testing easy (mock agent for unit tests).
 
-### From building custom agent infrastructure
-- Custom agent loops are a trap. Building caching, planning, and parallel tool dispatch from scratch is years of work. Use what exists.
+### From nullclaw
+- Building token caching, planning, and parallel tool dispatch into a custom agent loop is significant effort. Claude Code already has these capabilities and improves continuously — using it as the runtime avoids maintaining a competing implementation.
 - Channel abstraction is a good pattern for intake — keep the concept, implement in Python.
-- Provider abstraction doesn't matter when Claude Code is your only agent. It handles provider selection internally.
+- Provider abstraction doesn't matter when Claude Code is your agent runtime. It handles provider selection internally.

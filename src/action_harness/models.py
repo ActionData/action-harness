@@ -43,3 +43,20 @@ class PrResult(StageResult):
 
     pr_url: str | None = None
     branch: str = ""
+
+
+class RunManifest(BaseModel):
+    """Complete record of a pipeline run."""
+
+    change_name: str
+    repo_path: str
+    started_at: str
+    completed_at: str
+    success: bool
+    stages: list[StageResult]
+    total_duration_seconds: float
+    total_cost_usd: float | None = None
+    retries: int = 0
+    pr_url: str | None = None
+    error: str | None = None
+    manifest_path: str | None = None

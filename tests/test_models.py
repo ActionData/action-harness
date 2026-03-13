@@ -1,10 +1,12 @@
 """Tests for Pydantic result models."""
 
+import json
 from pathlib import Path
 
 from action_harness.models import (
     EvalResult,
     PrResult,
+    RunManifest,
     StageResult,
     WorkerResult,
     WorktreeResult,
@@ -102,3 +104,136 @@ class TestPrResult:
         assert result.success is False
         assert result.error == "push failed"
         assert result.pr_url is None
+
+
+class TestRunManifest:
+    def test_success_manifest(self) -> None:
+        stages: list[StageResult] = [
+            WorktreeResult(
+                success=True,
+                stage="worktree",
+                worktree_path=Path("/tmp/wt"),
+                branch="harness/test",
+                duration_seconds=1.5,
+            ),
+            WorkerResult(
+                success=True,
+                stage="worker",
+                commits_ahead=2,
+                cost_usd=0.15,
+                duration_seconds=30.0,
+            ),
+            EvalResult(
+                success=True,
+                stage="eval",
+                commands_run=4,
+                commands_passed=4,
+                duration_seconds=10.0,
+            ),
+            PrResult(
+                success=True,
+                stage="pr",
+                pr_url="https://github.com/org/repo/pull/1",
+                branch="harness/test",
+                duration_seconds=2.0,
+            ),
+        ]
+        manifest = RunManifest(
+            change_name="test-feature",
+            repo_path="/tmp/repo",
+            started_at="2026-03-13T10:00:00+00:00",
+            completed_at="2026-03-13T10:01:00+00:00",
+            success=True,
+            stages=stages,
+            total_duration_seconds=60.0,
+            total_cost_usd=0.15,
+            pr_url="https://github.com/org/repo/pull/1",
+        )
+        assert manifest.success is True
+        assert manifest.change_name == "test-feature"
+        assert manifest.retries == 0
+        assert manifest.error is None
+        assert len(manifest.stages) == 4
+
+    def test_failure_manifest(self) -> None:
+        stages: list[StageResult] = [
+            WorktreeResult(
+                success=True,
+                stage="worktree",
+                worktree_path=Path("/tmp/wt"),
+                branch="harness/test",
+            ),
+            WorkerResult(success=False, stage="worker", error="no commits produced"),
+        ]
+        manifest = RunManifest(
+            change_name="test-feature",
+            repo_path="/tmp/repo",
+            started_at="2026-03-13T10:00:00+00:00",
+            completed_at="2026-03-13T10:00:30+00:00",
+            success=False,
+            stages=stages,
+            total_duration_seconds=30.0,
+            retries=2,
+            error="Worker failed: no commits produced",
+        )
+        assert manifest.success is False
+        assert manifest.retries == 2
+        assert manifest.error == "Worker failed: no commits produced"
+        assert manifest.pr_url is None
+
+    def test_model_dump_json_produces_valid_json(self) -> None:
+        stages: list[StageResult] = [
+            WorktreeResult(
+                success=True,
+                stage="worktree",
+                worktree_path=Path("/tmp/wt"),
+                branch="harness/test",
+            ),
+            WorkerResult(success=True, stage="worker", commits_ahead=1, cost_usd=0.10),
+            EvalResult(success=True, stage="eval", commands_run=4, commands_passed=4),
+            PrResult(
+                success=True,
+                stage="pr",
+                pr_url="https://github.com/org/repo/pull/1",
+                branch="harness/test",
+            ),
+        ]
+        manifest = RunManifest(
+            change_name="test-feature",
+            repo_path="/tmp/repo",
+            started_at="2026-03-13T10:00:00+00:00",
+            completed_at="2026-03-13T10:01:00+00:00",
+            success=True,
+            stages=stages,
+            total_duration_seconds=60.0,
+            total_cost_usd=0.10,
+            pr_url="https://github.com/org/repo/pull/1",
+        )
+        json_str = manifest.model_dump_json()
+        parsed = json.loads(json_str)
+        assert parsed["change_name"] == "test-feature"
+        assert parsed["success"] is True
+        assert len(parsed["stages"]) == 4
+
+    def test_stages_accepts_mixed_subtypes(self) -> None:
+        stages: list[StageResult] = [
+            WorktreeResult(success=True, stage="worktree", branch="harness/test"),
+            WorkerResult(success=True, stage="worker", cost_usd=0.05),
+            EvalResult(success=True, stage="eval", commands_run=4, commands_passed=4),
+            PrResult(success=True, stage="pr", branch="harness/test"),
+        ]
+        manifest = RunManifest(
+            change_name="test",
+            repo_path="/tmp/repo",
+            started_at="2026-03-13T10:00:00+00:00",
+            completed_at="2026-03-13T10:01:00+00:00",
+            success=True,
+            stages=stages,
+            total_duration_seconds=60.0,
+        )
+        assert len(manifest.stages) == 4
+        # Verify the list accepts all subtypes without error
+        assert manifest.stages[0].stage == "worktree"
+        assert manifest.stages[1].stage == "worker"
+        assert manifest.stages[2].stage == "eval"
+        assert manifest.stages[3].stage == "pr"

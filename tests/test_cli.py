@@ -7,7 +7,7 @@ import pytest
 from typer.testing import CliRunner
 
 from action_harness.cli import ValidationError, app, validate_inputs
-from action_harness.models import PrResult
+from action_harness.models import PrResult, RunManifest
 
 runner = CliRunner()
 
@@ -19,6 +19,27 @@ def fake_repo(tmp_path: Path) -> Path:
     change_dir = tmp_path / "openspec" / "changes" / "test-change"
     change_dir.mkdir(parents=True)
     return tmp_path
+
+
+def _mock_pipeline_result() -> tuple[PrResult, RunManifest]:
+    """Create a mock successful pipeline result tuple."""
+    pr_result = PrResult(
+        success=True,
+        stage="pipeline",
+        pr_url="https://github.com/test/repo/pull/1",
+        branch="harness/test",
+    )
+    manifest = RunManifest(
+        change_name="test-change",
+        repo_path="/tmp/repo",
+        started_at="2026-03-13T10:00:00+00:00",
+        completed_at="2026-03-13T10:01:00+00:00",
+        success=True,
+        stages=[],
+        total_duration_seconds=60.0,
+        manifest_path="/tmp/repo/.action-harness/runs/manifest.json",
+    )
+    return pr_result, manifest
 
 
 def test_valid_inputs(fake_repo: Path) -> None:
@@ -82,19 +103,12 @@ class TestCliRunner:
         result = runner.invoke(app, ["--change", "x", "--repo", "/some/path"])
         assert result.exit_code != 0
 
-    def _mock_pipeline_success(self) -> PrResult:
-        return PrResult(
-            success=True,
-            stage="pipeline",
-            pr_url="https://github.com/test/repo/pull/1",
-            branch="harness/test",
-        )
-
     def test_run_valid_inputs(self, fake_repo: Path) -> None:
         with (
             patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"),
             patch(
-                "action_harness.pipeline.run_pipeline", return_value=self._mock_pipeline_success()
+                "action_harness.pipeline.run_pipeline",
+                return_value=_mock_pipeline_result(),
             ),
         ):
             result = runner.invoke(
@@ -116,7 +130,8 @@ class TestCliRunner:
         with (
             patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"),
             patch(
-                "action_harness.pipeline.run_pipeline", return_value=self._mock_pipeline_success()
+                "action_harness.pipeline.run_pipeline",
+                return_value=_mock_pipeline_result(),
             ),
         ):
             result = runner.invoke(

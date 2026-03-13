@@ -102,7 +102,7 @@ def run(
 
     from action_harness.pipeline import run_pipeline
 
-    result = run_pipeline(
+    pr_result, manifest = run_pipeline(
         change_name=change,
         repo=repo,
         max_retries=max_retries,
@@ -110,5 +110,7 @@ def run(
         verbose=verbose,
     )
 
-    if not result.success:
+    typer.echo(f"[pipeline] manifest saved to {manifest.manifest_path}", err=True)
+
+    if not pr_result.success:
         raise typer.Exit(code=1)

@@ -36,9 +36,11 @@ Use `claude` CLI subprocess invocation for workers, not the Agent SDK.
 
 ### 2. `opsx:apply` as the implementation primitive
 
-The harness dispatches a Claude Code worker that runs `opsx:apply` on the target change. This reuses the existing structured implementation workflow.
+The harness dispatches a Claude Code worker that runs `opsx:apply` on the target change. `opsx:apply` is a Claude Code skill defined in `.claude/skills/openspec-apply-change.md` in the target repo. It is loaded automatically when Claude Code runs in a repo that has this file — no additional configuration needed. The worker's system prompt instructs it to invoke the skill.
 
 **Why:** `opsx:apply` already handles reading specs, tracking task progress, and validating work. No need to build a separate implementation path.
+
+**Dependency:** The target repo must have the OpenSpec skills installed (`.claude/skills/openspec-apply-change.md`). For self-hosting, this already exists in the action-harness repo.
 
 ### 3. Two-tier testing: external eval (gate) + behavioral self-test (best-effort)
 
@@ -46,13 +48,48 @@ Tier 1: the harness runs eval commands as subprocesses and checks exit codes —
 
 **Why:** External eval is reliable and verifiable. Behavioral self-testing can't be verified from the outside but still provides useful signal for the human reviewer.
 
-### 4. Python for orchestration, minimal abstraction
+### 4. Worker CLI flags
+
+The Claude Code worker is invoked with these flags:
+- `--output-format json` — structured output for parsing
+- `--system-prompt <prompt>` — role-specific instructions
+- `--max-turns 200` — generous enough for multi-file changes, prevents runaway sessions. Configurable via `--max-turns` CLI flag on the harness.
+- `--allowedTools` — for bootstrap, allow all tools (no restriction). Restricting tools is a future hardening step once we understand what the worker actually needs.
+
+**Why these defaults:** 200 turns handles complex multi-file implementation tasks. Unrestricted tools avoids blocking the worker on a tool it needs (the eval gate catches bad outcomes). These can be tightened as we learn from self-hosted runs.
+
+### 5. Eval commands are a hardcoded constant
+
+For bootstrap, eval commands are defined as a constant list in the evaluator module: `uv run pytest -v`, `uv run ruff check .`, `uv run ruff format --check .`, `uv run mypy src/`. This is intentionally not configurable yet — repo profiling (self-hosted task #5) replaces this with dynamic detection.
+
+**Why hardcode:** The bootstrap only targets one repo (itself). Adding configuration now is premature abstraction.
+
+### 6. Structured feedback format
+
+When eval fails, the retry prompt follows this format:
+
+```
+## Eval Failure
+
+### Command: {command}
+### Exit Code: {exit_code}
+### Output:
+\```
+{stdout_and_stderr}
+\```
+
+Fix these issues and re-run the failing commands to verify.
+```
+
+Each failing command gets its own section. This gives the worker agent clear, parseable context about what failed and how.
+
+### 7. Python for orchestration, minimal abstraction
 
 The harness is a Python CLI (typer) that coordinates subprocesses. Functions that call `subprocess.run` and parse JSON output. No framework.
 
 **Why:** The hard work happens inside Claude Code. The harness just needs to create a worktree, invoke Claude Code, run eval, and open a PR.
 
-### 5. The test suite gates self-hosting
+### 8. The test suite gates self-hosting
 
 Before the harness starts working on itself, the test suite must be comprehensive enough to catch regressions. Every bootstrap component gets tests. If the tests are weak, the harness can merge changes that break itself.
 

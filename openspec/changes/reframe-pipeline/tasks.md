@@ -1,46 +1,53 @@
+Implementation note: groups 1-5 are sequential (each depends on the prior). Write tests alongside each group, not deferred to the end. Group 6 wires everything together.
+
 ## 1. Project Setup
 
-- [ ] 1.1 Update CLAUDE.md to reflect self-hosting goal and workflow-first framing
-- [ ] 1.2 Set up CLI entrypoint with typer: `action-harness run --change <name> --repo <path>` with `--max-retries` (default: 3)
-- [ ] 1.3 Validate inputs: repo path exists and is a git repo, change directory exists in repo
+- [ ] 1.1 Create module skeleton with empty files:
+  - `src/action_harness/cli.py` — CLI entrypoint (typer)
+  - `src/action_harness/worktree.py` — git worktree management
+  - `src/action_harness/worker.py` — Claude Code CLI dispatch
+  - `src/action_harness/evaluator.py` — subprocess eval runner
+  - `src/action_harness/pr.py` — PR creation via gh
+  - `src/action_harness/pipeline.py` — end-to-end wiring
+  - `src/action_harness/models.py` — Pydantic data models
+- [ ] 1.2 Set up CLI entrypoint in `cli.py` with typer: `action-harness run --change <name> --repo <path>` with `--max-retries` (default: 3) and `--max-turns` (default: 200)
+- [ ] 1.3 Validate inputs in `cli.py`: repo path exists and is a git repo, change directory exists in repo, `claude` CLI is in PATH, `gh` CLI is in PATH
+- [ ] 1.4 Tests in `tests/test_cli.py`: valid inputs, missing repo, missing change dir, missing claude CLI, missing gh CLI
 
 ## 2. Worktree Management
 
-- [ ] 2.1 Create git worktree from default branch with branch name `harness/<change-name>`
-- [ ] 2.2 Implement worktree cleanup: remove on terminal failure (preserve branch), preserve on PR creation
+- [ ] 2.1 In `worktree.py`: create git worktree from default branch with branch name `harness/<change-name>`. If branch already exists from a prior run, remove old worktree and delete branch first, then create fresh.
+- [ ] 2.2 In `worktree.py`: cleanup function — remove worktree on terminal failure (preserve branch for inspection), preserve worktree on PR creation
+- [ ] 2.3 Tests in `tests/test_worktree.py`: creation, cleanup on failure, cleanup on success, branch-already-exists re-run
 
 ## 3. Code Agent Dispatch
 
-- [ ] 3.1 Build the worker system prompt: change name, instruction to run `opsx:apply`, commit incrementally, self-validate
-- [ ] 3.2 Invoke `claude` CLI as subprocess in the worktree directory with flags: `--output-format json`, `--system-prompt`, `--max-turns`, `--allowedTools`
-- [ ] 3.3 Capture and parse worker JSON output (cost, duration, result)
+- [ ] 3.1 In `worker.py`: build the worker system prompt — change name, instruction to run `opsx:apply` for the change, commit incrementally, exercise the feature and report observations
+- [ ] 3.2 In `worker.py`: invoke `claude` CLI as subprocess in the worktree directory with flags: `--output-format json`, `--system-prompt`, `--max-turns <N>`, `--print-cost`
+- [ ] 3.3 In `worker.py`: capture and parse worker JSON output (cost, duration, result)
+- [ ] 3.4 In `worker.py`: after worker completes, verify the worktree branch has at least one commit ahead of base. If no commits, treat as failure.
+- [ ] 3.5 Tests in `tests/test_worker.py`: prompt construction, subprocess invocation args, output parsing, no-commits detection. Mock `subprocess.run` — do not invoke real Claude Code in unit tests.
 
 ## 4. Evaluation
 
-- [ ] 4.1 Run eval commands as subprocesses in the worktree: `uv run pytest -v`, `uv run ruff check .`, `uv run ruff format --check .`, `uv run mypy src/`
-- [ ] 4.2 On failure: capture stdout/stderr, format structured feedback prompt with failure output
-- [ ] 4.3 Re-dispatch worker with feedback prompt (retry loop up to `--max-retries`)
-- [ ] 4.4 On max retries exceeded: log failure context and exit with error
+- [ ] 4.1 In `evaluator.py`: define `BOOTSTRAP_EVAL_COMMANDS` constant: `["uv run pytest -v", "uv run ruff check .", "uv run ruff format --check .", "uv run mypy src/"]`
+- [ ] 4.2 In `evaluator.py`: run each eval command as subprocess in the worktree, capture exit code, stdout, stderr. Stop on first failure.
+- [ ] 4.3 In `evaluator.py`: on failure, format structured feedback prompt per design Decision 6 (command, exit code, output in markdown sections)
+- [ ] 4.4 In `pipeline.py`: implement retry loop — on eval failure, re-dispatch worker with feedback prompt. Track retry count. On max retries exceeded, exit with error and full failure context.
+- [ ] 4.5 Tests in `tests/test_evaluator.py`: all-pass, first-command-fails, format feedback output. Tests in `tests/test_pipeline.py`: retry counting, max retries exit. Mock subprocess calls.
 
 ## 5. PR Creation
 
-- [ ] 5.1 Push worktree branch to remote
-- [ ] 5.2 Open PR via `gh pr create` with title `[harness] <change-name>` and structured body (change name, implementation summary, eval results)
-- [ ] 5.3 Print PR URL and exit
+- [ ] 5.1 In `pr.py`: push worktree branch to remote via `git push -u origin <branch>`
+- [ ] 5.2 In `pr.py`: open PR via `gh pr create` with title `[harness] <change-name>` and structured body (change name, eval results summary, "Generated by action-harness" footer)
+- [ ] 5.3 In `pr.py`: return PR URL. Print to stdout.
+- [ ] 5.4 Tests in `tests/test_pr.py`: push command construction, gh pr create command and body construction. Mock subprocess calls.
 
 ## 6. End-to-End Wiring
 
-- [ ] 6.1 Wire all stages: validate inputs → create worktree → dispatch agent → eval → retry loop → push → open PR
-- [ ] 6.2 Handle errors at each stage with clear messages (not silent failures)
-
-## 7. Tests
-
-- [ ] 7.1 Unit tests for CLI argument validation and input parsing
-- [ ] 7.2 Unit tests for worktree creation and cleanup
-- [ ] 7.3 Unit tests for eval command execution and exit code handling
-- [ ] 7.4 Unit tests for retry loop logic (feedback formatting, retry counting, max retries)
-- [ ] 7.5 Unit tests for PR creation (gh command construction)
-- [ ] 7.6 Integration test: full loop on a test fixture repo with a trivial OpenSpec change
+- [ ] 6.1 In `pipeline.py`: wire all stages — validate inputs → create worktree → dispatch agent → verify commits → eval → (retry loop) → push → open PR → print URL
+- [ ] 6.2 In `pipeline.py`: handle errors at each stage with clear messages. Worktree cleanup on any terminal failure.
+- [ ] 6.3 Integration test in `tests/test_integration.py`: create a temporary git repo with a `pyproject.toml`, a passing test file, and a trivial OpenSpec change directory. Mock the Claude Code CLI to simulate: (a) adding a file and committing, (b) returning valid JSON output. Verify the full pipeline: worktree created, mock worker invoked with correct args, eval commands run, PR command constructed. Also test the failure path: mock worker returns no commits → retry with feedback → max retries → exit.
 
 ## Validation
 
@@ -60,4 +67,5 @@ Then verify end-to-end on the harness's own repo:
 3. Confirm: worktree created, worker dispatched, eval runs, PR opened
 4. Confirm: eval failure → structured feedback → retry works (introduce a deliberate test failure)
 5. Confirm: max retries → clean exit with error message
-6. Tag this version as the recovery baseline before beginning self-hosted work
+6. Confirm: re-run after failure works (branch-already-exists handling)
+7. Tag this version as the recovery baseline: `git tag harness-baseline-v0 HEAD`

@@ -289,24 +289,3 @@ harness/
 └── tests/
 ```
 
-## Prior Art & Lessons Learned
-
-### From nullharness
-- Multi-phase pipeline design works. Coder → test → review catches bugs that single-pass doesn't.
-- Smart dispatch saves time and money. Don't run test-runner if there's no test infra.
-- Worktree isolation is essential. Agents corrupt each other's work without it.
-- Repo onboarding makes agents repo-aware without manual config.
-- The supervisor must be deterministic and testable without LLM mocks.
-- Verdict protocol (agent self-reporting) is useful for context but insufficient for pass/fail. External eval is the source of truth.
-
-### From ai-harness
-- Claude Code as the agent runtime is the right call. Gets caching, planning, parallel tools for free.
-- Subprocess evaluation is more trustworthy than agent self-assessment.
-- Structured feedback → retry is effective. Agents fix real failures when given specific error output.
-- Python + pydantic is the right stack for the orchestration layer.
-- Protocol-based agent interface makes testing easy (mock agent for unit tests).
-
-### From nullclaw
-- Building token caching, planning, and parallel tool dispatch into a custom agent loop is significant effort. Claude Code already has these capabilities and improves continuously — using it as the runtime avoids maintaining a competing implementation.
-- Channel abstraction is a good pattern for intake — keep the concept, implement in Python.
-- Provider abstraction doesn't matter when Claude Code is your agent runtime. It handles provider selection internally.

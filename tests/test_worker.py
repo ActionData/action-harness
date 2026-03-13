@@ -1,0 +1,155 @@
+"""Tests for Claude Code CLI dispatch. Mocks subprocess.run — no real Claude Code."""
+
+import json
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+from action_harness.models import WorkerResult
+from action_harness.worker import build_system_prompt, count_commits_ahead, dispatch_worker
+
+
+class TestBuildSystemPrompt:
+    def test_includes_change_name(self) -> None:
+        prompt = build_system_prompt("add-logging")
+        assert "add-logging" in prompt
+
+    def test_includes_opsx_apply(self) -> None:
+        prompt = build_system_prompt("test-change")
+        assert "opsx:apply" in prompt
+
+    def test_includes_commit_instruction(self) -> None:
+        prompt = build_system_prompt("test-change")
+        assert "commit" in prompt.lower()
+
+
+class TestCountCommitsAhead:
+    def test_counts_commits(self) -> None:
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "3\n"
+        with patch("action_harness.worker.subprocess.run", return_value=mock_result):
+            assert count_commits_ahead(Path("/fake"), "main") == 3
+
+    def test_returns_zero_on_failure(self) -> None:
+        mock_result = MagicMock()
+        mock_result.returncode = 1
+        mock_result.stdout = ""
+        with patch("action_harness.worker.subprocess.run", return_value=mock_result):
+            assert count_commits_ahead(Path("/fake"), "main") == 0
+
+    def test_returns_zero_on_invalid_output(self) -> None:
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "not-a-number\n"
+        with patch("action_harness.worker.subprocess.run", return_value=mock_result):
+            assert count_commits_ahead(Path("/fake"), "main") == 0
+
+
+class TestDispatchWorker:
+    def _mock_subprocess(
+        self,
+        claude_returncode: int = 0,
+        claude_stdout: str = "",
+        claude_stderr: str = "",
+        commits_ahead: int = 1,
+    ) -> MagicMock:
+        """Create a mock that handles claude CLI, git rev-parse, and git rev-list calls."""
+        mock = MagicMock()
+
+        def side_effect(cmd: list[str], **kwargs: object) -> MagicMock:
+            result = MagicMock()
+            if cmd[0] == "claude":
+                result.returncode = claude_returncode
+                result.stdout = claude_stdout
+                result.stderr = claude_stderr
+            elif "rev-parse" in cmd:
+                # _get_base_branch check
+                result.returncode = 0
+                result.stdout = "main\n"
+            elif "rev-list" in cmd:
+                result.returncode = 0
+                result.stdout = f"{commits_ahead}\n"
+            else:
+                result.returncode = 0
+                result.stdout = ""
+            return result
+
+        mock.side_effect = side_effect
+        return mock
+
+    def test_successful_dispatch(self) -> None:
+        json_output = json.dumps({"cost_usd": 0.15, "result": "implemented feature"})
+        mock = self._mock_subprocess(claude_stdout=json_output, commits_ahead=2)
+
+        with patch("action_harness.worker.subprocess.run", mock):
+            result = dispatch_worker("test-change", Path("/fake/worktree"))
+
+        assert result.success is True
+        assert result.stage == "worker"
+        assert result.commits_ahead == 2
+        assert result.cost_usd == 0.15
+        assert result.worker_output == "implemented feature"
+        assert result.error is None
+        assert isinstance(result, WorkerResult)
+
+    def test_cli_failure(self) -> None:
+        mock = self._mock_subprocess(claude_returncode=1, claude_stderr="something went wrong")
+
+        with patch("action_harness.worker.subprocess.run", mock):
+            result = dispatch_worker("test-change", Path("/fake/worktree"))
+
+        assert result.success is False
+        assert "exited with code 1" in (result.error or "")
+
+    def test_no_commits_detected(self) -> None:
+        json_output = json.dumps({"cost_usd": 0.10, "result": "did nothing"})
+        mock = self._mock_subprocess(claude_stdout=json_output, commits_ahead=0)
+
+        with patch("action_harness.worker.subprocess.run", mock):
+            result = dispatch_worker("test-change", Path("/fake/worktree"))
+
+        assert result.success is False
+        assert "No commits were produced" in (result.error or "")
+        assert result.commits_ahead == 0
+
+    def test_invocation_args(self) -> None:
+        json_output = json.dumps({"cost_usd": 0.05, "result": "ok"})
+        mock = self._mock_subprocess(claude_stdout=json_output)
+
+        with patch("action_harness.worker.subprocess.run", mock):
+            dispatch_worker("my-change", Path("/fake/wt"), max_turns=50)
+
+        # Find the claude invocation call
+        claude_call = None
+        for call in mock.call_args_list:
+            cmd = call[0][0]
+            if cmd[0] == "claude":
+                claude_call = call
+                break
+        assert claude_call is not None
+        cmd = claude_call[0][0]
+        assert "--output-format" in cmd
+        assert "json" in cmd
+        assert "--max-turns" in cmd
+        assert "50" in cmd
+        assert claude_call[1]["cwd"] == Path("/fake/wt")
+
+    def test_invalid_json_output(self) -> None:
+        mock = self._mock_subprocess(claude_stdout="not valid json", commits_ahead=1)
+
+        with patch("action_harness.worker.subprocess.run", mock):
+            result = dispatch_worker("test-change", Path("/fake/worktree"))
+
+        assert result.success is True
+        assert result.worker_output == "not valid json"
+        assert result.cost_usd is None
+
+    def test_duration_tracked(self) -> None:
+        json_output = json.dumps({"cost_usd": 0.01, "result": "ok"})
+        mock = self._mock_subprocess(claude_stdout=json_output)
+
+        with patch("action_harness.worker.subprocess.run", mock):
+            result = dispatch_worker("test-change", Path("/fake/worktree"))
+
+        assert result.duration_seconds is not None
+        assert result.duration_seconds >= 0

@@ -10,7 +10,6 @@ from action_harness.models import EvalResult, PrResult
 
 def create_pr(
     change_name: str,
-    repo: Path,
     worktree_path: Path,
     branch: str,
     eval_result: EvalResult,
@@ -21,18 +20,28 @@ def create_pr(
     Pushes the worktree branch to origin, then creates a PR with a structured
     title and body. Returns the PR URL.
 
-    Note: gh CLI availability is validated by cli.validate_inputs before
-    the pipeline starts. This function assumes gh is in PATH.
+    Note: git and gh CLI availability is validated by cli.validate_inputs before
+    the pipeline starts. This function assumes both are in PATH.
     """
-    typer.echo(f"[pr] pushing branch '{branch}'", err=True)
+    typer.echo(f"[pr] creating PR for '{change_name}' on branch '{branch}'", err=True)
 
     # Push branch to remote
-    push_result = subprocess.run(
-        ["git", "push", "-u", "origin", branch],
-        cwd=worktree_path,
-        capture_output=True,
-        text=True,
-    )
+    try:
+        push_result = subprocess.run(
+            ["git", "push", "-u", "origin", branch],
+            cwd=worktree_path,
+            capture_output=True,
+            text=True,
+        )
+    except (FileNotFoundError, OSError) as e:
+        typer.echo(f"[pr] ERROR: git push failed: {e}", err=True)
+        return PrResult(
+            success=False,
+            stage="pr",
+            error=f"git push failed: {e}",
+            branch=branch,
+        )
+
     if push_result.returncode != 0:
         typer.echo(f"[pr] push failed: {push_result.stderr.strip()}", err=True)
         return PrResult(
@@ -53,22 +62,31 @@ def create_pr(
         typer.echo(f"  title: {title}", err=True)
 
     # Create PR via gh CLI
-    gh_result = subprocess.run(
-        [
-            "gh",
-            "pr",
-            "create",
-            "--title",
-            title,
-            "--body",
-            body,
-            "--head",
-            branch,
-        ],
-        cwd=worktree_path,
-        capture_output=True,
-        text=True,
-    )
+    try:
+        gh_result = subprocess.run(
+            [
+                "gh",
+                "pr",
+                "create",
+                "--title",
+                title,
+                "--body",
+                body,
+                "--head",
+                branch,
+            ],
+            cwd=worktree_path,
+            capture_output=True,
+            text=True,
+        )
+    except (FileNotFoundError, OSError) as e:
+        typer.echo(f"[pr] ERROR: gh pr create failed: {e}", err=True)
+        return PrResult(
+            success=False,
+            stage="pr",
+            error=f"gh pr create failed: {e}",
+            branch=branch,
+        )
 
     if gh_result.returncode != 0:
         typer.echo(f"[pr] gh pr create failed: {gh_result.stderr.strip()}", err=True)
@@ -93,12 +111,16 @@ def create_pr(
 
 def _build_pr_body(change_name: str, eval_result: EvalResult) -> str:
     """Build structured PR body."""
-    eval_summary = (
-        f"All {eval_result.commands_passed}/{eval_result.commands_run} eval commands passed"
-        if eval_result.success
-        else f"{eval_result.commands_passed}/{eval_result.commands_run} eval commands passed "
-        f"(failed: {eval_result.failed_command})"
-    )
+    if eval_result.success:
+        eval_summary = (
+            f"All {eval_result.commands_passed}/{eval_result.commands_run} eval commands passed"
+        )
+    else:
+        failed = eval_result.failed_command or "unknown"
+        eval_summary = (
+            f"{eval_result.commands_passed}/{eval_result.commands_run} "
+            f"eval commands passed (failed: {failed})"
+        )
 
     return (
         f"## Change: {change_name}\n\n"

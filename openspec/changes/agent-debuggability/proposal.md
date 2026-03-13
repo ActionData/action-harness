@@ -8,8 +8,8 @@ This must be addressed during bootstrap, not deferred to the structured-logging 
 
 - Add a design rule to CLAUDE.md: every function that performs I/O must be agent-debuggable — stderr progress for humans, structured return values for programmatic consumption
 - Add a design rule to CLAUDE.md: pipeline stages must be independently callable — the CLI wires them together, but each stage is testable and runnable in isolation
-- Update reframe-pipeline tasks to include stderr logging at each stage boundary (entering/exiting stage, inputs, outcomes)
-- Ensure every pipeline function returns a result object (not just side effects) so callers can inspect what happened
+- Establish conventions (via CLAUDE.md rules and result models) that the reframe-pipeline implementing agent follows — no modifications to reframe-pipeline tasks, the CLAUDE.md rules and result models are sufficient
+- Define result model types in `models.py` that every pipeline function returns — structured data, not just side effects
 - Add a `--verbose` flag to the CLI for detailed stderr output during pipeline runs
 - Add a `--dry-run` flag to the CLI that validates inputs and prints what would happen without executing
 
@@ -26,5 +26,5 @@ This must be addressed during bootstrap, not deferred to the structured-logging 
 
 - `CLAUDE.md` — new design rules added
 - `src/action_harness/cli.py` — new `--verbose` and `--dry-run` flags
-- Reframe-pipeline tasks updated to include logging requirements at each stage
-- All pipeline modules (worktree, worker, evaluator, pr, pipeline) gain stderr logging and return result objects
+- Reframe-pipeline implementation follows the new CLAUDE.md rules (no task modifications needed — rules apply to all code)
+- `src/action_harness/models.py` — result model types for all pipeline stages

@@ -22,7 +22,7 @@ Current state: `cli.py` validates inputs and prints a status line. The remaining
 
 ### 1. stderr for human-readable progress, return values for programmatic consumption
 
-Every pipeline function prints progress to stderr (via `typer.echo(..., err=True)`) and returns a result dataclass/model describing what happened. The CLI reads return values and decides what to print to stdout. Agents reading stderr get a timeline of what the harness did. Agents calling functions programmatically get structured results.
+Every pipeline function prints progress to stderr (via `typer.echo(..., err=True)`) and returns a Pydantic model describing what happened. The CLI reads return values and decides what to print to stdout. Agents reading stderr get a timeline of what the harness did. Agents calling functions programmatically get structured results.
 
 **Why stderr over stdout:** stdout is reserved for final output (PR URL, error summary). stderr is the diagnostic channel. This matches Unix conventions and means piping `action-harness run ... 2>log.txt` captures diagnostics without mixing with the result.
 
@@ -48,9 +48,11 @@ Default stderr output logs stage boundaries only (entering/exiting each stage, p
 
 ### 5. `--dry-run` flag for validation without execution
 
-`--dry-run` validates all inputs, resolves the worktree path, prints what each stage would do, and exits. No worktree creation, no worker dispatch, no eval, no PR.
+`--dry-run` validates all inputs, resolves the worktree path, prints what each stage would do to stdout, and exits. No worktree creation, no worker dispatch, no eval, no PR.
 
 **Why:** An agent testing harness configuration or verifying a change exists shouldn't need to run the full pipeline. Dry-run also serves as documentation — the output shows the exact sequence of operations.
+
+**Note on stdout:** Dry-run output goes to stdout because the execution plan *is* the final output of a dry-run. This is consistent with the stderr-for-diagnostics rule — in dry-run mode, there are no subprocesses running, so stderr has nothing to report.
 
 ## Risks / Trade-offs
 
@@ -58,7 +60,7 @@ Default stderr output logs stage boundaries only (entering/exiting each stage, p
 → Mitigation: Keep it minimal — one line at entry, one at exit. The structured-logging task can wrap this in helpers later.
 
 **[Risk] Result objects add types that need to be maintained.**
-→ Mitigation: Use simple dataclasses in models.py. They're plain data, not abstractions. Add fields as needed, don't over-design upfront.
+→ Mitigation: Use simple Pydantic models in models.py. They're plain data, not abstractions. Add fields as needed, don't over-design upfront.
 
 **[Trade-off] stderr logging is not structured (not JSON).**
 → Acceptable. The bootstrap needs human/agent-readable diagnostics now. The structured-logging self-hosted task upgrades to JSON later. The convention (stderr for diagnostics) stays the same.

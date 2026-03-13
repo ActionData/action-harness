@@ -1,5 +1,6 @@
 """Subprocess eval runner."""
 
+import shlex
 import subprocess
 from pathlib import Path
 
@@ -46,12 +47,23 @@ def run_eval(
         if verbose:
             typer.echo(f"  [{i + 1}/{len(commands)}] {cmd_str}", err=True)
 
-        result = subprocess.run(
-            cmd_str.split(),
-            cwd=worktree_path,
-            capture_output=True,
-            text=True,
-        )
+        try:
+            result = subprocess.run(
+                shlex.split(cmd_str),
+                cwd=worktree_path,
+                capture_output=True,
+                text=True,
+            )
+        except (FileNotFoundError, OSError) as e:
+            typer.echo(f"[eval] ERROR: failed to run '{cmd_str}': {e}", err=True)
+            return EvalResult(
+                success=False,
+                stage="eval",
+                error=f"Failed to execute: {cmd_str}: {e}",
+                commands_run=i + 1,
+                commands_passed=commands_passed,
+                failed_command=cmd_str,
+            )
 
         if result.returncode != 0:
             output = (result.stdout + result.stderr).strip()

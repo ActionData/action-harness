@@ -29,7 +29,7 @@ class TestFormatFeedback:
 
     def test_includes_exit_code(self) -> None:
         feedback = format_feedback("uv run pytest -v", 2, "error output")
-        assert "2" in feedback
+        assert "### Exit Code: 2" in feedback
 
     def test_includes_output(self) -> None:
         feedback = format_feedback("uv run pytest -v", 1, "FAILED test_foo\nassert False")
@@ -142,6 +142,16 @@ class TestRunEval:
 
         for c in mock.call_args_list:
             assert c[1]["cwd"] == wt
+
+    def test_command_not_found_returns_failure(self) -> None:
+        mock = MagicMock(side_effect=FileNotFoundError("No such file: nonexistent"))
+
+        with patch("action_harness.evaluator.subprocess.run", mock):
+            result = run_eval(Path("/fake/worktree"), eval_commands=["nonexistent --flag"])
+
+        assert result.success is False
+        assert "Failed to execute" in (result.error or "")
+        assert result.failed_command == "nonexistent --flag"
 
     def test_feedback_includes_combined_output(self) -> None:
         results = [(1, "stdout content", "stderr content")]

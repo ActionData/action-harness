@@ -3,6 +3,7 @@
 import shutil
 from pathlib import Path
 
+import click
 import typer
 
 from action_harness import __version__
@@ -81,7 +82,11 @@ def run(
     max_retries: int = typer.Option(3, help="Maximum eval retry attempts"),
     max_turns: int = typer.Option(200, help="Maximum Claude Code turns per dispatch"),
     model: str | None = typer.Option(None, help="Claude model to use (e.g., opus, sonnet)"),
-    effort: str | None = typer.Option(None, help="Effort level (low, medium, high, max)"),
+    effort: str | None = typer.Option(
+        None,
+        click_type=click.Choice(["low", "medium", "high", "max"]),
+        help="Effort level",
+    ),
     max_budget_usd: float | None = typer.Option(
         None, "--max-budget-usd", help="Maximum dollar spend per worker dispatch"
     ),
@@ -120,7 +125,7 @@ def run(
         typer.echo(f"  worker: claude --output-format json --max-turns {max_turns}")
         typer.echo(f"  model: {model or 'default'}")
         typer.echo(f"  effort: {effort or 'default'}")
-        typer.echo(f"  max-budget-usd: {max_budget_usd or 'none'}")
+        typer.echo(f"  max-budget-usd: {max_budget_usd if max_budget_usd is not None else 'none'}")
         typer.echo(f"  permission-mode: {permission_mode}")
         typer.echo("  eval commands:")
         for cmd in BOOTSTRAP_EVAL_COMMANDS:

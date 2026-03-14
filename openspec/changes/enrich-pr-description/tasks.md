@@ -15,10 +15,10 @@ Prerequisites: implement after `worker-config` (which also modifies pipeline.py)
 
 ## 3. Tests
 
-- [ ] 3.1 In `tests/test_pr.py`: add tests for `_read_proposal_why` — file exists with Why section (returns content between `## Why` and next `##`), file missing (returns None), file without Why section (returns None).
-- [ ] 3.2 In `tests/test_pr.py`: update `_build_pr_body` tests to verify new sections. Mock git subprocess calls for diff stat and commit log. Test: Background section present when proposal exists, Changes section with diff stat, Commits section with log, Worker section with cost/duration/observations. Test truncation: diff stat >30 lines truncated with indicator, observations >500 chars truncated with indicator.
-- [ ] 3.3 In `tests/test_pr.py`: update `create_pr` tests for new signature — pass `worker_result: WorkerResult` and `base_branch: str`.
-- [ ] 3.4 In `tests/test_integration.py`: update integration tests to pass `worker_result` and `base_branch` to `create_pr` if signature changed.
+- [x] 3.1 In `tests/test_pr.py`: add tests for `_read_proposal_why` — file exists with Why section (returns content between `## Why` and next `##`), file missing (returns None), file without Why section (returns None).
+- [x] 3.2 In `tests/test_pr.py`: update `_build_pr_body` tests to verify new sections. Mock git subprocess calls for diff stat and commit log. Test: Background section present when proposal exists, Changes section with diff stat, Commits section with log, Worker section with cost/duration/observations. Test truncation: diff stat >30 lines truncated with indicator, observations >500 chars truncated with indicator.
+- [x] 3.3 In `tests/test_pr.py`: update `create_pr` tests for new signature — pass `worker_result: WorkerResult` and `base_branch: str`.
+- [x] 3.4 In `tests/test_integration.py`: update integration tests to pass `worker_result` and `base_branch` to `create_pr` if signature changed.
 
 ## 4. Validation
 

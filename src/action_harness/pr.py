@@ -132,9 +132,7 @@ def create_pr(
 
     # Build PR body
     title = f"[harness] {change_name}"
-    body = _build_pr_body(
-        change_name, eval_result, worktree_path, base_branch, worker_result
-    )
+    body = _build_pr_body(change_name, eval_result, worktree_path, base_branch, worker_result)
 
     if verbose:
         typer.echo(f"  title: {title}", err=True)

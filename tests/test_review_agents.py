@@ -156,9 +156,7 @@ class TestTriageFindings:
             description="d",
             agent="bug-hunter",
         )
-        result = ReviewResult(
-            success=True, agent_name="bug-hunter", findings=[finding]
-        )
+        result = ReviewResult(success=True, agent_name="bug-hunter", findings=[finding])
         assert triage_findings([result]) is True
 
     def test_high_returns_true(self) -> None:
@@ -169,9 +167,7 @@ class TestTriageFindings:
             description="d",
             agent="bug-hunter",
         )
-        result = ReviewResult(
-            success=True, agent_name="bug-hunter", findings=[finding]
-        )
+        result = ReviewResult(success=True, agent_name="bug-hunter", findings=[finding])
         assert triage_findings([result]) is True
 
     def test_only_medium_low_returns_false(self) -> None:
@@ -191,25 +187,17 @@ class TestTriageFindings:
                 agent="quality-reviewer",
             ),
         ]
-        result = ReviewResult(
-            success=True, agent_name="quality-reviewer", findings=findings
-        )
+        result = ReviewResult(success=True, agent_name="quality-reviewer", findings=findings)
         assert triage_findings([result]) is False
 
     def test_empty_findings_returns_false(self) -> None:
-        result = ReviewResult(
-            success=True, agent_name="test-reviewer", findings=[]
-        )
+        result = ReviewResult(success=True, agent_name="test-reviewer", findings=[])
         assert triage_findings([result]) is False
 
     def test_all_failed_returns_false(self) -> None:
         results = [
-            ReviewResult(
-                success=False, agent_name="bug-hunter", error="failed"
-            ),
-            ReviewResult(
-                success=False, agent_name="test-reviewer", error="failed"
-            ),
+            ReviewResult(success=False, agent_name="bug-hunter", error="failed"),
+            ReviewResult(success=False, agent_name="test-reviewer", error="failed"),
         ]
         assert triage_findings(results) is False
 
@@ -230,12 +218,8 @@ class TestTriageFindings:
                 agent="b",
             ),
         ]
-        r1 = ReviewResult(
-            success=True, agent_name="a", findings=[findings[0]]
-        )
-        r2 = ReviewResult(
-            success=True, agent_name="b", findings=[findings[1]]
-        )
+        r1 = ReviewResult(success=True, agent_name="a", findings=[findings[0]])
+        r2 = ReviewResult(success=True, agent_name="b", findings=[findings[1]])
         assert triage_findings([r1, r2]) is True
 
 
@@ -249,9 +233,7 @@ class TestFormatReviewFeedback:
             description="Loop bound is wrong",
             agent="bug-hunter",
         )
-        result = ReviewResult(
-            success=True, agent_name="bug-hunter", findings=[finding]
-        )
+        result = ReviewResult(success=True, agent_name="bug-hunter", findings=[finding])
         feedback = format_review_feedback([result])
 
         assert "Off-by-one" in feedback
@@ -276,12 +258,8 @@ class TestFormatReviewFeedback:
                 agent="quality-reviewer",
             ),
         ]
-        r1 = ReviewResult(
-            success=True, agent_name="bug-hunter", findings=[findings[0]]
-        )
-        r2 = ReviewResult(
-            success=True, agent_name="quality-reviewer", findings=[findings[1]]
-        )
+        r1 = ReviewResult(success=True, agent_name="bug-hunter", findings=[findings[0]])
+        r2 = ReviewResult(success=True, agent_name="quality-reviewer", findings=[findings[1]])
         feedback = format_review_feedback([r1, r2])
 
         assert "Critical Bug" in feedback
@@ -299,9 +277,7 @@ class TestFormatReviewFeedback:
             description="d",
             agent="a",
         )
-        result = ReviewResult(
-            success=True, agent_name="a", findings=[finding]
-        )
+        result = ReviewResult(success=True, agent_name="a", findings=[finding])
         feedback = format_review_feedback([result])
         assert "No high or critical findings" in feedback
 
@@ -313,9 +289,7 @@ class TestFormatReviewFeedback:
             description="d",
             agent="a",
         )
-        result = ReviewResult(
-            success=True, agent_name="a", findings=[finding]
-        )
+        result = ReviewResult(success=True, agent_name="a", findings=[finding])
         feedback = format_review_feedback([result])
         assert "Fix the high/critical issues" in feedback
 
@@ -360,9 +334,7 @@ class TestDispatchSingleReview:
     def test_with_optional_flags(self) -> None:
         mock_result = MagicMock()
         mock_result.returncode = 0
-        mock_result.stdout = json.dumps(
-            {"result": json.dumps({"findings": [], "summary": "ok"})}
-        )
+        mock_result.stdout = json.dumps({"result": json.dumps({"findings": [], "summary": "ok"})})
         mock_result.stderr = ""
 
         with patch(
@@ -420,9 +392,7 @@ class TestDispatchSingleReview:
         }
         mock_result = MagicMock()
         mock_result.returncode = 0
-        mock_result.stdout = json.dumps(
-            {"result": json.dumps(findings_json), "cost_usd": 0.03}
-        )
+        mock_result.stdout = json.dumps({"result": json.dumps(findings_json), "cost_usd": 0.03})
         mock_result.stderr = ""
 
         with patch(
@@ -444,9 +414,7 @@ class TestDispatchSingleReview:
 
 class TestDispatchReviewAgents:
     def test_dispatches_three_agents(self) -> None:
-        mock_result = ReviewResult(
-            success=True, agent_name="mock", findings=[]
-        )
+        mock_result = ReviewResult(success=True, agent_name="mock", findings=[])
 
         with patch(
             "action_harness.review_agents.dispatch_single_review",
@@ -462,9 +430,7 @@ class TestDispatchReviewAgents:
 
     def test_collects_all_results(self) -> None:
         def mock_dispatch(agent_name: str, **kwargs: object) -> ReviewResult:
-            return ReviewResult(
-                success=True, agent_name=agent_name, findings=[]
-            )
+            return ReviewResult(success=True, agent_name=agent_name, findings=[])
 
         with patch(
             "action_harness.review_agents.dispatch_single_review",
@@ -489,9 +455,7 @@ class TestDispatchReviewAgents:
                     agent_name=agent_name,
                     error="failed",
                 )
-            return ReviewResult(
-                success=True, agent_name=agent_name, findings=[]
-            )
+            return ReviewResult(success=True, agent_name=agent_name, findings=[])
 
         with patch(
             "action_harness.review_agents.dispatch_single_review",

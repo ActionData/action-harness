@@ -179,14 +179,11 @@ def dispatch_single_review(
     duration = time.monotonic() - start_time
 
     if result.returncode != 0:
-        typer.echo(
-            f"[review:{agent_name}] failed (exit {result.returncode})", err=True
-        )
+        typer.echo(f"[review:{agent_name}] failed (exit {result.returncode})", err=True)
         return ReviewResult(
             success=False,
             agent_name=agent_name,
-            error=f"Claude CLI exited with code {result.returncode}: "
-            f"{result.stderr[:500]}",
+            error=f"Claude CLI exited with code {result.returncode}: {result.stderr[:500]}",
             duration_seconds=duration,
         )
 
@@ -199,9 +196,7 @@ def dispatch_single_review(
     return review_result
 
 
-def parse_review_findings(
-    raw_output: str, agent_name: str, duration: float
-) -> ReviewResult:
+def parse_review_findings(raw_output: str, agent_name: str, duration: float) -> ReviewResult:
     """Parse a review agent's JSON output into a ReviewResult.
 
     Extracts the JSON block from the Claude CLI JSON envelope's ``result``
@@ -346,8 +341,7 @@ def format_review_feedback(results: list[ReviewResult]) -> str:
                 if finding.line is not None:
                     location += f":{finding.line}"
                 lines.append(
-                    f"### [{finding.severity.upper()}] {finding.title} "
-                    f"(agent: {finding.agent})"
+                    f"### [{finding.severity.upper()}] {finding.title} (agent: {finding.agent})"
                 )
                 lines.append(f"- **File:** {location}")
                 lines.append(f"- **Description:** {finding.description}")
@@ -356,7 +350,5 @@ def format_review_feedback(results: list[ReviewResult]) -> str:
     if not has_findings:
         return "## Review Agent Findings\n\nNo high or critical findings."
 
-    lines.append(
-        "Fix the high/critical issues above and re-run eval to verify."
-    )
+    lines.append("Fix the high/critical issues above and re-run eval to verify.")
     return "\n".join(lines)

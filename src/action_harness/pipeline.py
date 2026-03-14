@@ -405,15 +405,15 @@ def _post_review_comment(
         body = "\n".join(lines)
 
     try:
-        result = subprocess.run(
+        gh_result = subprocess.run(
             ["gh", "pr", "comment", pr_url, "--body", body],
             cwd=worktree_path,
             capture_output=True,
             text=True,
         )
-        if result.returncode != 0:
+        if gh_result.returncode != 0:
             typer.echo(
-                f"[pipeline] warning: gh pr comment failed: {result.stderr.strip()}",
+                f"[pipeline] warning: gh pr comment failed: {gh_result.stderr.strip()}",
                 err=True,
             )
         elif verbose:
@@ -460,18 +460,14 @@ def _run_review_fix_retry(
     stages.append(worker_result)
 
     if not worker_result.success:
-        typer.echo(
-            f"[pipeline] review fix worker failed: {worker_result.error}", err=True
-        )
+        typer.echo(f"[pipeline] review fix worker failed: {worker_result.error}", err=True)
         return False
 
     eval_result = run_eval(worktree_path, verbose=verbose)
     stages.append(eval_result)
 
     if not eval_result.success:
-        typer.echo(
-            f"[pipeline] review fix eval failed: {eval_result.error}", err=True
-        )
+        typer.echo(f"[pipeline] review fix eval failed: {eval_result.error}", err=True)
         return False
 
     # Push new commits to the PR branch

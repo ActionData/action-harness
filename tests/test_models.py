@@ -213,9 +213,7 @@ class TestReviewResult:
             description="desc",
             agent="bug-hunter",
         )
-        review = ReviewResult(
-            success=True, agent_name="bug-hunter", findings=[finding]
-        )
+        review = ReviewResult(success=True, agent_name="bug-hunter", findings=[finding])
         manifest = RunManifest(
             change_name="test",
             repo_path=".",

@@ -179,7 +179,7 @@ def _make_claude_mock(
 
 class TestPipelineWithReviewAgents:
     def test_review_results_in_manifest(self, test_repo: Path) -> None:
-        """Three ReviewResult entries appear in manifest after PrResult and before OpenSpecReviewResult."""
+        """ReviewResults appear after PrResult and before OpenSpecReviewResult."""
         mock = _make_claude_mock(commits=True)
 
         with (

@@ -45,9 +45,9 @@ Prerequisites: these tasks assume `structured-logging` has NOT been implemented 
 
 ## Group 5: Integration Tests
 
-- [ ] 5.1 In `tests/test_integration.py` (or a new `tests/test_pipeline_review.py`), add a test that mocks `subprocess.run` to simulate the full pipeline with review agents. Verify: three `ReviewResult` entries appear in the manifest stages, they appear after `PrResult` and before `OpenSpecReviewResult`.
-- [ ] 5.2 Add a test for the fix-retry path: mock review agents to return a high-severity finding, verify the pipeline re-dispatches the worker with feedback, verify an additional `WorkerResult` and `EvalResult` appear in the manifest.
-- [ ] 5.3 Add a test for the no-retry path: mock review agents to return only medium/low findings, verify the pipeline proceeds directly to OpenSpec review without additional worker dispatch.
+- [x] 5.1 In `tests/test_integration.py` (or a new `tests/test_pipeline_review.py`), add a test that mocks `subprocess.run` to simulate the full pipeline with review agents. Verify: three `ReviewResult` entries appear in the manifest stages, they appear after `PrResult` and before `OpenSpecReviewResult`.
+- [x] 5.2 Add a test for the fix-retry path: mock review agents to return a high-severity finding, verify the pipeline re-dispatches the worker with feedback, verify an additional `WorkerResult` and `EvalResult` appear in the manifest.
+- [x] 5.3 Add a test for the no-retry path: mock review agents to return only medium/low findings, verify the pipeline proceeds directly to OpenSpec review without additional worker dispatch.
 
 ## Self-Validation
 

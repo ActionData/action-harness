@@ -50,10 +50,22 @@ class PrResult(StageResult):
     branch: str = ""
 
 
+class OpenSpecReviewResult(StageResult):
+    """Result from OpenSpec review agent."""
+
+    stage: Literal["openspec-review"] = "openspec-review"
+    tasks_total: int = 0
+    tasks_complete: int = 0
+    validation_passed: bool = False
+    semantic_review_passed: bool = False
+    findings: list[str] = []
+    archived: bool = False
+
+
 # Discriminated union so Pydantic preserves subtypes through serialization.
 # Only includes concrete stage types used in the pipeline (not the base StageResult).
 StageResultUnion = Annotated[
-    WorktreeResult | WorkerResult | EvalResult | PrResult,
+    WorktreeResult | WorkerResult | EvalResult | PrResult | OpenSpecReviewResult,
     Field(discriminator="stage"),
 ]
 

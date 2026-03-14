@@ -87,4 +87,5 @@ class RunManifest(BaseModel):
     pr_url: str | None = None
     error: str | None = None
     manifest_path: str | None = None
+    event_log_path: str | None = None
     profile: RepoProfile | None = None

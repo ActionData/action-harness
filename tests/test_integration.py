@@ -11,6 +11,8 @@ from action_harness.models import EvalResult, OpenSpecReviewResult, RunManifest
 from action_harness.openspec_reviewer import parse_review_result
 from action_harness.pipeline import run_pipeline
 
+# ruff: noqa: E501
+
 
 def _approved_review_result() -> OpenSpecReviewResult:
     """Return a pre-built approved OpenSpecReviewResult for mocking."""
@@ -631,3 +633,58 @@ class TestPipelineWithOpenspecReview:
         assert len(review_stages) == 1
         assert review_stages[0].success is False
         assert len(review_stages[0].findings) == 2
+
+
+class TestEventLogIntegration:
+    def _passing_eval(self) -> EvalResult:
+        return EvalResult(success=True, stage="eval", commands_run=4, commands_passed=4)
+
+    def test_event_log_path_populated_and_valid(self, test_repo: Path) -> None:
+        """Manifest.event_log_path is set and the file contains valid JSON-lines."""
+        mock = _make_claude_mock(commits=True)
+
+        with (
+            patch("action_harness.worker.subprocess.run", mock),
+            patch("action_harness.pipeline.run_eval", return_value=self._passing_eval()),
+            patch("action_harness.pr.subprocess.run", mock),
+            patch(
+                "action_harness.pipeline.dispatch_openspec_review",
+                return_value=('{"result": "{}"}', 1.0),
+            ),
+            patch(
+                "action_harness.pipeline.parse_review_result",
+                return_value=_approved_review_result(),
+            ),
+            patch(
+                "action_harness.pipeline.push_archive_if_needed",
+                return_value=(False, None),
+            ),
+        ):
+            _pr_result, manifest = run_pipeline("test-change", test_repo, max_retries=1)
+
+        # event_log_path should be set
+        assert manifest.event_log_path is not None
+        log_file = Path(manifest.event_log_path)
+        assert log_file.exists()
+
+        # Every line must be valid JSON with required fields
+        lines = log_file.read_text().strip().splitlines()
+        assert len(lines) >= 2  # at minimum: run.started + run.completed
+
+        event_types = []
+        for line in lines:
+            parsed = json.loads(line)
+            assert "timestamp" in parsed
+            assert "event" in parsed
+            assert "run_id" in parsed
+            event_types.append(parsed["event"])
+
+        # First event should be run.started, last should be run.completed
+        assert event_types[0] == "run.started"
+        assert event_types[-1] == "run.completed"
+
+        # Should contain key stage events for a happy path
+        assert "worktree.created" in event_types
+        assert "worker.dispatched" in event_types
+        assert "worker.completed" in event_types
+        assert "pr.created" in event_types

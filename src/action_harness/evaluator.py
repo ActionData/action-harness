@@ -28,6 +28,7 @@ def run_eval(
     worktree_path: Path,
     eval_commands: list[str] | None = None,
     verbose: bool = False,
+    logger: object | None = None,
 ) -> EvalResult:
     """Run eval commands in the worktree. Stop on first failure.
 
@@ -64,6 +65,13 @@ def run_eval(
         if result.returncode != 0:
             output = (result.stdout + result.stderr).strip()
             typer.echo(f"[eval] FAILED: {cmd_str} (exit {result.returncode})", err=True)
+            if logger is not None and hasattr(logger, "emit"):
+                logger.emit(
+                    "eval.command.failed",
+                    stage="eval",
+                    command=cmd_str,
+                    exit_code=result.returncode,
+                )
             if verbose:
                 preview = output[:500]
                 typer.echo(f"  output preview: {preview}", err=True)
@@ -81,6 +89,8 @@ def run_eval(
             )
 
         commands_passed += 1
+        if logger is not None and hasattr(logger, "emit"):
+            logger.emit("eval.command.passed", stage="eval", command=cmd_str)
         if verbose:
             typer.echo(f"  [{i + 1}/{len(commands)}] passed", err=True)
 

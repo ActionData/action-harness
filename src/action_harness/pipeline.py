@@ -81,6 +81,10 @@ def run_pipeline(
     repo: Path,
     max_retries: int = 3,
     max_turns: int = 200,
+    model: str | None = None,
+    effort: str | None = None,
+    max_budget_usd: float | None = None,
+    permission_mode: str = "bypassPermissions",
     verbose: bool = False,
 ) -> tuple[PrResult, RunManifest]:
     """Run the full pipeline: worktree -> worker -> eval -> retry -> PR.
@@ -96,7 +100,18 @@ def run_pipeline(
     stages: list[StageResultUnion] = []
 
     try:
-        pr_result = _run_pipeline_inner(change_name, repo, max_retries, max_turns, verbose, stages)
+        pr_result = _run_pipeline_inner(
+            change_name,
+            repo,
+            max_retries,
+            max_turns,
+            model,
+            effort,
+            max_budget_usd,
+            permission_mode,
+            verbose,
+            stages,
+        )
     except Exception as e:
         typer.echo(f"[pipeline] unexpected error: {e}", err=True)
         pr_result = PrResult(
@@ -118,6 +133,10 @@ def _run_pipeline_inner(
     repo: Path,
     max_retries: int,
     max_turns: int,
+    model: str | None,
+    effort: str | None,
+    max_budget_usd: float | None,
+    permission_mode: str,
     verbose: bool,
     stages: list[StageResultUnion],
 ) -> PrResult:
@@ -154,6 +173,10 @@ def _run_pipeline_inner(
             base_branch=_get_worktree_base(repo),
             max_turns=max_turns,
             feedback=feedback,
+            model=model,
+            effort=effort,
+            max_budget_usd=max_budget_usd,
+            permission_mode=permission_mode,
             verbose=verbose,
         )
         stages.append(worker_result)

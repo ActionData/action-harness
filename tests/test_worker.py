@@ -172,3 +172,80 @@ class TestDispatchWorker:
 
         assert result.duration_seconds is not None
         assert result.duration_seconds >= 0
+
+    def _get_claude_cmd(self, mock: MagicMock) -> list[str]:
+        """Extract the claude CLI command from mock call args."""
+        for call in mock.call_args_list:
+            cmd = call[0][0]
+            if cmd[0] == "claude":
+                return cmd
+        raise AssertionError("claude CLI was never called")
+
+    def test_model_flag_present(self) -> None:
+        json_output = json.dumps({"cost_usd": 0.01, "result": "ok"})
+        mock = self._mock_subprocess(claude_stdout=json_output)
+        with patch("action_harness.worker.subprocess.run", mock):
+            dispatch_worker("t", Path("/fake"), model="opus")
+        cmd = self._get_claude_cmd(mock)
+        idx = cmd.index("--model")
+        assert cmd[idx + 1] == "opus"
+
+    def test_model_flag_absent(self) -> None:
+        json_output = json.dumps({"cost_usd": 0.01, "result": "ok"})
+        mock = self._mock_subprocess(claude_stdout=json_output)
+        with patch("action_harness.worker.subprocess.run", mock):
+            dispatch_worker("t", Path("/fake"))
+        cmd = self._get_claude_cmd(mock)
+        assert "--model" not in cmd
+
+    def test_effort_flag_present(self) -> None:
+        json_output = json.dumps({"cost_usd": 0.01, "result": "ok"})
+        mock = self._mock_subprocess(claude_stdout=json_output)
+        with patch("action_harness.worker.subprocess.run", mock):
+            dispatch_worker("t", Path("/fake"), effort="high")
+        cmd = self._get_claude_cmd(mock)
+        idx = cmd.index("--effort")
+        assert cmd[idx + 1] == "high"
+
+    def test_effort_flag_absent(self) -> None:
+        json_output = json.dumps({"cost_usd": 0.01, "result": "ok"})
+        mock = self._mock_subprocess(claude_stdout=json_output)
+        with patch("action_harness.worker.subprocess.run", mock):
+            dispatch_worker("t", Path("/fake"))
+        cmd = self._get_claude_cmd(mock)
+        assert "--effort" not in cmd
+
+    def test_budget_flag_present(self) -> None:
+        json_output = json.dumps({"cost_usd": 0.01, "result": "ok"})
+        mock = self._mock_subprocess(claude_stdout=json_output)
+        with patch("action_harness.worker.subprocess.run", mock):
+            dispatch_worker("t", Path("/fake"), max_budget_usd=5.0)
+        cmd = self._get_claude_cmd(mock)
+        idx = cmd.index("--max-budget-usd")
+        assert cmd[idx + 1] == "5.0"
+
+    def test_budget_flag_absent(self) -> None:
+        json_output = json.dumps({"cost_usd": 0.01, "result": "ok"})
+        mock = self._mock_subprocess(claude_stdout=json_output)
+        with patch("action_harness.worker.subprocess.run", mock):
+            dispatch_worker("t", Path("/fake"))
+        cmd = self._get_claude_cmd(mock)
+        assert "--max-budget-usd" not in cmd
+
+    def test_permission_mode_default(self) -> None:
+        json_output = json.dumps({"cost_usd": 0.01, "result": "ok"})
+        mock = self._mock_subprocess(claude_stdout=json_output)
+        with patch("action_harness.worker.subprocess.run", mock):
+            dispatch_worker("t", Path("/fake"))
+        cmd = self._get_claude_cmd(mock)
+        idx = cmd.index("--permission-mode")
+        assert cmd[idx + 1] == "bypassPermissions"
+
+    def test_permission_mode_custom(self) -> None:
+        json_output = json.dumps({"cost_usd": 0.01, "result": "ok"})
+        mock = self._mock_subprocess(claude_stdout=json_output)
+        with patch("action_harness.worker.subprocess.run", mock):
+            dispatch_worker("t", Path("/fake"), permission_mode="plan")
+        cmd = self._get_claude_cmd(mock)
+        idx = cmd.index("--permission-mode")
+        assert cmd[idx + 1] == "plan"

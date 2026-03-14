@@ -51,6 +51,10 @@ def dispatch_worker(
     base_branch: str = "main",
     max_turns: int = 200,
     feedback: str | None = None,
+    model: str | None = None,
+    effort: str | None = None,
+    max_budget_usd: float | None = None,
+    permission_mode: str = "bypassPermissions",
     verbose: bool = False,
 ) -> WorkerResult:
     """Dispatch a Claude Code worker to implement a change.
@@ -79,7 +83,15 @@ def dispatch_worker(
         "json",
         "--max-turns",
         str(max_turns),
+        "--permission-mode",
+        permission_mode,
     ]
+    if model is not None:
+        cmd.extend(["--model", model])
+    if effort is not None:
+        cmd.extend(["--effort", effort])
+    if max_budget_usd is not None:
+        cmd.extend(["--max-budget-usd", str(max_budget_usd)])
 
     if verbose:
         typer.echo(f"  cwd: {worktree_path}", err=True)

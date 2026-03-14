@@ -175,6 +175,35 @@ class TestPipelineSuccess:
         idx = cmd.index("--max-turns")
         assert cmd[idx + 1] == "50"
 
+    def test_worker_config_threaded_through_pipeline(self, test_repo: Path) -> None:
+        mock = _make_claude_mock(commits=True)
+
+        with (
+            patch("action_harness.worker.subprocess.run", mock),
+            patch("action_harness.pipeline.run_eval", return_value=self._passing_eval()),
+            patch("action_harness.pr.subprocess.run", mock),
+        ):
+            _pr_result, _manifest = run_pipeline(
+                "test-change",
+                test_repo,
+                model="opus",
+                effort="high",
+                max_budget_usd=2.0,
+                permission_mode="plan",
+            )
+
+        claude_calls = [c for c in mock.call_args_list if c[0][0][0] == "claude"]
+        assert len(claude_calls) >= 1
+        cmd = claude_calls[0][0][0]
+        idx = cmd.index("--model")
+        assert cmd[idx + 1] == "opus"
+        idx = cmd.index("--effort")
+        assert cmd[idx + 1] == "high"
+        idx = cmd.index("--max-budget-usd")
+        assert cmd[idx + 1] == "2.0"
+        idx = cmd.index("--permission-mode")
+        assert cmd[idx + 1] == "plan"
+
 
 class TestPipelineFailure:
     def test_worker_no_commits_retries_then_fails(self, test_repo: Path) -> None:

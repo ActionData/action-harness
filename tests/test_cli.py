@@ -123,11 +123,15 @@ class TestCliRunner:
         result = runner.invoke(app, ["run", "--change", "x", "--repo", "/nonexistent/path"])
         assert result.exit_code == 1
 
-    def test_help_shows_verbose_and_dry_run(self) -> None:
+    def test_help_shows_all_flags(self) -> None:
         result = runner.invoke(app, ["run", "--help"])
         assert result.exit_code == 0
         assert "--verbose" in result.output
         assert "--dry-run" in result.output
+        assert "--model" in result.output
+        assert "--effort" in result.output
+        assert "--max-budget-usd" in result.output
+        assert "--permission-mode" in result.output
 
     def test_verbose_flag_accepted(self, fake_repo: Path) -> None:
         with (
@@ -158,6 +162,11 @@ class TestCliRunner:
         assert "claude --output-format json" in result.output
         assert "[harness] test-change" in result.output
         assert "max retries: 3" in result.output
+        # Worker config defaults
+        assert "model: default" in result.output
+        assert "effort: default" in result.output
+        assert "max-budget-usd: none" in result.output
+        assert "permission-mode: bypassPermissions" in result.output
 
     def test_dry_run_reflects_custom_options(self, fake_repo: Path) -> None:
         with patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"):
@@ -179,6 +188,33 @@ class TestCliRunner:
         assert result.exit_code == 0
         assert "max retries: 7" in result.output
         assert "--max-turns 50" in result.output
+
+    def test_dry_run_shows_worker_config(self, fake_repo: Path) -> None:
+        with patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"):
+            result = runner.invoke(
+                app,
+                [
+                    "run",
+                    "--change",
+                    "test-change",
+                    "--repo",
+                    str(fake_repo),
+                    "--dry-run",
+                    "--model",
+                    "sonnet",
+                    "--effort",
+                    "high",
+                    "--max-budget-usd",
+                    "2.0",
+                    "--permission-mode",
+                    "plan",
+                ],
+            )
+        assert result.exit_code == 0
+        assert "model: sonnet" in result.output
+        assert "effort: high" in result.output
+        assert "max-budget-usd: 2.0" in result.output
+        assert "permission-mode: plan" in result.output
 
     def test_dry_run_invalid_inputs(self) -> None:
         result = runner.invoke(

@@ -16,15 +16,15 @@
 
 ## 2. Unit Tests for Profiler
 
-- [ ] 2.1 Create `tests/test_profiler.py`. Add test class `TestDetectEcosystem` with tests for: pyproject.toml detected as python, package.json as javascript, Cargo.toml as rust, go.mod as go, Makefile as make, no markers returns unknown, multiple markers returns highest priority. Use `tmp_path` fixture to create marker files.
+- [x] 2.1 Create `tests/test_profiler.py`. Add test class `TestDetectEcosystem` with tests for: pyproject.toml detected as python, package.json as javascript, Cargo.toml as rust, go.mod as go, Makefile as make, no markers returns unknown, multiple markers returns highest priority. Use `tmp_path` fixture to create marker files.
 
-- [ ] 2.2 Add test class `TestParseClaudeMd` with tests for: extracts commands from `## Build & Test` section, extracts from `## Build and Test` (alternate heading), ignores comment lines in code blocks, ignores empty lines, returns None when no CLAUDE.md, returns None when heading not found, returns None when code block is empty, stops at next `## ` heading.
+- [x] 2.2 Add test class `TestParseClaudeMd` with tests for: extracts commands from `## Build & Test` section, extracts from `## Build and Test` (alternate heading), ignores comment lines in code blocks, ignores empty lines, returns None when no CLAUDE.md, returns None when heading not found, returns None when code block is empty, stops at next `## ` heading.
 
-- [ ] 2.3 Add test class `TestDetectPythonCommands` with tests for: all tools configured returns 4 commands, only pytest configured returns 1 command, no tools configured returns empty list, malformed TOML returns empty list (caught exception).
+- [x] 2.3 Add test class `TestDetectPythonCommands` with tests for: all tools configured returns 4 commands, only pytest configured returns 1 command, no tools configured returns empty list, malformed TOML returns empty list (caught exception).
 
-- [ ] 2.4 Add test class `TestDetectJsCommands` with tests for: test and lint scripts detected, no scripts key returns empty, tsconfig.json present adds tsc command.
+- [x] 2.4 Add test class `TestDetectJsCommands` with tests for: test and lint scripts detected, no scripts key returns empty, tsconfig.json present adds tsc command.
 
-- [ ] 2.5 Add test class `TestProfileRepo` with tests for: CLAUDE.md takes precedence over pyproject.toml, Python convention detection, fallback when nothing detected, source field is correct for each path, profile is JSON-serializable via `.model_dump_json()`.
+- [x] 2.5 Add test class `TestProfileRepo` with tests for: CLAUDE.md takes precedence over pyproject.toml, Python convention detection, fallback when nothing detected, source field is correct for each path, profile is JSON-serializable via `.model_dump_json()`.
 
 ## 3. Pipeline Integration
 
@@ -40,7 +40,7 @@
 
 ## 4. Integration Tests
 
-- [ ] 4.1 In `tests/test_profiler.py`, add an integration test `test_profile_action_harness_repo` that calls `profile_repo(Path(".").resolve())` on the actual action-harness repo and asserts: ecosystem is `"python"`, source is `"claude-md"` (since this repo has CLAUDE.md with Build & Test), eval_commands contains `"uv run pytest -v"`.
+- [x] 4.1 In `tests/test_profiler.py`, add an integration test `test_profile_action_harness_repo` that calls `profile_repo(Path(".").resolve())` on the actual action-harness repo and asserts: ecosystem is `"python"`, source is `"claude-md"` (since this repo has CLAUDE.md with Build & Test), eval_commands contains `"uv run pytest -v"`.
 
 - [ ] 4.2 In `tests/test_cli.py`, update or add a test for `--dry-run` output that verifies it shows detected ecosystem and source instead of only hardcoded commands.
 

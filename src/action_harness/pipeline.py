@@ -430,6 +430,8 @@ def _run_pipeline_inner(
                 permission_mode,
                 verbose,
                 stages,
+                eval_commands=eval_commands,
+                logger=logger,
             )
             if not fix_succeeded:
                 typer.echo("[pipeline] review fix-retry failed", err=True)
@@ -580,6 +582,8 @@ def _run_review_fix_retry(
     permission_mode: str,
     verbose: bool,
     stages: list[StageResultUnion],
+    eval_commands: list[str] | None = None,
+    logger: EventLogger | None = None,
 ) -> bool:
     """Re-dispatch worker with review feedback, re-run eval, push if passing.
 
@@ -609,7 +613,9 @@ def _run_review_fix_retry(
         typer.echo(f"[pipeline] review fix worker failed: {worker_result.error}", err=True)
         return False
 
-    eval_result = run_eval(worktree_path, verbose=verbose)
+    eval_result = run_eval(
+        worktree_path, eval_commands=eval_commands, verbose=verbose, logger=logger
+    )
     stages.append(eval_result)
 
     if not eval_result.success:
@@ -646,8 +652,8 @@ def _run_review_fix_retry(
             capture_output=True,
             text=True,
         )
-    except (FileNotFoundError, OSError):
-        pass  # Non-critical
+    except (FileNotFoundError, OSError) as e:
+        typer.echo(f"[pipeline] warning: gh pr comment failed: {e}", err=True)
 
     typer.echo("[pipeline] review fix retry completed successfully", err=True)
     return True

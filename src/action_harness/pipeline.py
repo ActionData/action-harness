@@ -22,6 +22,12 @@ from action_harness.openspec_reviewer import (
     push_archive_if_needed,
 )
 from action_harness.pr import create_pr
+from action_harness.protection import (
+    check_protected_files,
+    flag_pr_protected,
+    get_changed_files,
+    load_protected_patterns,
+)
 from action_harness.profiler import BOOTSTRAP_EVAL_COMMANDS, RepoProfile, profile_repo
 from action_harness.review_agents import (
     dispatch_review_agents,
@@ -40,6 +46,7 @@ def _build_manifest(
     retries: int,
     pr_result: PrResult,
     profile: RepoProfile | None = None,
+    protected_files: list[str] | None = None,
 ) -> RunManifest:
     """Construct a RunManifest from collected stage data."""
     completed_at = datetime.now(UTC).isoformat()
@@ -70,6 +77,7 @@ def _build_manifest(
         retries=retries,
         pr_url=pr_result.pr_url if pr_result.success else None,
         error=pr_result.error if not pr_result.success else None,
+        protected_files=protected_files or [],
         profile=profile,
     )
 
@@ -165,6 +173,8 @@ def run_pipeline(
         max_retries=max_retries,
     )
 
+    protected_files: list[str] = []
+
     try:
         pr_result = _run_pipeline_inner(
             change_name,
@@ -181,6 +191,7 @@ def run_pipeline(
             eval_commands=profile.eval_commands,
             workspace_dir=workspace_dir,
             skip_review=skip_review,
+            protected_files_out=protected_files,
         )
     except Exception as e:
         typer.echo(f"[pipeline] unexpected error: {e}", err=True)
@@ -204,7 +215,14 @@ def run_pipeline(
         logger.close()
 
     manifest = _build_manifest(
-        change_name, repo, started_at, stages, retries, pr_result, profile=profile
+        change_name,
+        repo,
+        started_at,
+        stages,
+        retries,
+        pr_result,
+        profile=profile,
+        protected_files=protected_files,
     )
     manifest.event_log_path = str(log_path)
     _write_manifest(manifest, repo, run_id)
@@ -227,6 +245,7 @@ def _run_pipeline_inner(
     eval_commands: list[str] | None = None,
     workspace_dir: Path | None = None,
     skip_review: bool = False,
+    protected_files_out: list[str] | None = None,
 ) -> PrResult:
     """Inner pipeline logic. Appends to stages list as side effect.
 
@@ -401,6 +420,25 @@ def _run_pipeline_inner(
         stage="pr",
         pr_url=pr_result.pr_url,
         branch=pr_result.branch,
+    )
+
+    # Stage 4.5: Protected paths check
+    patterns = load_protected_patterns(repo)
+    if patterns:
+        changed = get_changed_files(worktree_path, base_branch)
+        protected_files = check_protected_files(changed, patterns)
+    else:
+        protected_files = []
+
+    if protected_files_out is not None:
+        protected_files_out.extend(protected_files)
+
+    if protected_files and pr_result.pr_url:
+        flag_pr_protected(pr_result.pr_url, protected_files, worktree_path, verbose)
+
+    logger.emit(
+        "protection.checked",
+        metadata={"protected_files": protected_files, "patterns_count": len(patterns)},
     )
 
     # Stage 5: Review agents (parallel code review)

@@ -7,10 +7,10 @@
 
 ## 2. Pipeline Integration
 
-- [ ] 2.1 In `models.py`: add `protected_files: list[str] = []` field to `RunManifest`.
-- [ ] 2.2 In `pipeline.py`: import from `protection`. After PR creation succeeds and before review agents, call `load_protected_patterns(repo)`, then `get_changed_files(worktree_path, base_branch)`, then `check_protected_files(changed, patterns)`. If protected files found, call `flag_pr_protected(pr_url, protected_files, worktree_path, verbose)`. Store the result for the manifest.
-- [ ] 2.3 In `pipeline.py`: pass `protected_files` to `_build_manifest` and set on the manifest.
-- [ ] 2.4 If structured logging is available (EventLogger), emit a `protection.checked` event with `metadata={"protected_files": protected_files, "patterns_count": len(patterns)}`.
+- [x] 2.1 In `models.py`: add `protected_files: list[str] = []` field to `RunManifest`.
+- [x] 2.2 In `pipeline.py`: import from `protection`. After PR creation succeeds and before review agents, call `load_protected_patterns(repo)`, then `get_changed_files(worktree_path, base_branch)`, then `check_protected_files(changed, patterns)`. If protected files found, call `flag_pr_protected(pr_url, protected_files, worktree_path, verbose)`. Store the result for the manifest.
+- [x] 2.3 In `pipeline.py`: pass `protected_files` to `_build_manifest` and set on the manifest.
+- [x] 2.4 If structured logging is available (EventLogger), emit a `protection.checked` event with `metadata={"protected_files": protected_files, "patterns_count": len(patterns)}`.
 
 ## 3. Default Config
 

@@ -287,7 +287,7 @@ def _run_pipeline_inner(
         )
 
         if needs_fix:
-            _run_review_fix_retry(
+            fix_succeeded = _run_review_fix_retry(
                 change_name,
                 pr_result,
                 worktree_path,
@@ -300,6 +300,8 @@ def _run_pipeline_inner(
                 verbose,
                 stages,
             )
+            if not fix_succeeded:
+                typer.echo("[pipeline] review fix-retry failed", err=True)
     else:
         typer.echo("[pipeline] skipping review agents (--skip-review)", err=True)
 
@@ -347,7 +349,9 @@ def _run_review_agents(
     stages: list[StageResultUnion],
 ) -> bool:
     """Run review agents stage. Returns True if fix retry is needed."""
-    assert pr_result.pr_url is not None
+    if pr_result.pr_url is None:
+        typer.echo("[pipeline] error: PR URL is None, cannot proceed", err=True)
+        return False
     # Extract PR number from URL (e.g., https://github.com/org/repo/pull/123)
     pr_number = int(pr_result.pr_url.rstrip("/").split("/")[-1])
 
@@ -483,11 +487,15 @@ def _run_review_fix_retry(
                 f"[pipeline] warning: git push failed: {push_result.stderr.strip()}",
                 err=True,
             )
+            return False
     except (FileNotFoundError, OSError) as e:
         typer.echo(f"[pipeline] warning: git push failed: {e}", err=True)
+        return False
 
-    # Post comment noting fixes
-    assert pr_result.pr_url is not None
+    # Post comment noting fixes (only if push succeeded)
+    if pr_result.pr_url is None:
+        typer.echo("[pipeline] error: PR URL is None, cannot proceed", err=True)
+        return False
     comment = "Review findings addressed. New commits pushed to this branch."
     try:
         subprocess.run(

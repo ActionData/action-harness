@@ -241,9 +241,11 @@ def parse_review_findings(raw_output: str, agent_name: str, duration: float) -> 
                         agent=agent_name,
                     )
                 )
-            except Exception:
-                # Skip malformed findings
-                pass
+            except Exception as e:
+                typer.echo(
+                    f"[review:{agent_name}] warning: skipped malformed finding: {e}",
+                    err=True,
+                )
 
     return ReviewResult(
         success=True,

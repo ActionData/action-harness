@@ -705,3 +705,83 @@ class TestEventLogIntegration:
         assert "worker.dispatched" in event_types
         assert "worker.completed" in event_types
         assert "pr.created" in event_types
+
+
+class TestProtectedPathsIntegration:
+    def _passing_eval(self) -> EvalResult:
+        return EvalResult(success=True, stage="eval", commands_run=4, commands_passed=4)
+
+    def test_manifest_protected_files_populated(self, test_repo: Path) -> None:
+        """Protected files appear in manifest when diff touches protected paths."""
+        # Create .harness/protected-paths.yml in the test repo
+        harness_dir = test_repo / ".harness"
+        harness_dir.mkdir()
+        (harness_dir / "protected-paths.yml").write_text('protected:\n  - "new_feature.py"\n')
+        subprocess.run(["git", "add", "."], cwd=test_repo, capture_output=True, check=True)
+        subprocess.run(
+            ["git", "commit", "-m", "add protected paths config"],
+            cwd=test_repo,
+            capture_output=True,
+            check=True,
+        )
+
+        mock = _make_claude_mock(commits=True)
+
+        # Mock get_changed_files since the test repo has no origin remote
+        mock_changed = MagicMock(return_value=["new_feature.py"])
+
+        with (
+            patch("action_harness.worker.subprocess.run", mock),
+            patch("action_harness.pipeline.run_eval", return_value=self._passing_eval()),
+            patch("action_harness.pr.subprocess.run", mock),
+            patch("action_harness.pipeline.subprocess.run", mock),
+            patch("action_harness.pipeline.get_changed_files", mock_changed),
+            patch("action_harness.pipeline.flag_pr_protected"),
+            patch(
+                "action_harness.pipeline.dispatch_openspec_review",
+                return_value=('{"result": "{}"}', 1.0),
+            ),
+            patch(
+                "action_harness.pipeline.parse_review_result",
+                return_value=_approved_review_result(),
+            ),
+            patch(
+                "action_harness.pipeline.push_archive_if_needed",
+                return_value=(False, None),
+            ),
+        ):
+            pr_result, manifest = run_pipeline(
+                "test-change", test_repo, max_retries=1, skip_review=True
+            )
+
+        assert pr_result.success is True
+        # The mocked get_changed_files returns new_feature.py which matches the protected pattern
+        assert "new_feature.py" in manifest.protected_files
+
+    def test_manifest_empty_when_no_protected_config(self, test_repo: Path) -> None:
+        """Without config, protected_files is empty."""
+        mock = _make_claude_mock(commits=True)
+
+        with (
+            patch("action_harness.worker.subprocess.run", mock),
+            patch("action_harness.pipeline.run_eval", return_value=self._passing_eval()),
+            patch("action_harness.pr.subprocess.run", mock),
+            patch(
+                "action_harness.pipeline.dispatch_openspec_review",
+                return_value=('{"result": "{}"}', 1.0),
+            ),
+            patch(
+                "action_harness.pipeline.parse_review_result",
+                return_value=_approved_review_result(),
+            ),
+            patch(
+                "action_harness.pipeline.push_archive_if_needed",
+                return_value=(False, None),
+            ),
+        ):
+            pr_result, manifest = run_pipeline(
+                "test-change", test_repo, max_retries=1, skip_review=True
+            )
+
+        assert pr_result.success is True
+        assert manifest.protected_files == []

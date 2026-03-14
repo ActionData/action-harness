@@ -112,4 +112,5 @@ class RunManifest(BaseModel):
     error: str | None = None
     manifest_path: str | None = None
     event_log_path: str | None = None
+    protected_files: list[str] = []
     profile: RepoProfile | None = None

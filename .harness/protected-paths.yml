@@ -1,0 +1,8 @@
+protected:
+  - "src/action_harness/pipeline.py"
+  - "src/action_harness/evaluator.py"
+  - "src/action_harness/worktree.py"
+  - "src/action_harness/models.py"
+  - "src/action_harness/cli.py"
+  - "src/action_harness/protection.py"
+  - "CLAUDE.md"

@@ -1,13 +1,17 @@
 """End-to-end pipeline wiring."""
 
-import os
 from datetime import UTC, datetime
 from pathlib import Path
 
 import typer
 
 from action_harness.evaluator import run_eval
-from action_harness.models import PrResult, RunManifest, StageResult, WorkerResult
+from action_harness.models import (
+    PrResult,
+    RunManifest,
+    StageResultUnion,
+    WorkerResult,
+)
 from action_harness.pr import create_pr
 from action_harness.worker import dispatch_worker
 from action_harness.worktree import cleanup_worktree, create_worktree
@@ -17,7 +21,7 @@ def _build_manifest(
     change_name: str,
     repo: Path,
     started_at: str,
-    stages: list[StageResult],
+    stages: list[StageResultUnion],
     retries: int,
     pr_result: PrResult,
 ) -> RunManifest:
@@ -53,16 +57,15 @@ def _build_manifest(
 def _write_manifest(manifest: RunManifest, repo: Path) -> None:
     """Write manifest JSON to .action-harness/runs/ and set manifest_path."""
     runs_dir = repo / ".action-harness" / "runs"
-    os.makedirs(runs_dir, exist_ok=True)
+    runs_dir.mkdir(parents=True, exist_ok=True)
 
     # Replace colons and plus signs to make filesystem-safe
     ts = manifest.completed_at.replace(":", "-").replace("+", "_")
     filename = f"{ts}-{manifest.change_name}.json"
     filepath = runs_dir / filename
 
-    filepath.write_text(manifest.model_dump_json(indent=2))
     manifest.manifest_path = str(filepath)
-    typer.echo(f"[pipeline] manifest saved to {filepath}", err=True)
+    filepath.write_text(manifest.model_dump_json(indent=2))
 
 
 def run_pipeline(
@@ -82,10 +85,15 @@ def run_pipeline(
     typer.echo(f"  max_retries={max_retries}, max_turns={max_turns}", err=True)
 
     started_at = datetime.now(UTC).isoformat()
-    stages: list[StageResult] = []
-    retries = 0
+    stages: list[StageResultUnion] = []
 
-    pr_result = _run_pipeline_inner(change_name, repo, max_retries, max_turns, verbose, stages)
+    try:
+        pr_result = _run_pipeline_inner(change_name, repo, max_retries, max_turns, verbose, stages)
+    except Exception as e:
+        typer.echo(f"[pipeline] unexpected error: {e}", err=True)
+        pr_result = PrResult(
+            success=False, stage="pipeline", error=f"Unexpected error: {e}", branch=""
+        )
 
     # Count retries from stages: each WorkerResult after the first is a retry
     worker_count = sum(1 for s in stages if isinstance(s, WorkerResult))
@@ -103,7 +111,7 @@ def _run_pipeline_inner(
     max_retries: int,
     max_turns: int,
     verbose: bool,
-    stages: list[StageResult],
+    stages: list[StageResultUnion],
 ) -> PrResult:
     """Inner pipeline logic. Appends to stages list as side effect.
 

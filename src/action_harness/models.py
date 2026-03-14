@@ -1,8 +1,9 @@
 """Pydantic data models for action-harness."""
 
 from pathlib import Path
+from typing import Annotated, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class StageResult(BaseModel):
@@ -17,6 +18,7 @@ class StageResult(BaseModel):
 class WorktreeResult(StageResult):
     """Result from worktree creation."""
 
+    stage: Literal["worktree"] = "worktree"
     worktree_path: Path | None = None
     branch: str = ""
 
@@ -24,6 +26,7 @@ class WorktreeResult(StageResult):
 class WorkerResult(StageResult):
     """Result from Claude Code worker dispatch."""
 
+    stage: Literal["worker"] = "worker"
     commits_ahead: int = 0
     cost_usd: float | None = None
     worker_output: str | None = None
@@ -32,6 +35,7 @@ class WorkerResult(StageResult):
 class EvalResult(StageResult):
     """Result from evaluation commands."""
 
+    stage: Literal["eval"] = "eval"
     commands_run: int = 0
     commands_passed: int = 0
     failed_command: str | None = None
@@ -39,10 +43,19 @@ class EvalResult(StageResult):
 
 
 class PrResult(StageResult):
-    """Result from PR creation."""
+    """Result from PR creation or pipeline-level failure."""
 
+    stage: Literal["pr", "pipeline"] = "pr"
     pr_url: str | None = None
     branch: str = ""
+
+
+# Discriminated union so Pydantic preserves subtypes through serialization.
+# Only includes concrete stage types used in the pipeline (not the base StageResult).
+StageResultUnion = Annotated[
+    WorktreeResult | WorkerResult | EvalResult | PrResult,
+    Field(discriminator="stage"),
+]
 
 
 class RunManifest(BaseModel):
@@ -53,7 +66,7 @@ class RunManifest(BaseModel):
     started_at: str
     completed_at: str
     success: bool
-    stages: list[StageResult]
+    stages: list[StageResultUnion]
     total_duration_seconds: float
     total_cost_usd: float | None = None
     retries: int = 0

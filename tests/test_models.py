@@ -166,9 +166,19 @@ class TestRunManifest:
         assert restored.change_name == manifest.change_name
         assert restored.success == manifest.success
         assert len(restored.stages) == len(manifest.stages)
+        # Verify subtype-specific fields survive roundtrip
+        assert isinstance(restored.stages[0], WorktreeResult)
+        assert restored.stages[0].branch == "harness/foo"
+        assert isinstance(restored.stages[1], WorkerResult)
+        assert restored.stages[1].cost_usd == 0.15
+        assert restored.stages[1].commits_ahead == 2
+        assert isinstance(restored.stages[2], EvalResult)
+        assert restored.stages[2].commands_run == 4
+        assert isinstance(restored.stages[3], PrResult)
+        assert restored.stages[3].pr_url == "https://github.com/org/repo/pull/1"
 
     def test_stages_accept_mixed_subtypes(self) -> None:
-        stages: list[StageResult] = [
+        stages = [
             WorktreeResult(success=True, stage="worktree", branch="b"),
             WorkerResult(success=True, stage="worker", cost_usd=0.05),
             EvalResult(success=True, stage="eval", commands_run=1, commands_passed=1),

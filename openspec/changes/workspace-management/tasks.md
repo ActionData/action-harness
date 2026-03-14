@@ -27,11 +27,11 @@ Prerequisites: implement after `worker-config` and `enrich-pr-description` (both
 
 ## 5. Tests
 
-- [ ] 5.1 In `tests/test_repo.py`: test `_parse_repo_ref` — GitHub shorthand (`user/repo` → owner, name, clone URL), HTTPS URL, SSH URL. Verify owner, repo_name, clone_url extraction for each form.
-- [ ] 5.2 In `tests/test_repo.py`: test `resolve_repo` — local path passthrough (returns path and name), remote repo triggers clone (mock subprocess), already-cloned repo triggers fetch (mock subprocess), clone failure raises ValidationError.
-- [ ] 5.3 In `tests/test_repo.py`: test `_get_repo_dir` — default path when no collision, collision detection via `git remote get-url origin` returning a different URL (mock subprocess), fallback to `owner-repo` dir name.
-- [ ] 5.4 In `tests/test_cli.py`: test `clean` subcommand — clean specific workspace (directory removed), clean all for repo, clean all. Use tmp_path fixtures. Verify git worktree prune is called.
-- [ ] 5.5 In `tests/test_worktree.py`: test `create_worktree` with explicit `workspace_dir` — worktree created at specified path, not in /tmp. Test `cleanup_worktree` works for both temp and harness-home paths.
+- [x] 5.1 In `tests/test_repo.py`: test `_parse_repo_ref` — GitHub shorthand (`user/repo` → owner, name, clone URL), HTTPS URL, SSH URL. Verify owner, repo_name, clone_url extraction for each form.
+- [x] 5.2 In `tests/test_repo.py`: test `resolve_repo` — local path passthrough (returns path and name), remote repo triggers clone (mock subprocess), already-cloned repo triggers fetch (mock subprocess), clone failure raises ValidationError.
+- [x] 5.3 In `tests/test_repo.py`: test `_get_repo_dir` — default path when no collision, collision detection via `git remote get-url origin` returning a different URL (mock subprocess), fallback to `owner-repo` dir name.
+- [x] 5.4 In `tests/test_cli.py`: test `clean` subcommand — clean specific workspace (directory removed), clean all for repo, clean all. Use tmp_path fixtures. Verify git worktree prune is called.
+- [x] 5.5 In `tests/test_worktree.py`: test `create_worktree` with explicit `workspace_dir` — worktree created at specified path, not in /tmp. Test `cleanup_worktree` works for both temp and harness-home paths.
 
 ## 6. Validation
 

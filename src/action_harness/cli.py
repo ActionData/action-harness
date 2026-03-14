@@ -154,11 +154,9 @@ def run(
 
     if dry_run:
         if is_managed:
-            workspace_path = str(
-                resolved_home / "workspaces" / repo_name / change
-            )
+            workspace_path = str(resolved_home / "workspaces" / repo_name / change)
         else:
-            workspace_path = f"/tmp/action-harness-*/{ change}"
+            workspace_path = f"/tmp/action-harness-*/{change}"
         typer.echo(f"Dry-run plan for change '{change}':")
         typer.echo(f"  repo: {resolved_repo}")
         typer.echo(f"  worktree: {workspace_path}")
@@ -231,16 +229,16 @@ def clean(
 
         action-harness clean --all
     """
+    if not all_workspaces and repo is None:
+        typer.echo("Error: specify --repo or --all", err=True)
+        raise typer.Exit(code=1)
+
     resolved_home = _resolve_harness_home(harness_home)
     workspaces_root = resolved_home / "workspaces"
 
     if not workspaces_root.exists():
         typer.echo("[clean] no workspaces directory found", err=True)
         raise typer.Exit(code=0)
-
-    if not all_workspaces and repo is None:
-        typer.echo("Error: specify --repo or --all", err=True)
-        raise typer.Exit(code=1)
 
     if all_workspaces:
         # Remove all workspaces

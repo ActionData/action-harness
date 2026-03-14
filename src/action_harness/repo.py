@@ -24,9 +24,7 @@ def _parse_repo_ref(repo_arg: str) -> tuple[str, str, str]:
         return owner, repo_name, f"git@github.com:{owner}/{repo_name}.git"
 
     # HTTPS URL: https://github.com/owner/repo[.git]
-    https_match = re.match(
-        r"https?://github\.com/([^/]+)/([^/]+?)(?:\.git)?/?$", repo_arg
-    )
+    https_match = re.match(r"https?://github\.com/([^/]+)/([^/]+?)(?:\.git)?/?$", repo_arg)
     if https_match:
         owner, repo_name = https_match.group(1), https_match.group(2)
         return owner, repo_name, f"https://github.com/{owner}/{repo_name}.git"
@@ -40,9 +38,7 @@ def _parse_repo_ref(repo_arg: str) -> tuple[str, str, str]:
     raise ValidationError(f"Cannot parse repo reference: {repo_arg}")
 
 
-def _get_repo_dir(
-    owner: str, repo_name: str, clone_url: str, harness_home: Path
-) -> Path:
+def _get_repo_dir(owner: str, repo_name: str, clone_url: str, harness_home: Path) -> Path:
     """Return the directory to clone into, handling name collisions.
 
     Default: harness_home/repos/<repo_name>/
@@ -87,11 +83,9 @@ def _clone_or_fetch(clone_url: str, repo_dir: Path, verbose: bool) -> None:
             text=True,
         )
         if result.returncode != 0:
-            raise ValidationError(
-                f"Failed to clone {clone_url}: {result.stderr.strip()}"
-            )
+            raise ValidationError(f"Failed to clone {clone_url}: {result.stderr.strip()}")
         if verbose:
-            typer.echo(f"  clone complete", err=True)
+            typer.echo("  clone complete", err=True)
     else:
         typer.echo(f"[repo] fetching origin in {repo_dir}", err=True)
         result = subprocess.run(
@@ -101,16 +95,12 @@ def _clone_or_fetch(clone_url: str, repo_dir: Path, verbose: bool) -> None:
             text=True,
         )
         if result.returncode != 0:
-            typer.echo(
-                f"[repo] warning: fetch failed: {result.stderr.strip()}", err=True
-            )
+            typer.echo(f"[repo] warning: fetch failed: {result.stderr.strip()}", err=True)
         elif verbose:
-            typer.echo(f"  fetch complete", err=True)
+            typer.echo("  fetch complete", err=True)
 
 
-def resolve_repo(
-    repo_arg: str, harness_home: Path, verbose: bool = False
-) -> tuple[Path, str]:
+def resolve_repo(repo_arg: str, harness_home: Path, verbose: bool = False) -> tuple[Path, str]:
     """Resolve a --repo argument to (local_path, repo_name).
 
     If repo_arg is an existing local directory, return it directly.

@@ -165,9 +165,7 @@ def _run_pipeline_inner(
     after this returns, regardless of which exit path is taken.
     """
     # Stage 1: Create worktree
-    wt_result = create_worktree(
-        change_name, repo, verbose=verbose, workspace_dir=workspace_dir
-    )
+    wt_result = create_worktree(change_name, repo, verbose=verbose, workspace_dir=workspace_dir)
     stages.append(wt_result)
     if not wt_result.success:
         typer.echo(f"[pipeline] failed at worktree stage: {wt_result.error}", err=True)

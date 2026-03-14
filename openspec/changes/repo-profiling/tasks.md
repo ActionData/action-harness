@@ -28,15 +28,15 @@
 
 ## 3. Pipeline Integration
 
-- [ ] 3.1 In `src/action_harness/pipeline.py`, import `profile_repo` and `RepoProfile` from `profiler`. In `run_pipeline` (NOT `_run_pipeline_inner`), compute `profile = profile_repo(repo)` wrapped in try/except that logs a warning and falls back to `RepoProfile(ecosystem="unknown", eval_commands=BOOTSTRAP_EVAL_COMMANDS, source="fallback")`. Compute the profile BEFORE calling `_run_pipeline_inner`.
+- [x] 3.1 In `src/action_harness/pipeline.py`, import `profile_repo` and `RepoProfile` from `profiler`. In `run_pipeline` (NOT `_run_pipeline_inner`), compute `profile = profile_repo(repo)` wrapped in try/except that logs a warning and falls back to `RepoProfile(ecosystem="unknown", eval_commands=BOOTSTRAP_EVAL_COMMANDS, source="fallback")`. Compute the profile BEFORE calling `_run_pipeline_inner`.
 
-- [ ] 3.2 Add `eval_commands: list[str]` as a new parameter to `_run_pipeline_inner`. Pass `profile.eval_commands` from `run_pipeline`. In the eval call inside `_run_pipeline_inner`, pass `eval_commands=eval_commands` to `run_eval`.
+- [x] 3.2 Add `eval_commands: list[str]` as a new parameter to `_run_pipeline_inner`. Pass `profile.eval_commands` from `run_pipeline`. In the eval call inside `_run_pipeline_inner`, pass `eval_commands=eval_commands` to `run_eval`.
 
-- [ ] 3.3 In `src/action_harness/models.py`, import `RepoProfile` from `action_harness.profiler`. Add an optional `profile` field to `RunManifest`: `profile: RepoProfile | None = None`.
+- [x] 3.3 In `src/action_harness/models.py`, import `RepoProfile` from `action_harness.profiler`. Add an optional `profile` field to `RunManifest`: `profile: RepoProfile | None = None`.
 
-- [ ] 3.4 In `_build_manifest` in `pipeline.py`, accept a `profile: RepoProfile | None` parameter and set it on the manifest. Pass `profile` from `run_pipeline` (where it is already computed in task 3.1) directly to `_build_manifest`.
+- [x] 3.4 In `_build_manifest` in `pipeline.py`, accept a `profile: RepoProfile | None` parameter and set it on the manifest. Pass `profile` from `run_pipeline` (where it is already computed in task 3.1) directly to `_build_manifest`.
 
-- [ ] 3.5 In `src/action_harness/cli.py`, in the `run` command's dry-run branch, replace the hardcoded `BOOTSTRAP_EVAL_COMMANDS` loop with a call to `profile_repo(repo)` and display `profile.eval_commands` along with `profile.ecosystem` and `profile.source`.
+- [x] 3.5 In `src/action_harness/cli.py`, in the `run` command's dry-run branch, replace the hardcoded `BOOTSTRAP_EVAL_COMMANDS` loop with a call to `profile_repo(repo)` and display `profile.eval_commands` along with `profile.ecosystem` and `profile.source`.
 
 ## 4. Integration Tests
 

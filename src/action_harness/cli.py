@@ -7,7 +7,7 @@ import click
 import typer
 
 from action_harness import __version__
-from action_harness.evaluator import BOOTSTRAP_EVAL_COMMANDS
+from action_harness.profiler import profile_repo
 
 app = typer.Typer(
     name="action-harness",
@@ -117,6 +117,7 @@ def run(
         raise typer.Exit(code=1) from None
 
     if dry_run:
+        profile = profile_repo(repo)
         worktree_path = f"/tmp/action-harness/worktrees/harness/{change}"
         typer.echo(f"Dry-run plan for change '{change}':")
         typer.echo(f"  repo: {repo}")
@@ -127,8 +128,10 @@ def run(
         typer.echo(f"  effort: {effort or 'default'}")
         typer.echo(f"  max-budget-usd: {max_budget_usd if max_budget_usd is not None else 'none'}")
         typer.echo(f"  permission-mode: {permission_mode}")
+        typer.echo(f"  ecosystem: {profile.ecosystem}")
+        typer.echo(f"  profile source: {profile.source}")
         typer.echo("  eval commands:")
-        for cmd in BOOTSTRAP_EVAL_COMMANDS:
+        for cmd in profile.eval_commands:
             typer.echo(f"    - {cmd}")
         typer.echo(f"  pr title: [harness] {change}")
         typer.echo(f"  max retries: {max_retries}")

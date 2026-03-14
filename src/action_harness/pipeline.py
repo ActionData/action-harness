@@ -6,7 +6,7 @@ from pathlib import Path
 
 import typer
 
-from action_harness.evaluator import run_eval
+from action_harness.evaluator import BOOTSTRAP_EVAL_COMMANDS, run_eval
 from action_harness.models import (
     OpenSpecReviewResult,
     PrResult,
@@ -20,6 +20,7 @@ from action_harness.openspec_reviewer import (
     push_archive_if_needed,
 )
 from action_harness.pr import create_pr
+from action_harness.profiler import RepoProfile, profile_repo
 from action_harness.worker import count_commits_ahead, dispatch_worker
 from action_harness.worktree import cleanup_worktree, create_worktree
 
@@ -31,6 +32,7 @@ def _build_manifest(
     stages: list[StageResultUnion],
     retries: int,
     pr_result: PrResult,
+    profile: RepoProfile | None = None,
 ) -> RunManifest:
     """Construct a RunManifest from collected stage data."""
     completed_at = datetime.now(UTC).isoformat()
@@ -58,6 +60,7 @@ def _build_manifest(
         retries=retries,
         pr_url=pr_result.pr_url if pr_result.success else None,
         error=pr_result.error if not pr_result.success else None,
+        profile=profile,
     )
 
 
@@ -103,6 +106,22 @@ def run_pipeline(
     typer.echo(f"[pipeline] starting for change '{change_name}'", err=True)
     typer.echo(f"  max_retries={max_retries}, max_turns={max_turns}", err=True)
 
+    # Profile the repo before the pipeline starts
+    try:
+        profile = profile_repo(repo)
+    except Exception as e:
+        typer.echo(f"[pipeline] warning: profiler failed: {e}", err=True)
+        profile = RepoProfile(
+            ecosystem="unknown",
+            eval_commands=list(BOOTSTRAP_EVAL_COMMANDS),
+            source="fallback",
+        )
+    typer.echo(
+        f"  profile: ecosystem={profile.ecosystem}, source={profile.source}, "
+        f"commands={len(profile.eval_commands)}",
+        err=True,
+    )
+
     started_at = datetime.now(UTC).isoformat()
     stages: list[StageResultUnion] = []
 
@@ -118,6 +137,7 @@ def run_pipeline(
             permission_mode,
             verbose,
             stages,
+            eval_commands=profile.eval_commands,
         )
     except Exception as e:
         typer.echo(f"[pipeline] unexpected error: {e}", err=True)
@@ -129,7 +149,9 @@ def run_pipeline(
     worker_count = sum(1 for s in stages if isinstance(s, WorkerResult))
     retries = max(0, worker_count - 1)
 
-    manifest = _build_manifest(change_name, repo, started_at, stages, retries, pr_result)
+    manifest = _build_manifest(
+        change_name, repo, started_at, stages, retries, pr_result, profile=profile
+    )
     _write_manifest(manifest, repo)
 
     return pr_result, manifest
@@ -146,6 +168,7 @@ def _run_pipeline_inner(
     permission_mode: str,
     verbose: bool,
     stages: list[StageResultUnion],
+    eval_commands: list[str] | None = None,
 ) -> PrResult:
     """Inner pipeline logic. Appends to stages list as side effect.
 
@@ -207,7 +230,7 @@ def _run_pipeline_inner(
             continue
 
         # Run eval
-        eval_result = run_eval(worktree_path, verbose=verbose)
+        eval_result = run_eval(worktree_path, eval_commands=eval_commands, verbose=verbose)
         stages.append(eval_result)
 
         if eval_result.success:

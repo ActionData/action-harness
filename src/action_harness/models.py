@@ -5,6 +5,8 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
+from action_harness.profiler import RepoProfile
+
 
 class StageResult(BaseModel):
     """Base result type for all pipeline stages."""
@@ -85,3 +87,4 @@ class RunManifest(BaseModel):
     pr_url: str | None = None
     error: str | None = None
     manifest_path: str | None = None
+    profile: RepoProfile | None = None

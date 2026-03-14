@@ -19,7 +19,7 @@ The pipeline SHALL read protected file patterns from `.harness/protected-paths.y
 The pipeline SHALL compare the list of changed files (from `git diff --name-only`) against the protected patterns using glob matching. Any file matching a protected pattern SHALL be flagged.
 
 #### Scenario: Protected file modified
-- **WHEN** the diff includes `src/action_harness/pipeline.py` and `pipeline.py` is a protected pattern
+- **WHEN** the diff includes `src/action_harness/pipeline.py` and `src/action_harness/pipeline.py` is a protected pattern
 - **THEN** the file is flagged as protected
 
 #### Scenario: No protected files modified
@@ -40,6 +40,10 @@ When protected files are detected, the pipeline SHALL post a PR comment listing 
 #### Scenario: No protected files — no flag
 - **WHEN** the protection check finds no protected files
 - **THEN** no comment is posted and no label is added
+
+#### Scenario: GitHub CLI failure during flagging
+- **WHEN** `gh pr comment` or `gh pr edit --add-label` fails
+- **THEN** the pipeline logs a warning to stderr and continues without failing
 
 ### Requirement: Protection check runs after PR creation
 The protection check SHALL run after the PR is created but before review agents dispatch. This allows review agents to see the protection flag.
@@ -63,5 +67,5 @@ The `RunManifest` SHALL include a `protected_files` field (list of strings) list
 The harness repo SHALL ship with a `.harness/protected-paths.yml` containing default protected patterns for its own critical files.
 
 #### Scenario: Default config present
-- **WHEN** the action-harness repo is checked
-- **THEN** `.harness/protected-paths.yml` exists with patterns covering at minimum `pipeline.py`, `evaluator.py`, and `cli.py`
+- **WHEN** `load_protected_patterns` is called on the action-harness repo root
+- **THEN** the returned list contains at least `src/action_harness/pipeline.py`, `src/action_harness/evaluator.py`, and `src/action_harness/cli.py`

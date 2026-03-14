@@ -1,5 +1,6 @@
 """Tests for CLI entrypoint and input validation."""
 
+import subprocess
 from pathlib import Path
 from unittest.mock import patch
 
@@ -222,3 +223,122 @@ class TestCliRunner:
             ["run", "--change", "nonexistent", "--repo", "/nonexistent", "--dry-run"],
         )
         assert result.exit_code == 1
+
+    def test_help_shows_harness_home(self) -> None:
+        result = runner.invoke(app, ["run", "--help"])
+        assert result.exit_code == 0
+        assert "--harness-home" in result.output
+
+    def test_help_shows_clean_subcommand(self) -> None:
+        result = runner.invoke(app, ["--help"])
+        assert result.exit_code == 0
+        assert "clean" in result.output
+
+    def test_repo_help_mentions_urls(self) -> None:
+        result = runner.invoke(app, ["run", "--help"])
+        assert result.exit_code == 0
+        assert "owner/repo" in result.output
+
+
+class TestCleanCommand:
+    """Test the clean subcommand."""
+
+    def test_clean_requires_repo_or_all(self) -> None:
+        result = runner.invoke(app, ["clean"])
+        assert result.exit_code == 1
+        assert "specify --repo or --all" in result.output
+
+    def test_clean_no_workspaces_dir(self, tmp_path: Path) -> None:
+        result = runner.invoke(app, ["clean", "--all", "--harness-home", str(tmp_path)])
+        assert result.exit_code == 0
+        assert "no workspaces directory" in result.output
+
+    def test_clean_specific_workspace(self, tmp_path: Path) -> None:
+        """Clean a specific workspace directory."""
+        harness_home = tmp_path / "harness"
+        ws_dir = harness_home / "workspaces" / "my-app" / "fix-bug"
+        ws_dir.mkdir(parents=True)
+
+        # Create a fake repo clone for resolve_repo to find
+        repo_dir = harness_home / "repos" / "my-app"
+        repo_dir.mkdir(parents=True)
+        # Init a git repo so git commands don't fail hard
+        subprocess.run(["git", "init"], cwd=repo_dir, capture_output=True, check=True)
+        subprocess.run(
+            ["git", "config", "user.email", "test@test.com"],
+            cwd=repo_dir,
+            capture_output=True,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "Test"],
+            cwd=repo_dir,
+            capture_output=True,
+            check=True,
+        )
+
+        result = runner.invoke(
+            app,
+            [
+                "clean",
+                "--repo",
+                str(repo_dir),
+                "--change",
+                "fix-bug",
+                "--harness-home",
+                str(harness_home),
+            ],
+        )
+        assert result.exit_code == 0
+        assert not ws_dir.exists()
+
+    def test_clean_all_for_repo(self, tmp_path: Path) -> None:
+        """Clean all workspaces for a repo."""
+        harness_home = tmp_path / "harness"
+        ws_base = harness_home / "workspaces" / "my-app"
+        (ws_base / "fix-a").mkdir(parents=True)
+        (ws_base / "fix-b").mkdir(parents=True)
+
+        # Create repo clone
+        repo_dir = harness_home / "repos" / "my-app"
+        repo_dir.mkdir(parents=True)
+        subprocess.run(["git", "init"], cwd=repo_dir, capture_output=True, check=True)
+        subprocess.run(
+            ["git", "config", "user.email", "test@test.com"],
+            cwd=repo_dir,
+            capture_output=True,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "Test"],
+            cwd=repo_dir,
+            capture_output=True,
+            check=True,
+        )
+
+        result = runner.invoke(
+            app,
+            [
+                "clean",
+                "--repo",
+                str(repo_dir),
+                "--harness-home",
+                str(harness_home),
+            ],
+        )
+        assert result.exit_code == 0
+        assert not (ws_base / "fix-a").exists()
+        assert not (ws_base / "fix-b").exists()
+
+    def test_clean_all(self, tmp_path: Path) -> None:
+        """Clean all workspaces across all repos."""
+        harness_home = tmp_path / "harness"
+        (harness_home / "workspaces" / "app1" / "change1").mkdir(parents=True)
+        (harness_home / "workspaces" / "app2" / "change2").mkdir(parents=True)
+
+        result = runner.invoke(app, ["clean", "--all", "--harness-home", str(harness_home)])
+        assert result.exit_code == 0
+        assert "all workspaces removed" in result.output
+        # Workspace dirs should be cleaned up
+        assert not (harness_home / "workspaces" / "app1" / "change1").exists()
+        assert not (harness_home / "workspaces" / "app2" / "change2").exists()

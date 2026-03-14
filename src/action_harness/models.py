@@ -8,6 +8,10 @@ from pydantic import BaseModel, Field
 from action_harness.profiler import RepoProfile
 
 
+class ValidationError(Exception):
+    """Raised when CLI input validation fails."""
+
+
 class StageResult(BaseModel):
     """Base result type for all pipeline stages."""
 

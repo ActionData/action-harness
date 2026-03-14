@@ -98,12 +98,17 @@ def run_pipeline(
     max_budget_usd: float | None = None,
     permission_mode: str = "bypassPermissions",
     verbose: bool = False,
+    harness_home: Path | None = None,
+    repo_name: str | None = None,
 ) -> tuple[PrResult, RunManifest]:
     """Run the full pipeline: worktree -> worker -> eval -> retry -> PR.
 
     Returns a (PrResult, RunManifest) tuple. The manifest is always written
     to disk, on both success and failure.
     Cleans up worktree on terminal failure (preserves branch for inspection).
+
+    When harness_home and repo_name are both set, workspaces are created at
+    harness_home/workspaces/<repo_name>/<change_name>/ instead of /tmp.
     """
     typer.echo(f"[pipeline] starting for change '{change_name}'", err=True)
     typer.echo(f"  max_retries={max_retries}, max_turns={max_turns}", err=True)
@@ -123,6 +128,11 @@ def run_pipeline(
         f"commands={len(profile.eval_commands)}",
         err=True,
     )
+
+    # Compute workspace path for managed repos
+    workspace_dir: Path | None = None
+    if harness_home is not None and repo_name is not None:
+        workspace_dir = harness_home / "workspaces" / repo_name / change_name
 
     started_at = datetime.now(UTC).isoformat()
     stages: list[StageResultUnion] = []
@@ -159,6 +169,7 @@ def run_pipeline(
             stages,
             logger,
             eval_commands=profile.eval_commands,
+            workspace_dir=workspace_dir,
         )
     except Exception as e:
         typer.echo(f"[pipeline] unexpected error: {e}", err=True)
@@ -203,6 +214,7 @@ def _run_pipeline_inner(
     stages: list[StageResultUnion],
     logger: EventLogger,
     eval_commands: list[str] | None = None,
+    workspace_dir: Path | None = None,
 ) -> PrResult:
     """Inner pipeline logic. Appends to stages list as side effect.
 
@@ -210,7 +222,7 @@ def _run_pipeline_inner(
     after this returns, regardless of which exit path is taken.
     """
     # Stage 1: Create worktree
-    wt_result = create_worktree(change_name, repo, verbose=verbose)
+    wt_result = create_worktree(change_name, repo, verbose=verbose, workspace_dir=workspace_dir)
     stages.append(wt_result)
     if not wt_result.success:
         logger.emit(

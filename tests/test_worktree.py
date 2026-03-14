@@ -130,6 +130,27 @@ class TestCreateWorktree:
         assert "Failed to create worktree" in result.error
         assert result.worktree_path is None
 
+    def test_creates_worktree_at_workspace_dir(self, git_repo: Path, tmp_path: Path) -> None:
+        """When workspace_dir is provided, worktree is created there, not in /tmp."""
+        workspace_dir = tmp_path / "workspaces" / "my-repo" / "my-change"
+
+        result = create_worktree("my-change", git_repo, workspace_dir=workspace_dir)
+
+        assert result.success is True
+        assert result.worktree_path == workspace_dir
+        assert workspace_dir.exists()
+        # Should NOT be in /tmp
+        assert "/tmp" not in str(workspace_dir) or "action-harness-" not in str(workspace_dir)
+
+        # Verify it's actually a worktree
+        check = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=workspace_dir,
+            capture_output=True,
+            text=True,
+        )
+        assert check.stdout.strip() == "harness/my-change"
+
 
 class TestCleanupWorktree:
     def test_cleanup_removes_worktree(self, git_repo: Path) -> None:
@@ -179,3 +200,18 @@ class TestCleanupWorktree:
             text=True,
         )
         assert check.returncode != 0
+
+    def test_cleanup_harness_home_workspace(self, git_repo: Path, tmp_path: Path) -> None:
+        """Cleanup works for workspaces under harness home (not /tmp)."""
+        workspace_dir = tmp_path / "workspaces" / "my-repo" / "my-change"
+        result = create_worktree("my-change", git_repo, workspace_dir=workspace_dir)
+        assert result.success is True
+        assert result.worktree_path is not None
+        assert result.worktree_path.exists()
+
+        cleanup_result = cleanup_worktree(git_repo, result.worktree_path, result.branch)
+
+        assert cleanup_result.success is True
+        assert not result.worktree_path.exists()
+        # Parent (my-repo) should still exist
+        assert (tmp_path / "workspaces" / "my-repo").exists()

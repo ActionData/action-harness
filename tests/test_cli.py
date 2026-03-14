@@ -73,6 +73,11 @@ def test_missing_gh_cli(fake_repo: Path) -> None:
 class TestCliRunner:
     """Test the typer CLI command via CliRunner."""
 
+    def test_version_flag(self) -> None:
+        result = runner.invoke(app, ["--version"])
+        assert result.exit_code == 0
+        assert "0.1.0" in result.output
+
     def test_top_level_help(self) -> None:
         result = runner.invoke(app, ["--help"])
         assert result.exit_code == 0

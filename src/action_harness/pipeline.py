@@ -22,13 +22,13 @@ from action_harness.openspec_reviewer import (
     push_archive_if_needed,
 )
 from action_harness.pr import create_pr
+from action_harness.profiler import BOOTSTRAP_EVAL_COMMANDS, RepoProfile, profile_repo
 from action_harness.protection import (
     check_protected_files,
     flag_pr_protected,
     get_changed_files,
     load_protected_patterns,
 )
-from action_harness.profiler import BOOTSTRAP_EVAL_COMMANDS, RepoProfile, profile_repo
 from action_harness.review_agents import (
     dispatch_review_agents,
     format_review_feedback,
@@ -438,7 +438,9 @@ def _run_pipeline_inner(
 
     logger.emit(
         "protection.checked",
-        metadata={"protected_files": protected_files, "patterns_count": len(patterns)},
+        stage="protection",
+        protected_files=protected_files,
+        patterns_count=len(patterns),
     )
 
     # Stage 5: Review agents (parallel code review)

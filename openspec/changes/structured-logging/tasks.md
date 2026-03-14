@@ -1,9 +1,9 @@
 ## 1. Event Model and Logger
 
-- [ ] 1.1 Create `src/action_harness/event_log.py` with a `PipelineEvent` Pydantic model containing fields: `timestamp` (str), `event` (str), `run_id` (str), `stage` (str | None = None), `duration_seconds` (float | None = None), `success` (bool | None = None), `metadata` (dict[str, Any] with default_factory=dict).
-- [ ] 1.2 In `event_log.py`, create an `EventLogger` class that takes `log_path: Path` and `run_id: str` in its constructor, opens the file for appending, and stores the file handle. Add a `close()` method that closes the file handle (no-op if already closed).
-- [ ] 1.3 In `EventLogger`, implement `emit(self, event: str, stage: str | None = None, duration_seconds: float | None = None, success: bool | None = None, **metadata: Any) -> None` that: (a) constructs a `PipelineEvent` with `timestamp=datetime.now(UTC).isoformat()`, `run_id=self.run_id`, and the provided arguments with `metadata` from kwargs, (b) writes `event.model_dump_json() + "\n"` to the file, (c) calls `self._file.flush()` to ensure the line is written immediately, (d) wraps the entire body in try/except Exception and on error calls `typer.echo(f"[event_log] warning: failed to emit event: {e}", err=True)`.
-- [ ] 1.4 Add unit tests in `tests/test_event_log.py`: test that `PipelineEvent` serializes to valid JSON with all required fields, test that `EventLogger.emit` writes one JSON-line per call, test that `EventLogger.emit` does not raise on I/O error (mock the file to raise OSError), test that `close()` closes the file handle.
+- [x] 1.1 Create `src/action_harness/event_log.py` with a `PipelineEvent` Pydantic model containing fields: `timestamp` (str), `event` (str), `run_id` (str), `stage` (str | None = None), `duration_seconds` (float | None = None), `success` (bool | None = None), `metadata` (dict[str, Any] with default_factory=dict).
+- [x] 1.2 In `event_log.py`, create an `EventLogger` class that takes `log_path: Path` and `run_id: str` in its constructor, opens the file for appending, and stores the file handle. Add a `close()` method that closes the file handle (no-op if already closed).
+- [x] 1.3 In `EventLogger`, implement `emit(self, event: str, stage: str | None = None, duration_seconds: float | None = None, success: bool | None = None, **metadata: Any) -> None` that: (a) constructs a `PipelineEvent` with `timestamp=datetime.now(UTC).isoformat()`, `run_id=self.run_id`, and the provided arguments with `metadata` from kwargs, (b) writes `event.model_dump_json() + "\n"` to the file, (c) calls `self._file.flush()` to ensure the line is written immediately, (d) wraps the entire body in try/except Exception and on error calls `typer.echo(f"[event_log] warning: failed to emit event: {e}", err=True)`.
+- [x] 1.4 Add unit tests in `tests/test_event_log.py`: test that `PipelineEvent` serializes to valid JSON with all required fields, test that `EventLogger.emit` writes one JSON-line per call, test that `EventLogger.emit` does not raise on I/O error (mock the file to raise OSError), test that `close()` closes the file handle.
 
 ## 2. Integrate Logger into Pipeline
 
@@ -35,8 +35,8 @@
 
 ## 5. Tests
 
-- [ ] 5.1 In `tests/test_event_log.py`, add an integration-style test: create a temporary directory, instantiate `EventLogger`, emit several events of different types, close the logger, read the file, and assert: (a) each line parses as valid JSON, (b) all events have `timestamp`, `event`, and `run_id`, (c) event types match what was emitted, (d) metadata fields are present.
-- [ ] 5.2 In `tests/test_event_log.py`, test the non-fatal behavior: mock the file handle's `write` method to raise `OSError`, call `emit`, and assert it does not raise and logs a warning (capture stderr or mock `typer.echo`).
+- [x] 5.1 In `tests/test_event_log.py`, add an integration-style test: create a temporary directory, instantiate `EventLogger`, emit several events of different types, close the logger, read the file, and assert: (a) each line parses as valid JSON, (b) all events have `timestamp`, `event`, and `run_id`, (c) event types match what was emitted, (d) metadata fields are present.
+- [x] 5.2 In `tests/test_event_log.py`, test the non-fatal behavior: mock the file handle's `write` method to raise `OSError`, call `emit`, and assert it does not raise and logs a warning (capture stderr or mock `typer.echo`).
 - [ ] 5.3 In `tests/test_integration.py`, add a test that verifies `RunManifest.event_log_path` is populated after a pipeline run and that the referenced file exists and contains valid JSON-lines.
 
 ## 6. Self-Validation

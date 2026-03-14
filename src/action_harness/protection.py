@@ -32,16 +32,12 @@ def load_protected_patterns(repo_path: Path) -> list[str]:
         return []
 
     if not isinstance(data, dict) or "protected" not in data:
-        typer.echo(
-            f"[protection] warning: missing 'protected' key in {config_path}", err=True
-        )
+        typer.echo(f"[protection] warning: missing 'protected' key in {config_path}", err=True)
         return []
 
     patterns = data["protected"]
     if not isinstance(patterns, list):
-        typer.echo(
-            f"[protection] warning: 'protected' is not a list in {config_path}", err=True
-        )
+        typer.echo(f"[protection] warning: 'protected' is not a list in {config_path}", err=True)
         return []
 
     return [str(p) for p in patterns]
@@ -75,9 +71,7 @@ def get_changed_files(worktree_path: Path, base_branch: str) -> list[str]:
             text=True,
         )
         if result.returncode != 0:
-            typer.echo(
-                f"[protection] warning: git diff failed: {result.stderr.strip()}", err=True
-            )
+            typer.echo(f"[protection] warning: git diff failed: {result.stderr.strip()}", err=True)
             return []
         return [line for line in result.stdout.strip().splitlines() if line]
     except (FileNotFoundError, OSError) as e:

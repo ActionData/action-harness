@@ -27,11 +27,11 @@
 
 ## 4. Tests
 
-- [ ] 4.1 In `tests/test_protection.py`: test `load_protected_patterns` — file exists with patterns (returns list), file missing (returns []), malformed YAML (returns [], logs warning).
-- [ ] 4.2 In `tests/test_protection.py`: test `check_protected_files` — exact match, glob match (`*.py`), no match returns `[]`, multiple matches.
-- [ ] 4.3 In `tests/test_protection.py`: test `get_changed_files` — mock subprocess, returns file list. Test failure returns `[]`.
-- [ ] 4.4 In `tests/test_protection.py`: test `flag_pr_protected` — mock subprocess, verify `gh pr comment` and `gh pr edit --add-label` are called. Test empty list does nothing.
-- [ ] 4.5 In `tests/test_integration.py` or `tests/test_pipeline_review.py`: add test that verifies `manifest.protected_files` is populated when protected files are in the diff.
+- [x] 4.1 In `tests/test_protection.py`: test `load_protected_patterns` — file exists with patterns (returns list), file missing (returns []), malformed YAML (returns [], logs warning).
+- [x] 4.2 In `tests/test_protection.py`: test `check_protected_files` — exact match, glob match (`*.py`), no match returns `[]`, multiple matches.
+- [x] 4.3 In `tests/test_protection.py`: test `get_changed_files` — mock subprocess, returns file list. Test failure returns `[]`.
+- [x] 4.4 In `tests/test_protection.py`: test `flag_pr_protected` — mock subprocess, verify `gh pr comment` and `gh pr edit --add-label` are called. Test empty list does nothing.
+- [x] 4.5 In `tests/test_integration.py` or `tests/test_pipeline_review.py`: add test that verifies `manifest.protected_files` is populated when protected files are in the diff.
 
 ## 5. Validation
 

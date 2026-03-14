@@ -55,17 +55,25 @@ def _build_manifest(
 
 
 def _write_manifest(manifest: RunManifest, repo: Path) -> None:
-    """Write manifest JSON to .action-harness/runs/ and set manifest_path."""
-    runs_dir = repo / ".action-harness" / "runs"
-    runs_dir.mkdir(parents=True, exist_ok=True)
+    """Write manifest JSON to .action-harness/runs/ and set manifest_path.
 
-    # Replace colons and plus signs to make filesystem-safe
-    ts = manifest.completed_at.replace(":", "-").replace("+", "_")
-    filename = f"{ts}-{manifest.change_name}.json"
-    filepath = runs_dir / filename
+    Never raises — logs errors to stderr and continues. The manifest is an
+    observability artifact; its failure should not mask the pipeline outcome.
+    """
+    try:
+        runs_dir = repo / ".action-harness" / "runs"
+        runs_dir.mkdir(parents=True, exist_ok=True)
 
-    manifest.manifest_path = str(filepath)
-    filepath.write_text(manifest.model_dump_json(indent=2))
+        # Replace colons, plus signs, and slashes to make filesystem-safe
+        ts = manifest.completed_at.replace(":", "-").replace("+", "_")
+        safe_name = manifest.change_name.replace("/", "-")
+        filename = f"{ts}-{safe_name}.json"
+        filepath = runs_dir / filename
+
+        manifest.manifest_path = str(filepath)
+        filepath.write_text(manifest.model_dump_json(indent=2))
+    except Exception as e:
+        typer.echo(f"[pipeline] warning: failed to write manifest: {e}", err=True)
 
 
 def run_pipeline(

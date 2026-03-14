@@ -11,7 +11,7 @@ from action_harness.worktree import cleanup_worktree, create_worktree
 
 
 @pytest.fixture
-def git_repo(tmp_path: Path) -> Generator[Path, None, None]:
+def git_repo(tmp_path: Path) -> Generator[Path]:
     """Create a real git repo with an initial commit.
 
     Cleans up any worktrees created in /tmp/action-harness-* after the test.

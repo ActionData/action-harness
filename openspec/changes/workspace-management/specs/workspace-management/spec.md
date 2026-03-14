@@ -15,6 +15,10 @@ The CLI SHALL accept `--repo` as a local path, GitHub `owner/repo` shorthand, or
 - **WHEN** the operator runs with `--repo .` or `--repo /abs/path`
 - **THEN** the harness uses the local path directly without cloning (existing behavior)
 
+#### Scenario: Clone fails
+- **WHEN** the operator runs with `--repo user/nonexistent-repo` and the clone command fails
+- **THEN** the harness logs the git error to stderr and exits with a non-zero exit code without proceeding to pipeline stages
+
 #### Scenario: Repo already cloned
 - **WHEN** the operator runs with `--repo user/my-app` and `$HARNESS_HOME/repos/my-app/` already exists
 - **THEN** the harness runs `git fetch origin` to update, then proceeds without re-cloning

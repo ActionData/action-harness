@@ -4,9 +4,9 @@
 
 The review-agents capability dispatches independent Claude Code workers to review a PR for bugs, test gaps, and quality issues. Findings are triaged by severity. High-severity findings trigger a fix-retry cycle before proceeding to the OpenSpec review stage.
 
-## Requirements
+## ADDED Requirements
 
-### REQ-RA-001: Review Agent Dispatch
+### Requirement: Review Agent Dispatch
 
 The pipeline SHALL dispatch three review agents after successful PR creation: bug-hunter, test-reviewer, and quality-reviewer. Each agent SHALL be a separate Claude Code CLI invocation using `claude -p` with `--output-format json`.
 
@@ -19,7 +19,7 @@ The pipeline SHALL dispatch three review agents after successful PR creation: bu
 - WHEN PR creation returns `success=False`
 - THEN no review agents are dispatched
 
-### REQ-RA-002: Parallel Execution
+### Requirement: Parallel Execution
 
 Review agents SHALL be dispatched concurrently, not sequentially. The pipeline SHALL wait for all three to complete before proceeding to triage.
 
@@ -33,7 +33,7 @@ Review agents SHALL be dispatched concurrently, not sequentially. The pipeline S
 - THEN the other two agents continue to completion
 - AND the failed agent's result is recorded with `success=False`
 
-### REQ-RA-003: PR Diff as Input
+### Requirement: PR Diff as Input
 
 Each review agent SHALL receive the PR diff via `gh pr diff {pr_number}` as context. Agents SHALL run with `cwd` set to the worktree for CLI context (e.g., `gh` needs a git repo) but SHALL NOT modify any files. They are read-only reviewers.
 
@@ -46,7 +46,7 @@ Each review agent SHALL receive the PR diff via `gh pr diff {pr_number}` as cont
 - WHEN a review agent completes
 - THEN no files in the worktree or repository have been modified by the agent
 
-### REQ-RA-004: Structured Finding Output
+### Requirement: Structured Finding Output
 
 Each review agent SHALL produce a JSON output block containing a list of findings. Each finding SHALL have: `title` (string), `file` (string), `line` (int or null), `severity` (one of "critical", "high", "medium", "low"), and `description` (string).
 
@@ -64,7 +64,7 @@ Each review agent SHALL produce a JSON output block containing a list of finding
 - THEN the pipeline records a `ReviewResult` with `success=False` and `error` describing the parse failure
 - AND the pipeline treats the agent as having produced zero findings
 
-### REQ-RA-005: ReviewResult Model
+### Requirement: ReviewResult Model
 
 The pipeline SHALL use a `ReviewResult` model for each agent's result. The model SHALL include: `stage` (literal "review"), `agent_name` (string), `success` (bool), `error` (string or null), `duration_seconds` (float or null), `findings` (list of `ReviewFinding`), and `cost_usd` (float or null).
 
@@ -73,7 +73,7 @@ The pipeline SHALL use a `ReviewResult` model for each agent's result. The model
 - THEN a `ReviewResult` is appended to the manifest's `stages` list
 - AND the `ReviewResult` contains the agent name, duration, findings, and cost
 
-### REQ-RA-006: ReviewFinding Model
+### Requirement: ReviewFinding Model
 
 Each finding SHALL be represented as a `ReviewFinding` model with fields: `title` (str), `file` (str), `line` (int or null), `severity` (literal "critical" | "high" | "medium" | "low"), `description` (str), and `agent` (str, the name of the agent that produced it).
 
@@ -81,7 +81,7 @@ Each finding SHALL be represented as a `ReviewFinding` model with fields: `title
 - WHEN a finding is parsed from agent output
 - THEN the `ReviewFinding` instance has non-empty `title`, `file`, `severity`, `description`, and `agent` fields
 
-### REQ-RA-007: Severity-Based Triage
+### Requirement: Severity-Based Triage
 
 After all agents complete, the pipeline SHALL triage findings by severity. If any finding has severity "critical" or "high", the pipeline SHALL re-dispatch the code worker with the findings as structured feedback.
 
@@ -99,7 +99,7 @@ After all agents complete, the pipeline SHALL triage findings by severity. If an
 - WHEN review agents produce zero findings
 - THEN the pipeline proceeds directly to OpenSpec review
 
-### REQ-RA-008: Fix Retry Limit
+### Requirement: Fix Retry Limit
 
 The review-triggered fix retry SHALL be limited to one attempt. If the fix retry fails eval or produces new high-severity findings, the pipeline SHALL proceed to OpenSpec review with the findings recorded but no further retry.
 
@@ -116,7 +116,7 @@ The review-triggered fix retry SHALL be limited to one attempt. If the fix retry
 - WHEN the fix retry is complete and review agents are NOT re-run
 - THEN the pipeline proceeds to OpenSpec review (single retry only)
 
-### REQ-RA-009: Review Summary in PR Body
+### Requirement: Review Summary in PR Body
 
 After review agents complete, the pipeline SHALL post a PR comment summarizing findings from each reviewer. The comment SHALL group findings by agent and include severity, title, file, and line for each finding.
 
@@ -128,7 +128,7 @@ After review agents complete, the pipeline SHALL post a PR comment summarizing f
 - WHEN review agents produce zero findings across all three agents
 - THEN a comment is posted on the PR indicating all reviews passed with no findings
 
-### REQ-RA-010: Agent System Prompts
+### Requirement: Agent System Prompts
 
 Each review agent SHALL use a system prompt based on the agent definitions in `~/.claude/agents/` (bug-hunter.md, test-reviewer.md, quality-reviewer.md), extended with instructions to produce structured JSON output. Prompts are hardcoded in the module (point-in-time copy, not read at runtime). The user prompt SHALL include the PR number.
 
@@ -141,7 +141,7 @@ Each review agent SHALL use a system prompt based on the agent definitions in `~
 - WHEN any review agent is dispatched
 - THEN its user prompt includes the PR number so the agent can run `gh pr diff {number}`
 
-### REQ-RA-011: Pipeline Stage Ordering
+### Requirement: Pipeline Stage Ordering
 
 The review-agents stage SHALL run after PR creation and before OpenSpec review. The full pipeline order SHALL be: worktree -> worker -> eval -> PR -> review-agents -> triage -> (optional fix retry -> eval -> PR update) -> openspec-review.
 
@@ -153,7 +153,7 @@ The review-agents stage SHALL run after PR creation and before OpenSpec review. 
 - WHEN a fix retry is triggered
 - THEN the additional worker and eval results appear in the manifest after the review results and before the OpenSpec review result
 
-### REQ-RA-012: StageResultUnion Update
+### Requirement: StageResultUnion Update
 
 The `StageResultUnion` discriminated union in `models.py` SHALL include `ReviewResult` so that review results are properly serialized and deserialized in the manifest.
 

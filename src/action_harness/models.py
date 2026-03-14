@@ -6,6 +6,10 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, Field
 
 
+class ValidationError(Exception):
+    """Raised when CLI input validation fails."""
+
+
 class StageResult(BaseModel):
     """Base result type for all pipeline stages."""
 

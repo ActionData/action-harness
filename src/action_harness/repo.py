@@ -6,7 +6,7 @@ from pathlib import Path
 
 import typer
 
-from action_harness.cli import ValidationError
+from action_harness.models import ValidationError
 
 
 def _parse_repo_ref(repo_arg: str) -> tuple[str, str, str]:
@@ -123,4 +123,5 @@ def resolve_repo(repo_arg: str, harness_home: Path, verbose: bool = False) -> tu
 
     _clone_or_fetch(clone_url, repo_dir, verbose)
 
-    return repo_dir, repo_name
+    # Use repo_dir.name (not repo_name) so collision fallback (owner-repo) is reflected
+    return repo_dir, repo_dir.name

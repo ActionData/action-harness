@@ -10,6 +10,7 @@ import typer
 
 from action_harness import __version__
 from action_harness.evaluator import BOOTSTRAP_EVAL_COMMANDS
+from action_harness.models import ValidationError
 
 app = typer.Typer(
     name="action-harness",
@@ -42,10 +43,6 @@ def main(
 
     Requires **claude** and **gh** CLIs in PATH.
     """
-
-
-class ValidationError(Exception):
-    """Raised when CLI input validation fails."""
 
 
 def validate_inputs(change: str, repo: Path) -> None:
@@ -259,8 +256,11 @@ def clean(
             raise typer.Exit(code=0)
 
         if change is not None:
-            # Clean specific workspace
-            ws_path = repo_ws_dir / change
+            # Clean specific workspace — guard against path traversal
+            ws_path = (repo_ws_dir / change).resolve()
+            if not ws_path.is_relative_to(repo_ws_dir.resolve()):
+                typer.echo(f"Error: invalid change name (path traversal): {change}", err=True)
+                raise typer.Exit(code=1) from None
             if ws_path.exists():
                 _remove_workspace(ws_path, resolved_repo)
                 typer.echo(f"[clean] removed workspace {repo_name}/{change}", err=True)
@@ -286,12 +286,16 @@ def clean(
 def _remove_workspace(ws_path: Path, repo_path: Path) -> None:
     """Remove a workspace directory and its git worktree reference."""
     # Try git worktree remove first
-    subprocess.run(
+    result = subprocess.run(
         ["git", "worktree", "remove", "--force", str(ws_path)],
         cwd=repo_path,
         capture_output=True,
         text=True,
     )
+    if result.returncode != 0:
+        typer.echo(
+            f"[clean] warning: git worktree remove failed: {result.stderr.strip()}", err=True
+        )
     # If directory still exists, force-remove it
     if ws_path.exists():
         shutil.rmtree(ws_path, ignore_errors=True)

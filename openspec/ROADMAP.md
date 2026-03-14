@@ -25,3 +25,4 @@ Priority order. Each is an OpenSpec change the harness implements on itself.
 7. `unspecced-tasks` — Support simple fixes from issue descriptions without OpenSpec changes
 8. `failure-reporting` — Aggregate failure logs, identify systemic patterns
 9. `always-on` — Event-driven intake from webhooks, recurring maintenance, Slack escalation
+10. `checkpoint-resume` — Checkpoint pipeline state so interrupted runs can resume from the last completed stage. Needs specs.

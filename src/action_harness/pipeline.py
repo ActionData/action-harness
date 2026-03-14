@@ -1,5 +1,6 @@
 """End-to-end pipeline wiring."""
 
+import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -7,13 +8,19 @@ import typer
 
 from action_harness.evaluator import run_eval
 from action_harness.models import (
+    OpenSpecReviewResult,
     PrResult,
     RunManifest,
     StageResultUnion,
     WorkerResult,
 )
+from action_harness.openspec_reviewer import (
+    dispatch_openspec_review,
+    parse_review_result,
+    push_archive_if_needed,
+)
 from action_harness.pr import create_pr
-from action_harness.worker import dispatch_worker
+from action_harness.worker import count_commits_ahead, dispatch_worker
 from action_harness.worktree import cleanup_worktree, create_worktree
 
 
@@ -250,10 +257,116 @@ def _run_pipeline_inner(
         typer.echo(f"[pipeline] PR creation failed: {pr_result.error}", err=True)
         cleanup_worktree(repo, worktree_path, branch, verbose=verbose)
         typer.echo("[pipeline] complete (failed)", err=True)
-    else:
-        typer.echo("[pipeline] complete (success)", err=True)
+        return pr_result
 
+    # Stage 5: OpenSpec review
+    review_result = _run_openspec_review(
+        change_name,
+        worktree_path,
+        _get_worktree_base(repo),
+        max_turns,
+        model,
+        effort,
+        max_budget_usd,
+        permission_mode,
+        verbose,
+        pr_result,
+        stages,
+    )
+
+    if review_result is not None and not review_result.success:
+        typer.echo("[pipeline] openspec review returned findings", err=True)
+        for finding in review_result.findings:
+            typer.echo(f"  - {finding}", err=True)
+        typer.echo("[pipeline] complete (failed)", err=True)
+        return PrResult(
+            success=False,
+            stage="pipeline",
+            error="OpenSpec review returned findings",
+            branch=branch,
+            pr_url=pr_result.pr_url,
+        )
+
+    typer.echo("[pipeline] complete (success)", err=True)
     return pr_result
+
+
+def _run_openspec_review(
+    change_name: str,
+    worktree_path: Path,
+    base_branch: str,
+    max_turns: int,
+    model: str | None,
+    effort: str | None,
+    max_budget_usd: float | None,
+    permission_mode: str,
+    verbose: bool,
+    pr_result: PrResult,
+    stages: list[StageResultUnion],
+) -> OpenSpecReviewResult | None:
+    """Run the OpenSpec review stage. Returns the review result, or None on skip."""
+    typer.echo("[pipeline] running openspec review", err=True)
+
+    commits_before = count_commits_ahead(worktree_path, base_branch)
+
+    raw_output, duration = dispatch_openspec_review(
+        change_name,
+        worktree_path,
+        base_branch=base_branch,
+        max_turns=max_turns,
+        model=model,
+        effort=effort,
+        max_budget_usd=max_budget_usd,
+        permission_mode=permission_mode,
+        verbose=verbose,
+    )
+
+    review_result = parse_review_result(raw_output, duration)
+    stages.append(review_result)
+
+    if review_result.success and review_result.archived:
+        pushed, push_error = push_archive_if_needed(
+            worktree_path, base_branch, commits_before, verbose=verbose
+        )
+        if push_error:
+            typer.echo(f"[pipeline] failed to push archive: {push_error}", err=True)
+            review_result = OpenSpecReviewResult(
+                success=False,
+                error=push_error,
+                duration_seconds=review_result.duration_seconds,
+                tasks_total=review_result.tasks_total,
+                tasks_complete=review_result.tasks_complete,
+                validation_passed=review_result.validation_passed,
+                semantic_review_passed=review_result.semantic_review_passed,
+                findings=review_result.findings,
+                archived=review_result.archived,
+            )
+        elif pushed and pr_result.pr_url:
+            # Add a comment on the PR noting the archive was completed
+            _comment_archive_complete(worktree_path, pr_result.pr_url, verbose)
+
+    return review_result
+
+
+def _comment_archive_complete(worktree_path: Path, pr_url: str, verbose: bool) -> None:
+    """Add a PR comment noting that OpenSpec archive was completed."""
+    comment = "OpenSpec review passed. Archive changes have been pushed to this branch."
+    try:
+        result = subprocess.run(
+            ["gh", "pr", "comment", pr_url, "--body", comment],
+            cwd=worktree_path,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            typer.echo(
+                f"[pipeline] warning: gh pr comment failed: {result.stderr.strip()}",
+                err=True,
+            )
+        elif verbose:
+            typer.echo("[pipeline] posted archive comment on PR", err=True)
+    except (FileNotFoundError, OSError) as e:
+        typer.echo(f"[pipeline] warning: gh pr comment failed: {e}", err=True)
 
 
 def _get_worktree_base(repo: Path) -> str:

@@ -155,10 +155,10 @@ class TestCliRunner:
         assert result.exit_code == 0
         assert "test-change" in result.output
         assert "harness/test-change" in result.output
-        assert "uv run pytest -v" in result.output
-        assert "uv run ruff check" in result.output
-        assert "uv run ruff format" in result.output
-        assert "uv run mypy src/" in result.output
+        # Profiler output: ecosystem and source should be displayed
+        assert "ecosystem:" in result.output
+        assert "profile source:" in result.output
+        assert "eval commands:" in result.output
         assert "claude --output-format json" in result.output
         assert "[harness] test-change" in result.output
         assert "max retries: 3" in result.output

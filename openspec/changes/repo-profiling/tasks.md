@@ -42,7 +42,7 @@
 
 - [x] 4.1 In `tests/test_profiler.py`, add an integration test `test_profile_action_harness_repo` that calls `profile_repo(Path(".").resolve())` on the actual action-harness repo and asserts: ecosystem is `"python"`, source is `"claude-md"` (since this repo has CLAUDE.md with Build & Test), eval_commands contains `"uv run pytest -v"`.
 
-- [ ] 4.2 In `tests/test_cli.py`, update or add a test for `--dry-run` output that verifies it shows detected ecosystem and source instead of only hardcoded commands.
+- [x] 4.2 In `tests/test_cli.py`, update or add a test for `--dry-run` output that verifies it shows detected ecosystem and source instead of only hardcoded commands.
 
 ## 5. Self-Validation
 

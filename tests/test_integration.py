@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from action_harness.models import EvalResult
+from action_harness.models import EvalResult, RunManifest
 from action_harness.pipeline import run_pipeline
 
 
@@ -125,11 +125,17 @@ class TestPipelineSuccess:
             patch("action_harness.pipeline.run_eval", return_value=self._passing_eval()),
             patch("action_harness.pr.subprocess.run", mock),
         ):
-            result = run_pipeline("test-change", test_repo, max_retries=1)
+            pr_result, manifest = run_pipeline("test-change", test_repo, max_retries=1)
 
-        assert result.success is True
-        assert result.pr_url == "https://github.com/test/repo/pull/1"
-        assert result.branch == "harness/test-change"
+        assert pr_result.success is True
+        assert pr_result.pr_url == "https://github.com/test/repo/pull/1"
+        assert pr_result.branch == "harness/test-change"
+
+        assert manifest.success is True
+        assert manifest.change_name == "test-change"
+        assert manifest.retries == 0
+        assert manifest.pr_url == "https://github.com/test/repo/pull/1"
+        assert manifest.error is None
 
     def test_pipeline_creates_worktree(self, test_repo: Path) -> None:
         mock = _make_claude_mock(commits=True)
@@ -139,7 +145,7 @@ class TestPipelineSuccess:
             patch("action_harness.pipeline.run_eval", return_value=self._passing_eval()),
             patch("action_harness.pr.subprocess.run", mock),
         ):
-            run_pipeline("test-change", test_repo)
+            _pr_result, _manifest = run_pipeline("test-change", test_repo)
 
         # Verify branch was created
         check = subprocess.run(
@@ -158,7 +164,7 @@ class TestPipelineSuccess:
             patch("action_harness.pipeline.run_eval", return_value=self._passing_eval()),
             patch("action_harness.pr.subprocess.run", mock),
         ):
-            run_pipeline("test-change", test_repo, max_turns=50)
+            _pr_result, _manifest = run_pipeline("test-change", test_repo, max_turns=50)
 
         # Find claude invocation
         claude_calls = [c for c in mock.call_args_list if c[0][0][0] == "claude"]
@@ -175,16 +181,20 @@ class TestPipelineFailure:
         mock = _make_claude_mock(commits=False)
 
         with patch("action_harness.worker.subprocess.run", mock):
-            result = run_pipeline("test-change", test_repo, max_retries=2)
+            pr_result, manifest = run_pipeline("test-change", test_repo, max_retries=2)
 
-        assert result.success is False
-        assert "No commits" in (result.error or "")
+        assert pr_result.success is False
+        assert "No commits" in (pr_result.error or "")
+
+        assert manifest.success is False
+        assert manifest.retries == 2
+        assert manifest.error is not None
 
     def test_max_retries_respected(self, test_repo: Path) -> None:
         mock = _make_claude_mock(commits=False)
 
         with patch("action_harness.worker.subprocess.run", mock):
-            run_pipeline("test-change", test_repo, max_retries=2)
+            _pr_result, _manifest = run_pipeline("test-change", test_repo, max_retries=2)
 
         # Count claude invocations — should be max_retries + 1 (initial + retries)
         claude_calls = [c for c in mock.call_args_list if c[0][0][0] == "claude"]
@@ -209,10 +219,10 @@ class TestPipelineFailure:
             patch("action_harness.pipeline.run_eval", side_effect=[fail_eval, pass_eval]),
             patch("action_harness.pr.subprocess.run", mock),
         ):
-            result = run_pipeline("test-change", test_repo, max_retries=3)
+            pr_result, manifest = run_pipeline("test-change", test_repo, max_retries=3)
 
-        assert result.success is True
-        assert result.pr_url is not None
+        assert pr_result.success is True
+        assert pr_result.pr_url is not None
 
         # Verify worker was called twice (initial + retry)
         claude_calls = [c for c in mock.call_args_list if c[0][0][0] == "claude"]
@@ -222,6 +232,10 @@ class TestPipelineFailure:
         second_prompt = claude_calls[1][0][0][2]  # cmd[2] is the -p argument
         assert "Eval Failure" in second_prompt
 
+        # Manifest should record 1 retry
+        assert manifest.retries == 1
+        assert manifest.success is True
+
     def test_worktree_failure_returns_error(self, tmp_path: Path) -> None:
         """Pipeline fails gracefully when worktree creation fails."""
         # tmp_path has git init but no commits — worktree add will fail
@@ -229,18 +243,22 @@ class TestPipelineFailure:
         change_dir = tmp_path / "openspec" / "changes" / "test-change"
         change_dir.mkdir(parents=True)
 
-        result = run_pipeline("test-change", tmp_path)
+        pr_result, manifest = run_pipeline("test-change", tmp_path)
 
-        assert result.success is False
-        assert result.error is not None
+        assert pr_result.success is False
+        assert pr_result.error is not None
+
+        assert manifest.success is False
+        assert manifest.error is not None
+        assert len(manifest.stages) == 1  # Only worktree stage
 
     def test_worktree_cleaned_up_on_failure(self, test_repo: Path) -> None:
         mock = _make_claude_mock(commits=False)
 
         with patch("action_harness.worker.subprocess.run", mock):
-            result = run_pipeline("test-change", test_repo, max_retries=0)
+            pr_result, _manifest = run_pipeline("test-change", test_repo, max_retries=0)
 
-        assert result.success is False
+        assert pr_result.success is False
 
         # Worktree should be cleaned up (no lingering worktrees)
         list_result = subprocess.run(
@@ -255,3 +273,87 @@ class TestPipelineFailure:
             if line.startswith("worktree ") and "harness" in line
         ]
         assert len(worktrees) == 0
+
+
+class TestManifestPersistence:
+    def _passing_eval(self) -> EvalResult:
+        return EvalResult(success=True, stage="eval", commands_run=4, commands_passed=4)
+
+    def test_manifest_written_to_disk_on_success(self, test_repo: Path) -> None:
+        mock = _make_claude_mock(commits=True, cost=0.25)
+
+        with (
+            patch("action_harness.worker.subprocess.run", mock),
+            patch("action_harness.pipeline.run_eval", return_value=self._passing_eval()),
+            patch("action_harness.pr.subprocess.run", mock),
+        ):
+            _pr_result, manifest = run_pipeline("test-change", test_repo, max_retries=1)
+
+        # Manifest path should be set
+        assert manifest.manifest_path is not None
+        manifest_file = Path(manifest.manifest_path)
+        assert manifest_file.exists()
+
+        # Verify the directory structure
+        runs_dir = test_repo / ".action-harness" / "runs"
+        assert runs_dir.exists()
+
+        # Verify the JSON deserializes to a valid RunManifest
+        raw = manifest_file.read_text()
+        restored = RunManifest.model_validate_json(raw)
+        assert restored.change_name == "test-change"
+        assert restored.success is True
+        assert restored.total_cost_usd == 0.25
+
+    def test_manifest_written_to_disk_on_failure(self, test_repo: Path) -> None:
+        mock = _make_claude_mock(commits=False)
+
+        with patch("action_harness.worker.subprocess.run", mock):
+            _pr_result, manifest = run_pipeline("test-change", test_repo, max_retries=1)
+
+        assert manifest.manifest_path is not None
+        manifest_file = Path(manifest.manifest_path)
+        assert manifest_file.exists()
+
+        restored = RunManifest.model_validate_json(manifest_file.read_text())
+        assert restored.success is False
+        assert restored.error is not None
+        assert restored.retries == 1
+
+    def test_manifest_filename_contains_change_name(self, test_repo: Path) -> None:
+        mock = _make_claude_mock(commits=True)
+
+        with (
+            patch("action_harness.worker.subprocess.run", mock),
+            patch("action_harness.pipeline.run_eval", return_value=self._passing_eval()),
+            patch("action_harness.pr.subprocess.run", mock),
+        ):
+            _pr_result, manifest = run_pipeline("test-change", test_repo, max_retries=1)
+
+        assert manifest.manifest_path is not None
+        assert "test-change.json" in manifest.manifest_path
+
+    def test_manifest_cost_sums_all_worker_results(self, test_repo: Path) -> None:
+        """Cost should sum across all worker dispatches including retries."""
+        mock = _make_claude_mock(commits=True, cost=0.10)
+        fail_eval = EvalResult(
+            success=False,
+            stage="eval",
+            error="failed",
+            commands_run=1,
+            commands_passed=0,
+            failed_command="uv run pytest -v",
+            feedback_prompt="## Eval Failure\n...",
+        )
+        pass_eval = EvalResult(success=True, stage="eval", commands_run=4, commands_passed=4)
+
+        with (
+            patch("action_harness.worker.subprocess.run", mock),
+            patch("action_harness.pipeline.run_eval", side_effect=[fail_eval, pass_eval]),
+            patch("action_harness.pr.subprocess.run", mock),
+        ):
+            _pr_result, manifest = run_pipeline("test-change", test_repo, max_retries=3)
+
+        # Two worker dispatches at $0.10 each
+        assert manifest.total_cost_usd is not None
+        assert abs(manifest.total_cost_usd - 0.20) < 0.001

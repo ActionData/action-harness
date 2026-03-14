@@ -1,10 +1,12 @@
 """Tests for Pydantic result models."""
 
+import json
 from pathlib import Path
 
 from action_harness.models import (
     EvalResult,
     PrResult,
+    RunManifest,
     StageResult,
     WorkerResult,
     WorktreeResult,
@@ -102,3 +104,97 @@ class TestPrResult:
         assert result.success is False
         assert result.error == "push failed"
         assert result.pr_url is None
+
+
+class TestRunManifest:
+    def _make_manifest(self, success: bool = True) -> RunManifest:
+        stages: list[StageResult] = [
+            WorktreeResult(
+                success=True, stage="worktree", worktree_path=Path("/tmp/wt"), branch="harness/foo"
+            ),
+            WorkerResult(success=True, stage="worker", commits_ahead=2, cost_usd=0.15),
+            EvalResult(success=True, stage="eval", commands_run=4, commands_passed=4),
+            PrResult(
+                success=success,
+                stage="pr",
+                pr_url="https://github.com/org/repo/pull/1" if success else None,
+                branch="harness/foo",
+                error=None if success else "push failed",
+            ),
+        ]
+        return RunManifest(
+            change_name="test-change",
+            repo_path="/tmp/repo",
+            started_at="2026-01-01T00:00:00+00:00",
+            completed_at="2026-01-01T00:01:30+00:00",
+            success=success,
+            stages=stages,
+            total_duration_seconds=90.0,
+            total_cost_usd=0.15,
+            retries=0,
+            pr_url="https://github.com/org/repo/pull/1" if success else None,
+            error=None if success else "push failed",
+        )
+
+    def test_success_manifest(self) -> None:
+        manifest = self._make_manifest(success=True)
+        assert manifest.success is True
+        assert manifest.pr_url == "https://github.com/org/repo/pull/1"
+        assert manifest.error is None
+        assert manifest.retries == 0
+        assert len(manifest.stages) == 4
+        assert manifest.total_cost_usd == 0.15
+
+    def test_failure_manifest(self) -> None:
+        manifest = self._make_manifest(success=False)
+        assert manifest.success is False
+        assert manifest.error == "push failed"
+        assert manifest.pr_url is None
+
+    def test_model_dump_json_produces_valid_json(self) -> None:
+        manifest = self._make_manifest()
+        raw = manifest.model_dump_json()
+        parsed = json.loads(raw)
+        assert parsed["change_name"] == "test-change"
+        assert parsed["success"] is True
+        assert len(parsed["stages"]) == 4
+
+    def test_model_validate_json_roundtrip(self) -> None:
+        manifest = self._make_manifest()
+        raw = manifest.model_dump_json()
+        restored = RunManifest.model_validate_json(raw)
+        assert restored.change_name == manifest.change_name
+        assert restored.success == manifest.success
+        assert len(restored.stages) == len(manifest.stages)
+        # Verify subtype-specific fields survive roundtrip
+        assert isinstance(restored.stages[0], WorktreeResult)
+        assert restored.stages[0].branch == "harness/foo"
+        assert isinstance(restored.stages[1], WorkerResult)
+        assert restored.stages[1].cost_usd == 0.15
+        assert restored.stages[1].commits_ahead == 2
+        assert isinstance(restored.stages[2], EvalResult)
+        assert restored.stages[2].commands_run == 4
+        assert isinstance(restored.stages[3], PrResult)
+        assert restored.stages[3].pr_url == "https://github.com/org/repo/pull/1"
+
+    def test_stages_accept_mixed_subtypes(self) -> None:
+        stages = [
+            WorktreeResult(success=True, stage="worktree", branch="b"),
+            WorkerResult(success=True, stage="worker", cost_usd=0.05),
+            EvalResult(success=True, stage="eval", commands_run=1, commands_passed=1),
+            PrResult(success=True, stage="pr", branch="b"),
+        ]
+        manifest = RunManifest(
+            change_name="mixed",
+            repo_path="/tmp",
+            started_at="2026-01-01T00:00:00+00:00",
+            completed_at="2026-01-01T00:00:01+00:00",
+            success=True,
+            stages=stages,
+            total_duration_seconds=1.0,
+        )
+        assert len(manifest.stages) == 4
+
+    def test_manifest_path_defaults_to_none(self) -> None:
+        manifest = self._make_manifest()
+        assert manifest.manifest_path is None

@@ -27,3 +27,4 @@ Priority order. Each is an OpenSpec change the harness implements on itself.
 9. `always-on` — Event-driven intake from webhooks, recurring maintenance, Slack escalation
 10. `checkpoint-resume` — Checkpoint pipeline state so interrupted runs can resume from the last completed stage. Needs specs.
 11. `live-progress-feed` — Real-time visibility into worker progress (task completion, file edits, tool calls) during pipeline runs. Needs specs.
+12. `ephemeral-observability` — Per-worktree observability stack (Vector → VictoriaLogs/Metrics/Traces) for target apps that emit telemetry. Lets workers query logs (LogsQL), metrics (PromQL), and traces (TraceQL) to validate runtime behavior — not just exit codes. Torn down when task completes. Requires repo-profiling to detect when a target app is a running service. Inspired by OpenAI's Codex harness architecture.

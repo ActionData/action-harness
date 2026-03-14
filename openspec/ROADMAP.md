@@ -10,6 +10,7 @@ Goal: self-hosting. Build the minimum loop by hand, then the harness builds ever
 - `worker-config` — CLI flags for --model, --effort, --max-budget-usd, --permission-mode. Additive, no signature conflicts.
 - `enrich-pr-description` — Richer PR body built from the run manifest. Modifies create_pr signature.
 - `openspec-review-agent` — Final gate agent: spec validation, semantic review, automated archival. Adds stage after PR creation.
+- `workspace-management` — Clone repos from URLs, persistent workspaces, configurable harness home, clean command. Enables multi-repo use.
 
 ## Self-Hosted Backlog (harness builds these)
 

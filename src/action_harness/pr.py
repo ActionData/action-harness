@@ -20,10 +20,12 @@ def _read_proposal_why(worktree_path: Path, change_name: str) -> str | None:
     try:
         text = proposal_path.read_text()
     except (FileNotFoundError, OSError):
+        typer.echo("[pr] proposal.md not found, skipping Background section", err=True)
         return None
 
     match = re.search(r"^## Why\s*\n(.*?)(?=^## |\Z)", text, re.MULTILINE | re.DOTALL)
     if not match:
+        typer.echo("[pr] no '## Why' section found in proposal.md", err=True)
         return None
 
     content = match.group(1).strip()
@@ -44,10 +46,12 @@ def _get_diff_stat(worktree_path: Path, base_branch: str) -> str | None:
             capture_output=True,
             text=True,
         )
-    except (FileNotFoundError, OSError):
+    except (FileNotFoundError, OSError) as e:
+        typer.echo(f"[pr] git diff --stat failed: {e}", err=True)
         return None
 
     if result.returncode != 0:
+        typer.echo(f"[pr] git diff --stat failed (exit {result.returncode})", err=True)
         return None
 
     output = result.stdout.strip()
@@ -72,10 +76,12 @@ def _get_commit_log(worktree_path: Path, base_branch: str) -> str | None:
             capture_output=True,
             text=True,
         )
-    except (FileNotFoundError, OSError):
+    except (FileNotFoundError, OSError) as e:
+        typer.echo(f"[pr] git log failed: {e}", err=True)
         return None
 
     if result.returncode != 0:
+        typer.echo(f"[pr] git log failed (exit {result.returncode})", err=True)
         return None
 
     output = result.stdout.strip()

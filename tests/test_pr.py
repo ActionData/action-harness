@@ -212,6 +212,22 @@ class TestBuildPrBody:
         # No worker section if all fields are None
         assert "### Worker" not in body
 
+    def test_worker_section_partial_fields(self, tmp_path: Path) -> None:
+        """Worker section appears with available fields when cost is None."""
+        worker = WorkerResult(
+            success=True,
+            stage="worker",
+            duration_seconds=90.0,
+            worker_output="some observations",
+        )
+        mock = self._mock_git_calls()
+        with patch("action_harness.pr.subprocess.run", mock):
+            body = _build_pr_body("test", _success_eval(), tmp_path, "main", worker_result=worker)
+        assert "### Worker" in body
+        assert "90s" in body
+        assert "some observations" in body
+        assert "Cost" not in body
+
     def test_no_worker_section_when_none(self, tmp_path: Path) -> None:
         mock = self._mock_git_calls()
         with patch("action_harness.pr.subprocess.run", mock):

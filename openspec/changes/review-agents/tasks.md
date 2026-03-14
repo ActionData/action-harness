@@ -25,12 +25,12 @@ Prerequisites: these tasks assume `structured-logging` has NOT been implemented 
 
 ## Group 3: Tests for Review Agent Module
 
-- [ ] 3.1 Create `tests/test_review_agents.py`. Add unit tests for `build_review_prompt`: verify it returns a non-empty string for each of the three agent names, verify the prompt contains JSON output instructions, verify it raises or returns a sensible error for unknown agent names.
-- [ ] 3.2 Add unit tests for `parse_review_findings`: test with valid JSON containing findings, test with empty findings list, test with unparseable output (returns error result), test that `agent` field is set correctly on each `ReviewFinding`.
-- [ ] 3.3 Add unit tests for `triage_findings`: test returns `True` when a "critical" finding exists, `True` for "high", `False` for only "medium"/"low", `False` for empty findings, `False` when all results have `success=False`.
-- [ ] 3.4 Add unit tests for `format_review_feedback`: test that output contains finding titles and file references, test that only high/critical findings are included, test empty input produces a no-findings message.
-- [ ] 3.5 Add unit tests for `dispatch_single_review` with mocked `subprocess.run`: verify the `claude` CLI command is constructed correctly (includes `--output-format json`, `--max-turns`, system prompt), verify `cwd` is set to `worktree_path`, verify the result is parsed into a `ReviewResult`.
-- [ ] 3.6 Add unit tests for `dispatch_review_agents` with mocked `dispatch_single_review`: verify three agents are dispatched, verify results are collected, verify parallel execution (all three calls happen regardless of individual failures).
+- [x] 3.1 Create `tests/test_review_agents.py`. Add unit tests for `build_review_prompt`: verify it returns a non-empty string for each of the three agent names, verify the prompt contains JSON output instructions, verify it raises or returns a sensible error for unknown agent names.
+- [x] 3.2 Add unit tests for `parse_review_findings`: test with valid JSON containing findings, test with empty findings list, test with unparseable output (returns error result), test that `agent` field is set correctly on each `ReviewFinding`.
+- [x] 3.3 Add unit tests for `triage_findings`: test returns `True` when a "critical" finding exists, `True` for "high", `False` for only "medium"/"low", `False` for empty findings, `False` when all results have `success=False`.
+- [x] 3.4 Add unit tests for `format_review_feedback`: test that output contains finding titles and file references, test that only high/critical findings are included, test empty input produces a no-findings message.
+- [x] 3.5 Add unit tests for `dispatch_single_review` with mocked `subprocess.run`: verify the `claude` CLI command is constructed correctly (includes `--output-format json`, `--max-turns`, system prompt), verify `cwd` is set to `worktree_path`, verify the result is parsed into a `ReviewResult`.
+- [x] 3.6 Add unit tests for `dispatch_review_agents` with mocked `dispatch_single_review`: verify three agents are dispatched, verify results are collected, verify parallel execution (all three calls happen regardless of individual failures).
 
 ## Group 4: Pipeline Integration
 

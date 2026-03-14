@@ -54,6 +54,7 @@ The CLI help text (`--help`) is the API documentation. When adding or changing c
 
 - **Never propagate bad patterns.** Fix or track as tech debt — don't copy.
 - **No silent failures.** Log errors that affect task flow.
+- **No `Any` types.** Use specific types. If a value can be multiple types, use a union (`str | int | None`). `Any` is only acceptable for truly dynamic kwargs (e.g., `**metadata: Any` for JSON-serializable values). Never use `Any` to avoid thinking about the type.
 - **Proposal-first development.** Every non-trivial change starts with an OpenSpec proposal.
 - **Self-validation is required.** Every proposal includes validation steps.
 - **Agent independence.** The implementing agent validates its own work. A separate agent reviews.

@@ -4,8 +4,6 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 from action_harness.event_log import EventLogger, PipelineEvent
 
 

@@ -7,6 +7,7 @@ from pathlib import Path
 import typer
 
 from action_harness.evaluator import run_eval
+from action_harness.event_log import EventLogger
 from action_harness.models import (
     OpenSpecReviewResult,
     PrResult,
@@ -61,7 +62,7 @@ def _build_manifest(
     )
 
 
-def _write_manifest(manifest: RunManifest, repo: Path) -> None:
+def _write_manifest(manifest: RunManifest, repo: Path, run_id: str) -> None:
     """Write manifest JSON to .action-harness/runs/ and set manifest_path.
 
     Never raises — logs errors to stderr and continues. The manifest is an
@@ -71,10 +72,11 @@ def _write_manifest(manifest: RunManifest, repo: Path) -> None:
         runs_dir = repo / ".action-harness" / "runs"
         runs_dir.mkdir(parents=True, exist_ok=True)
 
-        # Replace colons, plus signs, and slashes to make filesystem-safe
-        ts = manifest.completed_at.replace(":", "-").replace("+", "_")
         safe_name = manifest.change_name.replace("/", "-")
-        filename = f"{ts}-{safe_name}.json"
+        filename = f"{run_id}.json"
+        # Ensure change name is in the filename if not already via run_id
+        if safe_name not in run_id:
+            filename = f"{run_id}-{safe_name}.json"
         filepath = runs_dir / filename
 
         manifest.manifest_path = str(filepath)
@@ -106,6 +108,24 @@ def run_pipeline(
     started_at = datetime.now(UTC).isoformat()
     stages: list[StageResultUnion] = []
 
+    # Generate run_id from started_at (filesystem-safe) + change name
+    safe_ts = started_at.replace(":", "-").replace("+", "_")
+    safe_change = change_name.replace("/", "-")
+    run_id = f"{safe_ts}-{safe_change}"
+
+    # Create event logger before try block so it is available in except/finally
+    runs_dir = repo / ".action-harness" / "runs"
+    runs_dir.mkdir(parents=True, exist_ok=True)
+    log_path = runs_dir / f"{run_id}.events.jsonl"
+    logger = EventLogger(log_path, run_id)
+
+    logger.emit(
+        "run.started",
+        change_name=change_name,
+        repo_path=str(repo),
+        max_retries=max_retries,
+    )
+
     try:
         pr_result = _run_pipeline_inner(
             change_name,
@@ -118,19 +138,32 @@ def run_pipeline(
             permission_mode,
             verbose,
             stages,
+            logger,
         )
     except Exception as e:
         typer.echo(f"[pipeline] unexpected error: {e}", err=True)
+        logger.emit("pipeline.error", error=str(e))
         pr_result = PrResult(
             success=False, stage="pipeline", error=f"Unexpected error: {e}", branch=""
         )
+    finally:
+        # Count retries from stages: each WorkerResult after the first is a retry
+        worker_count = sum(1 for s in stages if isinstance(s, WorkerResult))
+        retries = max(0, worker_count - 1)
 
-    # Count retries from stages: each WorkerResult after the first is a retry
-    worker_count = sum(1 for s in stages if isinstance(s, WorkerResult))
-    retries = max(0, worker_count - 1)
+        duration = (datetime.now(UTC) - datetime.fromisoformat(started_at)).total_seconds()
+        logger.emit(
+            "run.completed",
+            success=pr_result.success,
+            duration_seconds=duration,
+            retries=retries,
+            error=pr_result.error,
+        )
+        logger.close()
 
     manifest = _build_manifest(change_name, repo, started_at, stages, retries, pr_result)
-    _write_manifest(manifest, repo)
+    manifest.event_log_path = str(log_path)
+    _write_manifest(manifest, repo, run_id)
 
     return pr_result, manifest
 
@@ -146,6 +179,7 @@ def _run_pipeline_inner(
     permission_mode: str,
     verbose: bool,
     stages: list[StageResultUnion],
+    logger: EventLogger,
 ) -> PrResult:
     """Inner pipeline logic. Appends to stages list as side effect.
 
@@ -156,10 +190,22 @@ def _run_pipeline_inner(
     wt_result = create_worktree(change_name, repo, verbose=verbose)
     stages.append(wt_result)
     if not wt_result.success:
+        logger.emit(
+            "worktree.failed",
+            stage="worktree",
+            error=wt_result.error,
+        )
         typer.echo(f"[pipeline] failed at worktree stage: {wt_result.error}", err=True)
         return PrResult(
             success=False, stage="pipeline", error=wt_result.error, branch=wt_result.branch
         )
+
+    logger.emit(
+        "worktree.created",
+        stage="worktree",
+        branch=wt_result.branch,
+        worktree_path=str(wt_result.worktree_path),
+    )
 
     assert wt_result.worktree_path is not None
     worktree_path = wt_result.worktree_path
@@ -173,6 +219,8 @@ def _run_pipeline_inner(
         # Dispatch worker
         if feedback:
             typer.echo(f"[pipeline] retry {attempt}/{max_retries} with feedback", err=True)
+
+        logger.emit("worker.dispatched", stage="worker", attempt=attempt)
 
         worker_result = dispatch_worker(
             change_name,
@@ -189,6 +237,13 @@ def _run_pipeline_inner(
         stages.append(worker_result)
 
         if not worker_result.success:
+            logger.emit(
+                "worker.failed",
+                stage="worker",
+                duration_seconds=worker_result.duration_seconds,
+                success=False,
+                error=worker_result.error,
+            )
             if attempt >= max_retries:
                 typer.echo(
                     f"[pipeline] worker failed after {attempt + 1} attempt(s): "
@@ -202,13 +257,40 @@ def _run_pipeline_inner(
                     error=f"Worker failed: {worker_result.error}",
                     branch=branch,
                 )
+            logger.emit(
+                "retry.scheduled",
+                attempt=attempt + 1,
+                reason="worker_failed",
+                max_retries=max_retries,
+            )
             attempt += 1
             feedback = worker_result.error
             continue
 
+        logger.emit(
+            "worker.completed",
+            stage="worker",
+            duration_seconds=worker_result.duration_seconds,
+            success=True,
+            commits_ahead=worker_result.commits_ahead,
+            cost_usd=worker_result.cost_usd,
+        )
+
         # Run eval
-        eval_result = run_eval(worktree_path, verbose=verbose)
+        from action_harness.evaluator import BOOTSTRAP_EVAL_COMMANDS
+
+        logger.emit("eval.started", stage="eval", command_count=len(BOOTSTRAP_EVAL_COMMANDS))
+
+        eval_result = run_eval(worktree_path, verbose=verbose, logger=logger)
         stages.append(eval_result)
+
+        logger.emit(
+            "eval.completed",
+            stage="eval",
+            success=eval_result.success,
+            commands_passed=eval_result.commands_passed,
+            commands_run=eval_result.commands_run,
+        )
 
         if eval_result.success:
             typer.echo("[pipeline] eval passed, creating PR", err=True)
@@ -228,6 +310,12 @@ def _run_pipeline_inner(
                 branch=branch,
             )
 
+        logger.emit(
+            "retry.scheduled",
+            attempt=attempt + 1,
+            reason="eval_failed",
+            max_retries=max_retries,
+        )
         attempt += 1
         feedback = eval_result.feedback_prompt
     else:
@@ -254,10 +342,18 @@ def _run_pipeline_inner(
     stages.append(pr_result)
 
     if not pr_result.success:
+        logger.emit("pr.failed", stage="pr", error=pr_result.error)
         typer.echo(f"[pipeline] PR creation failed: {pr_result.error}", err=True)
         cleanup_worktree(repo, worktree_path, branch, verbose=verbose)
         typer.echo("[pipeline] complete (failed)", err=True)
         return pr_result
+
+    logger.emit(
+        "pr.created",
+        stage="pr",
+        pr_url=pr_result.pr_url,
+        branch=pr_result.branch,
+    )
 
     # Stage 5: OpenSpec review
     review_result = _run_openspec_review(
@@ -272,7 +368,18 @@ def _run_pipeline_inner(
         verbose,
         pr_result,
         stages,
+        logger,
     )
+
+    if review_result is not None:
+        logger.emit(
+            "openspec_review.completed",
+            stage="openspec-review",
+            success=review_result.success,
+            duration_seconds=review_result.duration_seconds,
+            archived=review_result.archived,
+            findings=review_result.findings,
+        )
 
     if review_result is not None and not review_result.success:
         typer.echo("[pipeline] openspec review returned findings", err=True)
@@ -303,6 +410,7 @@ def _run_openspec_review(
     verbose: bool,
     pr_result: PrResult,
     stages: list[StageResultUnion],
+    logger: EventLogger,
 ) -> OpenSpecReviewResult | None:
     """Run the OpenSpec review stage. Returns the review result, or None on skip."""
     typer.echo("[pipeline] running openspec review", err=True)

@@ -96,6 +96,11 @@ def run(
         help="Claude Code permission mode for headless operation",
     ),
     verbose: bool = typer.Option(False, help="Show detailed subprocess output on stderr"),
+    skip_review: bool = typer.Option(
+        False,
+        "--skip-review",
+        help="Skip the review-agents stage (bug-hunter, test-reviewer, quality-reviewer)",
+    ),
     dry_run: bool = typer.Option(
         False, "--dry-run", help="Validate and print plan without executing"
     ),
@@ -146,6 +151,7 @@ def run(
         max_budget_usd=max_budget_usd,
         permission_mode=permission_mode,
         verbose=verbose,
+        skip_review=skip_review,
     )
 
     if manifest.manifest_path:

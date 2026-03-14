@@ -62,10 +62,35 @@ class OpenSpecReviewResult(StageResult):
     archived: bool = False
 
 
+class ReviewFinding(BaseModel):
+    """A single finding from a review agent."""
+
+    title: str
+    file: str
+    line: int | None = None
+    severity: Literal["critical", "high", "medium", "low"]
+    description: str
+    agent: str
+
+
+class ReviewResult(StageResult):
+    """Result from a code review agent dispatch."""
+
+    stage: Literal["review"] = "review"
+    agent_name: str
+    findings: list[ReviewFinding] = []
+    cost_usd: float | None = None
+
+
 # Discriminated union so Pydantic preserves subtypes through serialization.
 # Only includes concrete stage types used in the pipeline (not the base StageResult).
 StageResultUnion = Annotated[
-    WorktreeResult | WorkerResult | EvalResult | PrResult | OpenSpecReviewResult,
+    WorktreeResult
+    | WorkerResult
+    | EvalResult
+    | PrResult
+    | OpenSpecReviewResult
+    | ReviewResult,
     Field(discriminator="stage"),
 ]
 

@@ -4,14 +4,14 @@ Prerequisites: these tasks assume `structured-logging` has NOT been implemented 
 
 ## Group 0: Shared Utilities
 
-- [ ] 0.1 Extract `_extract_json_block` from `src/action_harness/openspec_reviewer.py` into a shared module `src/action_harness/parsing.py`. Update `openspec_reviewer.py` to import from there. This function is needed by both the openspec reviewer and the review agents.
+- [x] 0.1 Extract `_extract_json_block` from `src/action_harness/openspec_reviewer.py` into a shared module `src/action_harness/parsing.py`. Update `openspec_reviewer.py` to import from there. This function is needed by both the openspec reviewer and the review agents.
 
 ## Group 1: Models
 
-- [ ] 1.1 In `src/action_harness/models.py`, add `ReviewFinding` model with fields: `title: str`, `file: str`, `line: int | None = None`, `severity: Literal["critical", "high", "medium", "low"]`, `description: str`, `agent: str`.
-- [ ] 1.2 In `src/action_harness/models.py`, add `ReviewResult(StageResult)` model with fields: `stage: Literal["review"] = "review"`, `agent_name: str`, `findings: list[ReviewFinding] = []`, `cost_usd: float | None = None`.
-- [ ] 1.3 In `src/action_harness/models.py`, add `ReviewResult` to the `StageResultUnion` discriminated union.
-- [ ] 1.4 In `tests/test_models.py`, add tests for `ReviewFinding` and `ReviewResult`: construction, serialization, deserialization, inclusion in `RunManifest.stages`, and round-trip through JSON.
+- [x] 1.1 In `src/action_harness/models.py`, add `ReviewFinding` model with fields: `title: str`, `file: str`, `line: int | None = None`, `severity: Literal["critical", "high", "medium", "low"]`, `description: str`, `agent: str`.
+- [x] 1.2 In `src/action_harness/models.py`, add `ReviewResult(StageResult)` model with fields: `stage: Literal["review"] = "review"`, `agent_name: str`, `findings: list[ReviewFinding] = []`, `cost_usd: float | None = None`.
+- [x] 1.3 In `src/action_harness/models.py`, add `ReviewResult` to the `StageResultUnion` discriminated union.
+- [x] 1.4 In `tests/test_models.py`, add tests for `ReviewFinding` and `ReviewResult`: construction, serialization, deserialization, inclusion in `RunManifest.stages`, and round-trip through JSON.
 
 ## Group 2: Review Agent Dispatch
 

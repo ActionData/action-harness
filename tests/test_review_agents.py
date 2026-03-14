@@ -1,0 +1,473 @@
+"""Tests for review agent dispatch, parsing, triage, and feedback."""
+
+import json
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from action_harness.models import ReviewFinding, ReviewResult
+from action_harness.review_agents import (
+    REVIEW_AGENT_NAMES,
+    build_review_prompt,
+    dispatch_review_agents,
+    dispatch_single_review,
+    format_review_feedback,
+    parse_review_findings,
+    triage_findings,
+)
+
+
+class TestBuildReviewPrompt:
+    def test_returns_nonempty_for_each_agent(self) -> None:
+        for name in REVIEW_AGENT_NAMES:
+            prompt = build_review_prompt(name, 42)
+            assert len(prompt) > 0
+
+    def test_contains_json_output_instructions(self) -> None:
+        for name in REVIEW_AGENT_NAMES:
+            prompt = build_review_prompt(name, 99)
+            assert '"findings"' in prompt
+            assert '"severity"' in prompt
+
+    def test_unknown_agent_raises(self) -> None:
+        with pytest.raises(ValueError, match="Unknown review agent"):
+            build_review_prompt("nonexistent-agent", 1)
+
+    def test_prompt_contains_pr_number(self) -> None:
+        prompt = build_review_prompt("bug-hunter", 123)
+        assert "123" in prompt
+
+    def test_bug_hunter_prompt_content(self) -> None:
+        prompt = build_review_prompt("bug-hunter", 1)
+        assert "bug" in prompt.lower() or "Bug" in prompt
+
+    def test_test_reviewer_prompt_content(self) -> None:
+        prompt = build_review_prompt("test-reviewer", 1)
+        assert "test" in prompt.lower()
+
+    def test_quality_reviewer_prompt_content(self) -> None:
+        prompt = build_review_prompt("quality-reviewer", 1)
+        assert "quality" in prompt.lower() or "maintainability" in prompt.lower()
+
+
+class TestParseReviewFindings:
+    def test_valid_json_with_findings(self) -> None:
+        findings_json = {
+            "findings": [
+                {
+                    "title": "Off-by-one",
+                    "file": "src/foo.py",
+                    "line": 42,
+                    "severity": "high",
+                    "description": "Loop bound is wrong",
+                }
+            ],
+            "summary": "Found one issue",
+        }
+        raw = json.dumps({"result": json.dumps(findings_json), "cost_usd": 0.05})
+        result = parse_review_findings(raw, "bug-hunter", 5.0)
+
+        assert result.success is True
+        assert result.agent_name == "bug-hunter"
+        assert len(result.findings) == 1
+        assert result.findings[0].title == "Off-by-one"
+        assert result.findings[0].file == "src/foo.py"
+        assert result.findings[0].line == 42
+        assert result.findings[0].severity == "high"
+        assert result.findings[0].agent == "bug-hunter"
+        assert result.cost_usd == 0.05
+        assert result.duration_seconds == 5.0
+
+    def test_empty_findings_list(self) -> None:
+        findings_json = {"findings": [], "summary": "No issues."}
+        raw = json.dumps({"result": json.dumps(findings_json)})
+        result = parse_review_findings(raw, "test-reviewer", 3.0)
+
+        assert result.success is True
+        assert result.findings == []
+        assert result.agent_name == "test-reviewer"
+
+    def test_unparseable_output(self) -> None:
+        result = parse_review_findings("not json at all", "quality-reviewer", 1.0)
+
+        assert result.success is False
+        assert "invalid JSON" in (result.error or "")
+        assert result.agent_name == "quality-reviewer"
+
+    def test_no_json_block_in_result(self) -> None:
+        raw = json.dumps({"result": "Just some prose with no JSON block"})
+        result = parse_review_findings(raw, "bug-hunter", 2.0)
+
+        assert result.success is False
+        assert "no JSON block" in (result.error or "")
+
+    def test_agent_field_set_on_each_finding(self) -> None:
+        findings_json = {
+            "findings": [
+                {
+                    "title": "A",
+                    "file": "a.py",
+                    "severity": "low",
+                    "description": "d1",
+                },
+                {
+                    "title": "B",
+                    "file": "b.py",
+                    "severity": "medium",
+                    "description": "d2",
+                },
+            ],
+            "summary": "Two findings",
+        }
+        raw = json.dumps({"result": json.dumps(findings_json)})
+        result = parse_review_findings(raw, "test-reviewer", 4.0)
+
+        assert result.success is True
+        assert all(f.agent == "test-reviewer" for f in result.findings)
+
+    def test_json_embedded_in_prose(self) -> None:
+        findings_json = {
+            "findings": [
+                {
+                    "title": "Issue",
+                    "file": "x.py",
+                    "severity": "critical",
+                    "description": "bad",
+                }
+            ],
+            "summary": "Found issue",
+        }
+        result_text = f"Here is my review:\n```json\n{json.dumps(findings_json)}\n```\nDone."
+        raw = json.dumps({"result": result_text})
+        result = parse_review_findings(raw, "bug-hunter", 2.0)
+
+        assert result.success is True
+        assert len(result.findings) == 1
+        assert result.findings[0].severity == "critical"
+
+
+class TestTriageFindings:
+    def test_critical_returns_true(self) -> None:
+        finding = ReviewFinding(
+            title="Crash",
+            file="f.py",
+            severity="critical",
+            description="d",
+            agent="bug-hunter",
+        )
+        result = ReviewResult(success=True, agent_name="bug-hunter", findings=[finding])
+        assert triage_findings([result]) is True
+
+    def test_high_returns_true(self) -> None:
+        finding = ReviewFinding(
+            title="Bug",
+            file="f.py",
+            severity="high",
+            description="d",
+            agent="bug-hunter",
+        )
+        result = ReviewResult(success=True, agent_name="bug-hunter", findings=[finding])
+        assert triage_findings([result]) is True
+
+    def test_only_medium_low_returns_false(self) -> None:
+        findings = [
+            ReviewFinding(
+                title="Style",
+                file="f.py",
+                severity="medium",
+                description="d",
+                agent="quality-reviewer",
+            ),
+            ReviewFinding(
+                title="Nit",
+                file="g.py",
+                severity="low",
+                description="d",
+                agent="quality-reviewer",
+            ),
+        ]
+        result = ReviewResult(success=True, agent_name="quality-reviewer", findings=findings)
+        assert triage_findings([result]) is False
+
+    def test_empty_findings_returns_false(self) -> None:
+        result = ReviewResult(success=True, agent_name="test-reviewer", findings=[])
+        assert triage_findings([result]) is False
+
+    def test_all_failed_returns_false(self) -> None:
+        results = [
+            ReviewResult(success=False, agent_name="bug-hunter", error="failed"),
+            ReviewResult(success=False, agent_name="test-reviewer", error="failed"),
+        ]
+        assert triage_findings(results) is False
+
+    def test_mixed_severities_with_one_high(self) -> None:
+        findings = [
+            ReviewFinding(
+                title="Low",
+                file="f.py",
+                severity="low",
+                description="d",
+                agent="a",
+            ),
+            ReviewFinding(
+                title="High",
+                file="g.py",
+                severity="high",
+                description="d",
+                agent="b",
+            ),
+        ]
+        r1 = ReviewResult(success=True, agent_name="a", findings=[findings[0]])
+        r2 = ReviewResult(success=True, agent_name="b", findings=[findings[1]])
+        assert triage_findings([r1, r2]) is True
+
+
+class TestFormatReviewFeedback:
+    def test_contains_finding_details(self) -> None:
+        finding = ReviewFinding(
+            title="Off-by-one",
+            file="src/foo.py",
+            line=42,
+            severity="high",
+            description="Loop bound is wrong",
+            agent="bug-hunter",
+        )
+        result = ReviewResult(success=True, agent_name="bug-hunter", findings=[finding])
+        feedback = format_review_feedback([result])
+
+        assert "Off-by-one" in feedback
+        assert "src/foo.py:42" in feedback
+        assert "HIGH" in feedback
+        assert "bug-hunter" in feedback
+
+    def test_only_high_critical_included(self) -> None:
+        findings = [
+            ReviewFinding(
+                title="Critical Bug",
+                file="a.py",
+                severity="critical",
+                description="crash",
+                agent="bug-hunter",
+            ),
+            ReviewFinding(
+                title="Minor Style",
+                file="b.py",
+                severity="low",
+                description="naming",
+                agent="quality-reviewer",
+            ),
+        ]
+        r1 = ReviewResult(success=True, agent_name="bug-hunter", findings=[findings[0]])
+        r2 = ReviewResult(success=True, agent_name="quality-reviewer", findings=[findings[1]])
+        feedback = format_review_feedback([r1, r2])
+
+        assert "Critical Bug" in feedback
+        assert "Minor Style" not in feedback
+
+    def test_empty_input_no_findings_message(self) -> None:
+        feedback = format_review_feedback([])
+        assert "No high or critical findings" in feedback
+
+    def test_only_medium_low_no_findings_message(self) -> None:
+        finding = ReviewFinding(
+            title="Nit",
+            file="x.py",
+            severity="medium",
+            description="d",
+            agent="a",
+        )
+        result = ReviewResult(success=True, agent_name="a", findings=[finding])
+        feedback = format_review_feedback([result])
+        assert "No high or critical findings" in feedback
+
+    def test_contains_footer(self) -> None:
+        finding = ReviewFinding(
+            title="Bug",
+            file="f.py",
+            severity="high",
+            description="d",
+            agent="a",
+        )
+        result = ReviewResult(success=True, agent_name="a", findings=[finding])
+        feedback = format_review_feedback([result])
+        assert "Fix the high/critical issues" in feedback
+
+
+class TestDispatchSingleReview:
+    def test_command_construction(self) -> None:
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = json.dumps(
+            {
+                "result": json.dumps({"findings": [], "summary": "ok"}),
+                "cost_usd": 0.02,
+            }
+        )
+        mock_result.stderr = ""
+
+        with patch(
+            "action_harness.review_agents.subprocess.run",
+            return_value=mock_result,
+        ) as mock_run:
+            result = dispatch_single_review(
+                "bug-hunter",
+                pr_number=42,
+                worktree_path=Path("/tmp/wt"),
+                max_turns=30,
+            )
+
+        assert result.success is True
+        assert result.agent_name == "bug-hunter"
+
+        call_args = mock_run.call_args
+        cmd = call_args[0][0]
+        assert cmd[0] == "claude"
+        assert "-p" in cmd
+        assert "--output-format" in cmd
+        assert "json" in cmd
+        assert "--max-turns" in cmd
+        assert "30" in cmd
+        assert "--system-prompt" in cmd
+        assert call_args[1]["cwd"] == Path("/tmp/wt")
+
+    def test_with_optional_flags(self) -> None:
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = json.dumps({"result": json.dumps({"findings": [], "summary": "ok"})})
+        mock_result.stderr = ""
+
+        with patch(
+            "action_harness.review_agents.subprocess.run",
+            return_value=mock_result,
+        ) as mock_run:
+            dispatch_single_review(
+                "test-reviewer",
+                pr_number=10,
+                worktree_path=Path("/tmp/wt"),
+                model="opus",
+                effort="high",
+                max_budget_usd=1.5,
+            )
+
+        cmd = mock_run.call_args[0][0]
+        assert "--model" in cmd
+        assert "opus" in cmd
+        assert "--effort" in cmd
+        assert "high" in cmd
+        assert "--max-budget-usd" in cmd
+        assert "1.5" in cmd
+
+    def test_cli_failure_returns_error_result(self) -> None:
+        mock_result = MagicMock()
+        mock_result.returncode = 1
+        mock_result.stdout = ""
+        mock_result.stderr = "some error"
+
+        with patch(
+            "action_harness.review_agents.subprocess.run",
+            return_value=mock_result,
+        ):
+            result = dispatch_single_review(
+                "bug-hunter",
+                pr_number=1,
+                worktree_path=Path("/tmp/wt"),
+            )
+
+        assert result.success is False
+        assert "exit" in (result.error or "").lower() or "exited" in (result.error or "").lower()
+
+    def test_parsed_into_review_result(self) -> None:
+        findings_json = {
+            "findings": [
+                {
+                    "title": "Bug",
+                    "file": "f.py",
+                    "line": 10,
+                    "severity": "high",
+                    "description": "desc",
+                }
+            ],
+            "summary": "One bug",
+        }
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = json.dumps({"result": json.dumps(findings_json), "cost_usd": 0.03})
+        mock_result.stderr = ""
+
+        with patch(
+            "action_harness.review_agents.subprocess.run",
+            return_value=mock_result,
+        ):
+            result = dispatch_single_review(
+                "bug-hunter",
+                pr_number=5,
+                worktree_path=Path("/tmp/wt"),
+            )
+
+        assert isinstance(result, ReviewResult)
+        assert result.success is True
+        assert len(result.findings) == 1
+        assert result.findings[0].title == "Bug"
+        assert result.cost_usd == 0.03
+
+
+class TestDispatchReviewAgents:
+    def test_dispatches_three_agents(self) -> None:
+        mock_result = ReviewResult(success=True, agent_name="mock", findings=[])
+
+        with patch(
+            "action_harness.review_agents.dispatch_single_review",
+            return_value=mock_result,
+        ) as mock_dispatch:
+            results = dispatch_review_agents(
+                pr_number=42,
+                worktree_path=Path("/tmp/wt"),
+            )
+
+        assert len(results) == 3
+        assert mock_dispatch.call_count == 3
+
+    def test_collects_all_results(self) -> None:
+        def mock_dispatch(agent_name: str, **kwargs: object) -> ReviewResult:
+            return ReviewResult(success=True, agent_name=agent_name, findings=[])
+
+        with patch(
+            "action_harness.review_agents.dispatch_single_review",
+            side_effect=mock_dispatch,
+        ):
+            results = dispatch_review_agents(
+                pr_number=10,
+                worktree_path=Path("/tmp/wt"),
+            )
+
+        agent_names = {r.agent_name for r in results}
+        assert agent_names == {"bug-hunter", "test-reviewer", "quality-reviewer"}
+
+    def test_individual_failure_does_not_block_others(self) -> None:
+        call_count = {"n": 0}
+
+        def mock_dispatch(agent_name: str, **kwargs: object) -> ReviewResult:
+            call_count["n"] += 1
+            if agent_name == "bug-hunter":
+                return ReviewResult(
+                    success=False,
+                    agent_name=agent_name,
+                    error="failed",
+                )
+            return ReviewResult(success=True, agent_name=agent_name, findings=[])
+
+        with patch(
+            "action_harness.review_agents.dispatch_single_review",
+            side_effect=mock_dispatch,
+        ):
+            results = dispatch_review_agents(
+                pr_number=1,
+                worktree_path=Path("/tmp/wt"),
+            )
+
+        assert len(results) == 3
+        assert call_count["n"] == 3
+        failed = [r for r in results if not r.success]
+        assert len(failed) == 1
+        assert failed[0].agent_name == "bug-hunter"

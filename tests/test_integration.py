@@ -158,7 +158,9 @@ class TestPipelineSuccess:
                 return_value=(False, None),
             ),
         ):
-            pr_result, manifest = run_pipeline("test-change", test_repo, max_retries=1)
+            pr_result, manifest = run_pipeline(
+                "test-change", test_repo, max_retries=1, skip_review=True
+            )
 
         assert pr_result.success is True
         assert pr_result.pr_url == "https://github.com/test/repo/pull/1"
@@ -190,7 +192,7 @@ class TestPipelineSuccess:
                 return_value=(False, None),
             ),
         ):
-            _pr_result, _manifest = run_pipeline("test-change", test_repo)
+            _pr_result, _manifest = run_pipeline("test-change", test_repo, skip_review=True)
 
         # Verify branch was created
         check = subprocess.run(
@@ -221,7 +223,9 @@ class TestPipelineSuccess:
                 return_value=(False, None),
             ),
         ):
-            _pr_result, _manifest = run_pipeline("test-change", test_repo, max_turns=50)
+            _pr_result, _manifest = run_pipeline(
+                "test-change", test_repo, max_turns=50, skip_review=True
+            )
 
         # Find claude invocation
         claude_calls = [c for c in mock.call_args_list if c[0][0][0] == "claude"]
@@ -259,6 +263,7 @@ class TestPipelineSuccess:
                 effort="high",
                 max_budget_usd=2.0,
                 permission_mode="plan",
+                skip_review=True,
             )
 
         claude_calls = [c for c in mock.call_args_list if c[0][0][0] == "claude"]
@@ -329,7 +334,9 @@ class TestPipelineFailure:
                 return_value=(False, None),
             ),
         ):
-            pr_result, manifest = run_pipeline("test-change", test_repo, max_retries=3)
+            pr_result, manifest = run_pipeline(
+                "test-change", test_repo, max_retries=3, skip_review=True
+            )
 
         assert pr_result.success is True
         assert pr_result.pr_url is not None
@@ -409,7 +416,9 @@ class TestManifestPersistence:
                 return_value=(False, None),
             ),
         ):
-            _pr_result, manifest = run_pipeline("test-change", test_repo, max_retries=1)
+            _pr_result, manifest = run_pipeline(
+                "test-change", test_repo, max_retries=1, skip_review=True
+            )
 
         # Manifest path should be set
         assert manifest.manifest_path is not None
@@ -462,7 +471,9 @@ class TestManifestPersistence:
                 return_value=(False, None),
             ),
         ):
-            _pr_result, manifest = run_pipeline("test-change", test_repo, max_retries=1)
+            _pr_result, manifest = run_pipeline(
+                "test-change", test_repo, max_retries=1, skip_review=True
+            )
 
         assert manifest.manifest_path is not None
         assert "test-change.json" in manifest.manifest_path
@@ -498,7 +509,9 @@ class TestManifestPersistence:
                 return_value=(False, None),
             ),
         ):
-            _pr_result, manifest = run_pipeline("test-change", test_repo, max_retries=3)
+            _pr_result, manifest = run_pipeline(
+                "test-change", test_repo, max_retries=3, skip_review=True
+            )
 
         # Two worker dispatches at $0.10 each
         assert manifest.total_cost_usd is not None
@@ -575,7 +588,9 @@ class TestPipelineWithOpenspecReview:
                 return_value=3,
             ),
         ):
-            pr_result, manifest = run_pipeline("test-change", test_repo, max_retries=1)
+            pr_result, manifest = run_pipeline(
+                "test-change", test_repo, max_retries=1, skip_review=True
+            )
 
         assert pr_result.success is True
         assert pr_result.pr_url == "https://github.com/test/repo/pull/1"
@@ -623,7 +638,9 @@ class TestPipelineWithOpenspecReview:
                 return_value=3,
             ),
         ):
-            pr_result, manifest = run_pipeline("test-change", test_repo, max_retries=1)
+            pr_result, manifest = run_pipeline(
+                "test-change", test_repo, max_retries=1, skip_review=True
+            )
 
         assert pr_result.success is False
         assert manifest.success is False

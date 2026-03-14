@@ -6,6 +6,8 @@ from pathlib import Path
 from action_harness.models import (
     EvalResult,
     PrResult,
+    ReviewFinding,
+    ReviewResult,
     RunManifest,
     StageResult,
     WorkerResult,
@@ -104,6 +106,127 @@ class TestPrResult:
         assert result.success is False
         assert result.error == "push failed"
         assert result.pr_url is None
+
+
+class TestReviewFinding:
+    def test_construction(self) -> None:
+        finding = ReviewFinding(
+            title="Bug found",
+            file="src/foo.py",
+            line=42,
+            severity="high",
+            description="Off-by-one error",
+            agent="bug-hunter",
+        )
+        assert finding.title == "Bug found"
+        assert finding.file == "src/foo.py"
+        assert finding.line == 42
+        assert finding.severity == "high"
+        assert finding.description == "Off-by-one error"
+        assert finding.agent == "bug-hunter"
+
+    def test_line_optional(self) -> None:
+        finding = ReviewFinding(
+            title="Test gap",
+            file="src/bar.py",
+            severity="medium",
+            description="Missing test",
+            agent="test-reviewer",
+        )
+        assert finding.line is None
+
+    def test_serialization_roundtrip(self) -> None:
+        finding = ReviewFinding(
+            title="Quality issue",
+            file="src/baz.py",
+            line=10,
+            severity="low",
+            description="Naming convention",
+            agent="quality-reviewer",
+        )
+        raw = finding.model_dump_json()
+        restored = ReviewFinding.model_validate_json(raw)
+        assert restored.title == finding.title
+        assert restored.severity == finding.severity
+        assert restored.agent == finding.agent
+
+
+class TestReviewResult:
+    def test_success_with_findings(self) -> None:
+        finding = ReviewFinding(
+            title="Bug",
+            file="foo.py",
+            severity="high",
+            description="desc",
+            agent="bug-hunter",
+        )
+        result = ReviewResult(
+            success=True,
+            agent_name="bug-hunter",
+            findings=[finding],
+            cost_usd=0.05,
+        )
+        assert result.stage == "review"
+        assert result.agent_name == "bug-hunter"
+        assert len(result.findings) == 1
+        assert result.cost_usd == 0.05
+        assert isinstance(result, StageResult)
+
+    def test_failure_result(self) -> None:
+        result = ReviewResult(
+            success=False,
+            agent_name="test-reviewer",
+            error="parse failure",
+        )
+        assert result.success is False
+        assert result.error == "parse failure"
+        assert result.findings == []
+        assert result.cost_usd is None
+
+    def test_serialization_roundtrip(self) -> None:
+        finding = ReviewFinding(
+            title="Issue",
+            file="x.py",
+            severity="critical",
+            description="crash",
+            agent="bug-hunter",
+        )
+        result = ReviewResult(
+            success=True,
+            agent_name="bug-hunter",
+            findings=[finding],
+            cost_usd=0.12,
+            duration_seconds=5.0,
+        )
+        raw = result.model_dump_json()
+        restored = ReviewResult.model_validate_json(raw)
+        assert restored.agent_name == "bug-hunter"
+        assert len(restored.findings) == 1
+        assert restored.findings[0].title == "Issue"
+        assert restored.cost_usd == 0.12
+
+    def test_in_run_manifest(self) -> None:
+        finding = ReviewFinding(
+            title="test",
+            file="foo.py",
+            severity="high",
+            description="desc",
+            agent="bug-hunter",
+        )
+        review = ReviewResult(success=True, agent_name="bug-hunter", findings=[finding])
+        manifest = RunManifest(
+            change_name="test",
+            repo_path=".",
+            started_at="2026-01-01T00:00:00+00:00",
+            completed_at="2026-01-01T00:00:01+00:00",
+            success=True,
+            stages=[review],
+            total_duration_seconds=1.0,
+        )
+        raw = manifest.model_dump_json()
+        restored = RunManifest.model_validate_json(raw)
+        assert isinstance(restored.stages[0], ReviewResult)
+        assert restored.stages[0].findings[0].title == "test"
 
 
 class TestRunManifest:

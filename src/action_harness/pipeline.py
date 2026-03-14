@@ -11,6 +11,7 @@ from action_harness.event_log import EventLogger
 from action_harness.models import (
     OpenSpecReviewResult,
     PrResult,
+    ReviewResult,
     RunManifest,
     StageResultUnion,
     WorkerResult,
@@ -22,6 +23,11 @@ from action_harness.openspec_reviewer import (
 )
 from action_harness.pr import create_pr
 from action_harness.profiler import BOOTSTRAP_EVAL_COMMANDS, RepoProfile, profile_repo
+from action_harness.review_agents import (
+    dispatch_review_agents,
+    format_review_feedback,
+    triage_findings,
+)
 from action_harness.worker import count_commits_ahead, dispatch_worker
 from action_harness.worktree import cleanup_worktree, create_worktree
 
@@ -41,13 +47,16 @@ def _build_manifest(
     end_dt = datetime.fromisoformat(completed_at)
     total_duration = (end_dt - start_dt).total_seconds()
 
-    # Sum cost_usd across all WorkerResult entries (including retries)
+    # Sum cost_usd across WorkerResult and ReviewResult entries
     total_cost: float | None = None
     for stage in stages:
-        if isinstance(stage, WorkerResult) and stage.cost_usd is not None:
+        cost = None
+        if isinstance(stage, (WorkerResult, ReviewResult)):
+            cost = stage.cost_usd
+        if cost is not None:
             if total_cost is None:
                 total_cost = 0.0
-            total_cost += stage.cost_usd
+            total_cost += cost
 
     return RunManifest(
         change_name=change_name,
@@ -100,6 +109,7 @@ def run_pipeline(
     verbose: bool = False,
     harness_home: Path | None = None,
     repo_name: str | None = None,
+    skip_review: bool = False,
 ) -> tuple[PrResult, RunManifest]:
     """Run the full pipeline: worktree -> worker -> eval -> retry -> PR.
 
@@ -170,6 +180,7 @@ def run_pipeline(
             logger,
             eval_commands=profile.eval_commands,
             workspace_dir=workspace_dir,
+            skip_review=skip_review,
         )
     except Exception as e:
         typer.echo(f"[pipeline] unexpected error: {e}", err=True)
@@ -215,6 +226,7 @@ def _run_pipeline_inner(
     logger: EventLogger,
     eval_commands: list[str] | None = None,
     workspace_dir: Path | None = None,
+    skip_review: bool = False,
 ) -> PrResult:
     """Inner pipeline logic. Appends to stages list as side effect.
 
@@ -391,7 +403,40 @@ def _run_pipeline_inner(
         branch=pr_result.branch,
     )
 
-    # Stage 5: OpenSpec review
+    # Stage 5: Review agents (parallel code review)
+    if not skip_review:
+        needs_fix = _run_review_agents(
+            pr_result,
+            worktree_path,
+            max_turns,
+            model,
+            effort,
+            max_budget_usd,
+            permission_mode,
+            verbose,
+            stages,
+        )
+
+        if needs_fix:
+            fix_succeeded = _run_review_fix_retry(
+                change_name,
+                pr_result,
+                worktree_path,
+                repo,
+                max_turns,
+                model,
+                effort,
+                max_budget_usd,
+                permission_mode,
+                verbose,
+                stages,
+            )
+            if not fix_succeeded:
+                typer.echo("[pipeline] review fix-retry failed", err=True)
+    else:
+        typer.echo("[pipeline] skipping review agents (--skip-review)", err=True)
+
+    # Stage 6: OpenSpec review
     review_result = _run_openspec_review(
         change_name,
         worktree_path,
@@ -432,6 +477,180 @@ def _run_pipeline_inner(
 
     typer.echo("[pipeline] complete (success)", err=True)
     return pr_result
+
+
+def _run_review_agents(
+    pr_result: PrResult,
+    worktree_path: Path,
+    max_turns: int,
+    model: str | None,
+    effort: str | None,
+    max_budget_usd: float | None,
+    permission_mode: str,
+    verbose: bool,
+    stages: list[StageResultUnion],
+) -> bool:
+    """Run review agents stage. Returns True if fix retry is needed."""
+    if pr_result.pr_url is None:
+        typer.echo("[pipeline] error: PR URL is None, cannot proceed", err=True)
+        return False
+    # Extract PR number from URL (e.g., https://github.com/org/repo/pull/123)
+    pr_number = int(pr_result.pr_url.rstrip("/").split("/")[-1])
+
+    typer.echo(f"[pipeline] running review agents for PR #{pr_number}", err=True)
+
+    review_results = dispatch_review_agents(
+        pr_number=pr_number,
+        worktree_path=worktree_path,
+        max_turns=max_turns,
+        model=model,
+        effort=effort,
+        max_budget_usd=max_budget_usd,
+        permission_mode=permission_mode,
+        verbose=verbose,
+    )
+
+    for result in review_results:
+        stages.append(result)
+
+    _post_review_comment(worktree_path, pr_result.pr_url, review_results, verbose)
+
+    needs_fix = triage_findings(review_results)
+    if needs_fix:
+        typer.echo("[pipeline] high/critical findings detected, fix retry needed", err=True)
+    else:
+        typer.echo("[pipeline] no high/critical findings, proceeding", err=True)
+
+    return needs_fix
+
+
+def _post_review_comment(
+    worktree_path: Path,
+    pr_url: str,
+    review_results: list[ReviewResult],
+    verbose: bool,
+) -> None:
+    """Post a PR comment summarizing review agent findings."""
+    total_findings = sum(len(r.findings) for r in review_results)
+
+    if total_findings == 0:
+        body = "All review agents passed with no findings."
+    else:
+        lines = ["## Review Agent Findings", ""]
+        for result in review_results:
+            if not result.findings:
+                continue
+            lines.append(f"### {result.agent_name}")
+            for f in result.findings:
+                location = f.file
+                if f.line is not None:
+                    location += f":{f.line}"
+                lines.append(f"- **[{f.severity.upper()}]** {f.title} (`{location}`)")
+                lines.append(f"  {f.description}")
+            lines.append("")
+        body = "\n".join(lines)
+
+    try:
+        gh_result = subprocess.run(
+            ["gh", "pr", "comment", pr_url, "--body", body],
+            cwd=worktree_path,
+            capture_output=True,
+            text=True,
+        )
+        if gh_result.returncode != 0:
+            typer.echo(
+                f"[pipeline] warning: gh pr comment failed: {gh_result.stderr.strip()}",
+                err=True,
+            )
+        elif verbose:
+            typer.echo("[pipeline] posted review comment on PR", err=True)
+    except (FileNotFoundError, OSError) as e:
+        typer.echo(f"[pipeline] warning: gh pr comment failed: {e}", err=True)
+
+
+def _run_review_fix_retry(
+    change_name: str,
+    pr_result: PrResult,
+    worktree_path: Path,
+    repo: Path,
+    max_turns: int,
+    model: str | None,
+    effort: str | None,
+    max_budget_usd: float | None,
+    permission_mode: str,
+    verbose: bool,
+    stages: list[StageResultUnion],
+) -> bool:
+    """Re-dispatch worker with review feedback, re-run eval, push if passing.
+
+    Returns True if fix succeeded (eval passed), False otherwise.
+    """
+    typer.echo("[pipeline] starting review fix retry", err=True)
+
+    # Collect review results from stages
+    review_results = [s for s in stages if isinstance(s, ReviewResult)]
+    feedback = format_review_feedback(review_results)
+
+    worker_result = dispatch_worker(
+        change_name,
+        worktree_path,
+        base_branch=_get_worktree_base(repo),
+        max_turns=max_turns,
+        feedback=feedback,
+        model=model,
+        effort=effort,
+        max_budget_usd=max_budget_usd,
+        permission_mode=permission_mode,
+        verbose=verbose,
+    )
+    stages.append(worker_result)
+
+    if not worker_result.success:
+        typer.echo(f"[pipeline] review fix worker failed: {worker_result.error}", err=True)
+        return False
+
+    eval_result = run_eval(worktree_path, verbose=verbose)
+    stages.append(eval_result)
+
+    if not eval_result.success:
+        typer.echo(f"[pipeline] review fix eval failed: {eval_result.error}", err=True)
+        return False
+
+    # Push new commits to the PR branch
+    try:
+        push_result = subprocess.run(
+            ["git", "push", "origin", "HEAD"],
+            cwd=worktree_path,
+            capture_output=True,
+            text=True,
+        )
+        if push_result.returncode != 0:
+            typer.echo(
+                f"[pipeline] warning: git push failed: {push_result.stderr.strip()}",
+                err=True,
+            )
+            return False
+    except (FileNotFoundError, OSError) as e:
+        typer.echo(f"[pipeline] warning: git push failed: {e}", err=True)
+        return False
+
+    # Post comment noting fixes (only if push succeeded)
+    if pr_result.pr_url is None:
+        typer.echo("[pipeline] error: PR URL is None, cannot proceed", err=True)
+        return False
+    comment = "Review findings addressed. New commits pushed to this branch."
+    try:
+        subprocess.run(
+            ["gh", "pr", "comment", pr_result.pr_url, "--body", comment],
+            cwd=worktree_path,
+            capture_output=True,
+            text=True,
+        )
+    except (FileNotFoundError, OSError):
+        pass  # Non-critical
+
+    typer.echo("[pipeline] review fix retry completed successfully", err=True)
+    return True
 
 
 def _run_openspec_review(

@@ -113,6 +113,11 @@ def run(
         help="Claude Code permission mode for headless operation",
     ),
     verbose: bool = typer.Option(False, help="Show detailed subprocess output on stderr"),
+    skip_review: bool = typer.Option(
+        False,
+        "--skip-review",
+        help="Skip the review-agents stage (bug-hunter, test-reviewer, quality-reviewer)",
+    ),
     dry_run: bool = typer.Option(
         False, "--dry-run", help="Validate and print plan without executing"
     ),
@@ -187,6 +192,7 @@ def run(
         verbose=verbose,
         harness_home=resolved_home if is_managed else None,
         repo_name=repo_name if is_managed else None,
+        skip_review=skip_review,
     )
 
     if manifest.manifest_path:

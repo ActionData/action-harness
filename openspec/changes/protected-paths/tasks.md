@@ -1,9 +1,9 @@
 ## 1. Protection Module
 
-- [ ] 1.1 Create `src/action_harness/protection.py`. Define `load_protected_patterns(repo_path: Path) -> list[str]` that reads `.harness/protected-paths.yml` from the repo. Parse YAML with `pyyaml` (already a dependency). Return the `protected` list. If file missing, log to stderr and return `[]`. If malformed YAML or missing `protected` key, log warning and return `[]`.
-- [ ] 1.2 In `protection.py`: define `check_protected_files(changed_files: list[str], patterns: list[str]) -> list[str]` that matches each changed file against the patterns using `fnmatch.fnmatch`. Return the list of files that match any pattern.
-- [ ] 1.3 In `protection.py`: define `get_changed_files(worktree_path: Path, base_branch: str) -> list[str]` that runs `git diff --name-only origin/<base_branch>..HEAD` in the worktree and returns the list of changed file paths. Return `[]` on failure.
-- [ ] 1.4 In `protection.py`: define `flag_pr_protected(pr_url: str, protected_files: list[str], worktree_path: Path, verbose: bool) -> None` that posts a PR comment listing the protected files and adds the `protected-paths` label via `gh pr edit --add-label protected-paths`. Log to stderr. Non-fatal — swallow errors with warning.
+- [x] 1.1 Create `src/action_harness/protection.py`. Define `load_protected_patterns(repo_path: Path) -> list[str]` that reads `.harness/protected-paths.yml` from the repo. Parse YAML with `pyyaml` (already a dependency). Return the `protected` list. If file missing, log to stderr and return `[]`. If malformed YAML or missing `protected` key, log warning and return `[]`.
+- [x] 1.2 In `protection.py`: define `check_protected_files(changed_files: list[str], patterns: list[str]) -> list[str]` that matches each changed file against the patterns using `fnmatch.fnmatch`. Return the list of files that match any pattern.
+- [x] 1.3 In `protection.py`: define `get_changed_files(worktree_path: Path, base_branch: str) -> list[str]` that runs `git diff --name-only origin/<base_branch>..HEAD` in the worktree and returns the list of changed file paths. Return `[]` on failure.
+- [x] 1.4 In `protection.py`: define `flag_pr_protected(pr_url: str, protected_files: list[str], worktree_path: Path, verbose: bool) -> None` that posts a PR comment listing the protected files and adds the `protected-paths` label via `gh pr edit --add-label protected-paths`. Log to stderr. Non-fatal — swallow errors with warning.
 
 ## 2. Pipeline Integration
 

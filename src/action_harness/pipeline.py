@@ -234,7 +234,16 @@ def _run_pipeline_inner(
         )
 
     # Stage 4: Create PR
-    pr_result = create_pr(change_name, worktree_path, branch, eval_result, verbose=verbose)
+    base_branch = _get_worktree_base(repo)
+    pr_result = create_pr(
+        change_name,
+        worktree_path,
+        branch,
+        eval_result,
+        worker_result=worker_result,
+        base_branch=base_branch,
+        verbose=verbose,
+    )
     stages.append(pr_result)
 
     if not pr_result.success:

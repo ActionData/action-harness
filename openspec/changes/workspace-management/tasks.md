@@ -2,16 +2,16 @@ Prerequisites: implement after `worker-config` and `enrich-pr-description` (both
 
 ## 1. Repo Management Module
 
-- [ ] 1.1 Create `src/action_harness/repo.py`. Define `resolve_repo(repo_arg: str, harness_home: Path, verbose: bool = False) -> tuple[Path, str]` that takes the `--repo` argument and returns `(local_path, repo_name)`. If `repo_arg` is an existing local directory, return `(Path(repo_arg), Path(repo_arg).name)`. If it matches `owner/repo` pattern or starts with `https://` or `git@`, clone or locate the repo under `harness_home/repos/` and return the clone path with the repo name. Raise `ValidationError` if clone fails.
-- [ ] 1.2 In `repo.py`: define `_parse_repo_ref(repo_arg: str) -> tuple[str, str, str]` returning `(owner, repo_name, clone_url)`. Handle GitHub shorthand (`owner/repo` → `https://github.com/owner/repo.git`), HTTPS URLs, and SSH URLs. Extract owner and repo_name from any form.
-- [ ] 1.3 In `repo.py`: define `_get_repo_dir(owner: str, repo_name: str, harness_home: Path) -> Path` that returns the directory to clone into. Default to `harness_home/repos/<repo_name>/`. To check for collision, run `git -C <existing_dir> remote get-url origin` and compare against the incoming `clone_url`. If they differ, use `harness_home/repos/<owner>-<repo_name>/` and log the collision to stderr.
-- [ ] 1.4 In `repo.py`: define `_clone_or_fetch(clone_url: str, repo_dir: Path, verbose: bool) -> None`. If `repo_dir` doesn't exist, run `git clone <url> <repo_dir>`. If it does exist, run `git fetch origin` inside it. Log to stderr. If clone fails, raise `ValidationError` with the git error message.
+- [x] 1.1 Create `src/action_harness/repo.py`. Define `resolve_repo(repo_arg: str, harness_home: Path, verbose: bool = False) -> tuple[Path, str]` that takes the `--repo` argument and returns `(local_path, repo_name)`. If `repo_arg` is an existing local directory, return `(Path(repo_arg), Path(repo_arg).name)`. If it matches `owner/repo` pattern or starts with `https://` or `git@`, clone or locate the repo under `harness_home/repos/` and return the clone path with the repo name. Raise `ValidationError` if clone fails.
+- [x] 1.2 In `repo.py`: define `_parse_repo_ref(repo_arg: str) -> tuple[str, str, str]` returning `(owner, repo_name, clone_url)`. Handle GitHub shorthand (`owner/repo` → `https://github.com/owner/repo.git`), HTTPS URLs, and SSH URLs. Extract owner and repo_name from any form.
+- [x] 1.3 In `repo.py`: define `_get_repo_dir(owner: str, repo_name: str, harness_home: Path) -> Path` that returns the directory to clone into. Default to `harness_home/repos/<repo_name>/`. To check for collision, run `git -C <existing_dir> remote get-url origin` and compare against the incoming `clone_url`. If they differ, use `harness_home/repos/<owner>-<repo_name>/` and log the collision to stderr.
+- [x] 1.4 In `repo.py`: define `_clone_or_fetch(clone_url: str, repo_dir: Path, verbose: bool) -> None`. If `repo_dir` doesn't exist, run `git clone <url> <repo_dir>`. If it does exist, run `git fetch origin` inside it. Log to stderr. If clone fails, raise `ValidationError` with the git error message.
 
 ## 2. Workspace Paths in Worktree Module
 
-- [ ] 2.1 In `worktree.py`: update `create_worktree` to accept an optional `workspace_dir: Path | None` parameter. If provided, create the worktree at `workspace_dir` instead of using `tempfile.mkdtemp`. If not provided, fall back to temp dir (preserves existing behavior for tests).
-- [ ] 2.2 In `worktree.py`: update `cleanup_worktree` to handle both temp-dir and harness-home workspace paths. The current `parent.name.startswith("action-harness-")` guard at line ~180 only cleans temp dirs. Generalize: when the workspace is under harness home, remove the workspace directory directly (not the parent). When under temp, use existing behavior.
-- [ ] 2.3 In `pipeline.py`: add `repo_name: str | None = None` parameter to `run_pipeline`. When `harness_home` and `repo_name` are both set, compute workspace path as `harness_home / "workspaces" / repo_name / change_name` and pass to `create_worktree`. When `--repo` is a local path (not managed), use temp dir as before.
+- [x] 2.1 In `worktree.py`: update `create_worktree` to accept an optional `workspace_dir: Path | None` parameter. If provided, create the worktree at `workspace_dir` instead of using `tempfile.mkdtemp`. If not provided, fall back to temp dir (preserves existing behavior for tests).
+- [x] 2.2 In `worktree.py`: update `cleanup_worktree` to handle both temp-dir and harness-home workspace paths. The current `parent.name.startswith("action-harness-")` guard at line ~180 only cleans temp dirs. Generalize: when the workspace is under harness home, remove the workspace directory directly (not the parent). When under temp, use existing behavior.
+- [x] 2.3 In `pipeline.py`: add `repo_name: str | None = None` parameter to `run_pipeline`. When `harness_home` and `repo_name` are both set, compute workspace path as `harness_home / "workspaces" / repo_name / change_name` and pass to `create_worktree`. When `--repo` is a local path (not managed), use temp dir as before.
 
 ## 3. CLI Updates
 
@@ -23,7 +23,7 @@ Prerequisites: implement after `worker-config` and `enrich-pr-description` (both
 
 ## 4. Pipeline Updates
 
-- [ ] 4.1 In `pipeline.py`: add `harness_home: Path | None = None` and `repo_name: str | None = None` parameters to `run_pipeline`. Thread `harness_home` and `repo_name` to workspace computation in task 2.3.
+- [x] 4.1 In `pipeline.py`: add `harness_home: Path | None = None` and `repo_name: str | None = None` parameters to `run_pipeline`. Thread `harness_home` and `repo_name` to workspace computation in task 2.3.
 
 ## 5. Tests
 

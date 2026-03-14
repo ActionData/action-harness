@@ -100,12 +100,20 @@ def _cleanup_existing_branch(repo: Path, branch: str, verbose: bool = False) -> 
             )
 
 
-def create_worktree(change_name: str, repo: Path, verbose: bool = False) -> WorktreeResult:
+def create_worktree(
+    change_name: str,
+    repo: Path,
+    verbose: bool = False,
+    workspace_dir: Path | None = None,
+) -> WorktreeResult:
     """Create a git worktree for the given change.
 
     Creates a worktree branched from the default branch with branch name
     harness/<change-name>. If the branch already exists from a prior run,
     cleans up the old worktree and branch first.
+
+    If workspace_dir is provided, the worktree is created at that path.
+    Otherwise, a temp directory is used (legacy behavior).
     """
     branch = f"harness/{change_name}"
     typer.echo(f"[worktree] creating worktree for '{change_name}'", err=True)
@@ -115,8 +123,13 @@ def create_worktree(change_name: str, repo: Path, verbose: bool = False) -> Work
 
     # Determine base branch and worktree path
     base_branch = _get_default_branch(repo)
-    worktree_dir = Path(tempfile.mkdtemp(prefix="action-harness-"))
-    worktree_path = worktree_dir / change_name
+
+    if workspace_dir is not None:
+        workspace_dir.parent.mkdir(parents=True, exist_ok=True)
+        worktree_path = workspace_dir
+    else:
+        worktree_dir = Path(tempfile.mkdtemp(prefix="action-harness-"))
+        worktree_path = worktree_dir / change_name
 
     if verbose:
         typer.echo(f"  base branch: {base_branch}", err=True)
@@ -132,8 +145,9 @@ def create_worktree(change_name: str, repo: Path, verbose: bool = False) -> Work
 
     if result.returncode != 0:
         typer.echo(f"[worktree] failed: {result.stderr.strip()}", err=True)
-        # Clean up the leaked temp directory
-        shutil.rmtree(worktree_dir, ignore_errors=True)
+        # Clean up the leaked directory (temp dir parent or workspace dir itself)
+        if workspace_dir is None:
+            shutil.rmtree(worktree_path.parent, ignore_errors=True)
         return WorktreeResult(
             success=False,
             stage="worktree",
@@ -176,10 +190,14 @@ def cleanup_worktree(
             err=True,
         )
 
-    # Clean up parent temp directory
+    # Clean up the directory:
+    # - Temp dirs: parent has prefix "action-harness-", remove parent
+    # - Harness-home workspace dirs: remove the worktree directory itself
     parent = worktree_path.parent
     if parent.name.startswith("action-harness-") and parent.exists():
         shutil.rmtree(parent, ignore_errors=True)
+    elif worktree_path.exists():
+        shutil.rmtree(worktree_path, ignore_errors=True)
 
     if not preserve_branch:
         del_result = subprocess.run(

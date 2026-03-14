@@ -4,6 +4,7 @@ Emits JSON-lines events to a per-run log file alongside the manifest.
 Event emission is non-fatal: I/O errors are logged to stderr and swallowed.
 """
 
+import io
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -34,8 +35,12 @@ class EventLogger:
     def __init__(self, log_path: Path, run_id: str) -> None:
         self.log_path = log_path
         self.run_id = run_id
-        log_path.parent.mkdir(parents=True, exist_ok=True)
-        self._file = open(log_path, "a")  # noqa: SIM115
+        self._file: io.TextIOWrapper | None = None
+        try:
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            self._file = open(log_path, "a")  # noqa: SIM115
+        except (OSError, PermissionError) as e:
+            typer.echo(f"[event_log] warning: failed to open log file: {e}", err=True)
 
     def emit(
         self,
@@ -46,6 +51,8 @@ class EventLogger:
         **metadata: Any,
     ) -> None:
         """Write a single event as a JSON line. Never raises."""
+        if self._file is None:
+            return
         try:
             pe = PipelineEvent(
                 timestamp=datetime.now(UTC).isoformat(),
@@ -62,6 +69,6 @@ class EventLogger:
             typer.echo(f"[event_log] warning: failed to emit event: {e}", err=True)
 
     def close(self) -> None:
-        """Close the underlying file handle. No-op if already closed."""
-        if not self._file.closed:
+        """Close the underlying file handle. No-op if already closed or never opened."""
+        if self._file is not None and not self._file.closed:
             self._file.close()

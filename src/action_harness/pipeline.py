@@ -12,6 +12,7 @@ from action_harness.models import (
     StageResultUnion,
     WorkerResult,
 )
+from action_harness.openspec_reviewer import dispatch_openspec_review
 from action_harness.pr import create_pr
 from action_harness.worker import dispatch_worker
 from action_harness.worktree import cleanup_worktree, create_worktree
@@ -250,10 +251,65 @@ def _run_pipeline_inner(
         typer.echo(f"[pipeline] PR creation failed: {pr_result.error}", err=True)
         cleanup_worktree(repo, worktree_path, branch, verbose=verbose)
         typer.echo("[pipeline] complete (failed)", err=True)
-    else:
-        typer.echo("[pipeline] complete (success)", err=True)
+        return pr_result
 
+    # Stage 5: OpenSpec review
+    review_result = dispatch_openspec_review(
+        change_name,
+        worktree_path,
+        base_branch=base_branch,
+        permission_mode=permission_mode,
+        verbose=verbose,
+    )
+    stages.append(review_result)
+
+    if not review_result.success:
+        for finding in review_result.findings:
+            typer.echo(f"[openspec-review] finding: {finding}", err=True)
+        typer.echo("[pipeline] OpenSpec review returned findings", err=True)
+        return PrResult(
+            success=False,
+            stage="pipeline",
+            error=(
+                "OpenSpec review findings: "
+                + ("; ".join(review_result.findings) or review_result.error or "review failed")
+            ),
+            branch=branch,
+        )
+
+    # If archive changes were pushed, comment on the PR
+    if review_result.archived and pr_result.pr_url:
+        _comment_archive_complete(worktree_path, pr_result.pr_url, change_name, verbose)
+
+    typer.echo("[pipeline] complete (success)", err=True)
     return pr_result
+
+
+def _comment_archive_complete(
+    worktree_path: Path, pr_url: str, change_name: str, verbose: bool = False
+) -> None:
+    """Add a PR comment noting the OpenSpec archive was completed."""
+    import subprocess
+
+    comment = (
+        f"OpenSpec change `{change_name}` has been archived. Archive commits pushed to this branch."
+    )
+    try:
+        result = subprocess.run(
+            ["gh", "pr", "comment", pr_url, "--body", comment],
+            cwd=worktree_path,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            typer.echo(
+                f"[pipeline] warning: failed to comment on PR: {result.stderr.strip()}",
+                err=True,
+            )
+        elif verbose:
+            typer.echo("  archive comment added to PR", err=True)
+    except (FileNotFoundError, OSError) as e:
+        typer.echo(f"[pipeline] warning: failed to comment on PR: {e}", err=True)
 
 
 def _get_worktree_base(repo: Path) -> str:

@@ -7,8 +7,23 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from action_harness.models import EvalResult, RunManifest
+from action_harness.models import EvalResult, OpenSpecReviewResult, RunManifest
 from action_harness.pipeline import run_pipeline
+
+
+def _approved_openspec_review() -> OpenSpecReviewResult:
+    """Default approved OpenSpec review result for tests that don't focus on review."""
+    return OpenSpecReviewResult(
+        success=True,
+        stage="openspec_review",
+        tasks_total=1,
+        tasks_complete=1,
+        validation_passed=True,
+        semantic_review_passed=True,
+        findings=[],
+        archived=False,
+        duration_seconds=1.0,
+    )
 
 
 @pytest.fixture
@@ -124,6 +139,10 @@ class TestPipelineSuccess:
             patch("action_harness.worker.subprocess.run", mock),
             patch("action_harness.pipeline.run_eval", return_value=self._passing_eval()),
             patch("action_harness.pr.subprocess.run", mock),
+            patch(
+                "action_harness.pipeline.dispatch_openspec_review",
+                return_value=_approved_openspec_review(),
+            ),
         ):
             pr_result, manifest = run_pipeline("test-change", test_repo, max_retries=1)
 
@@ -144,6 +163,10 @@ class TestPipelineSuccess:
             patch("action_harness.worker.subprocess.run", mock),
             patch("action_harness.pipeline.run_eval", return_value=self._passing_eval()),
             patch("action_harness.pr.subprocess.run", mock),
+            patch(
+                "action_harness.pipeline.dispatch_openspec_review",
+                return_value=_approved_openspec_review(),
+            ),
         ):
             _pr_result, _manifest = run_pipeline("test-change", test_repo)
 
@@ -163,6 +186,10 @@ class TestPipelineSuccess:
             patch("action_harness.worker.subprocess.run", mock),
             patch("action_harness.pipeline.run_eval", return_value=self._passing_eval()),
             patch("action_harness.pr.subprocess.run", mock),
+            patch(
+                "action_harness.pipeline.dispatch_openspec_review",
+                return_value=_approved_openspec_review(),
+            ),
         ):
             _pr_result, _manifest = run_pipeline("test-change", test_repo, max_turns=50)
 
@@ -182,6 +209,10 @@ class TestPipelineSuccess:
             patch("action_harness.worker.subprocess.run", mock),
             patch("action_harness.pipeline.run_eval", return_value=self._passing_eval()),
             patch("action_harness.pr.subprocess.run", mock),
+            patch(
+                "action_harness.pipeline.dispatch_openspec_review",
+                return_value=_approved_openspec_review(),
+            ),
         ):
             _pr_result, _manifest = run_pipeline(
                 "test-change",
@@ -247,6 +278,10 @@ class TestPipelineFailure:
             patch("action_harness.worker.subprocess.run", mock),
             patch("action_harness.pipeline.run_eval", side_effect=[fail_eval, pass_eval]),
             patch("action_harness.pr.subprocess.run", mock),
+            patch(
+                "action_harness.pipeline.dispatch_openspec_review",
+                return_value=_approved_openspec_review(),
+            ),
         ):
             pr_result, manifest = run_pipeline("test-change", test_repo, max_retries=3)
 
@@ -315,6 +350,10 @@ class TestManifestPersistence:
             patch("action_harness.worker.subprocess.run", mock),
             patch("action_harness.pipeline.run_eval", return_value=self._passing_eval()),
             patch("action_harness.pr.subprocess.run", mock),
+            patch(
+                "action_harness.pipeline.dispatch_openspec_review",
+                return_value=_approved_openspec_review(),
+            ),
         ):
             _pr_result, manifest = run_pipeline("test-change", test_repo, max_retries=1)
 
@@ -356,6 +395,10 @@ class TestManifestPersistence:
             patch("action_harness.worker.subprocess.run", mock),
             patch("action_harness.pipeline.run_eval", return_value=self._passing_eval()),
             patch("action_harness.pr.subprocess.run", mock),
+            patch(
+                "action_harness.pipeline.dispatch_openspec_review",
+                return_value=_approved_openspec_review(),
+            ),
         ):
             _pr_result, manifest = run_pipeline("test-change", test_repo, max_retries=1)
 
@@ -380,9 +423,103 @@ class TestManifestPersistence:
             patch("action_harness.worker.subprocess.run", mock),
             patch("action_harness.pipeline.run_eval", side_effect=[fail_eval, pass_eval]),
             patch("action_harness.pr.subprocess.run", mock),
+            patch(
+                "action_harness.pipeline.dispatch_openspec_review",
+                return_value=_approved_openspec_review(),
+            ),
         ):
             _pr_result, manifest = run_pipeline("test-change", test_repo, max_retries=3)
 
         # Two worker dispatches at $0.10 each
         assert manifest.total_cost_usd is not None
         assert abs(manifest.total_cost_usd - 0.20) < 0.001
+
+
+class TestPipelineWithOpenSpecReview:
+    def _passing_eval(self) -> EvalResult:
+        return EvalResult(success=True, stage="eval", commands_run=4, commands_passed=4)
+
+    def _approved_review(self) -> OpenSpecReviewResult:
+        return OpenSpecReviewResult(
+            success=True,
+            stage="openspec_review",
+            tasks_total=5,
+            tasks_complete=5,
+            validation_passed=True,
+            semantic_review_passed=True,
+            findings=[],
+            archived=True,
+            duration_seconds=15.0,
+        )
+
+    def _findings_review(self) -> OpenSpecReviewResult:
+        return OpenSpecReviewResult(
+            success=False,
+            stage="openspec_review",
+            tasks_total=5,
+            tasks_complete=3,
+            validation_passed=False,
+            semantic_review_passed=False,
+            findings=["Task 4 incomplete", "Validation errors found"],
+            archived=False,
+            duration_seconds=10.0,
+        )
+
+    def test_pipeline_with_openspec_review_approved(self, test_repo: Path) -> None:
+        """Pipeline succeeds when OpenSpec review approves."""
+        mock = _make_claude_mock(commits=True)
+
+        with (
+            patch("action_harness.worker.subprocess.run", mock),
+            patch("action_harness.pipeline.run_eval", return_value=self._passing_eval()),
+            patch("action_harness.pr.subprocess.run", mock),
+            patch(
+                "action_harness.pipeline.dispatch_openspec_review",
+                return_value=self._approved_review(),
+            ),
+            patch("action_harness.pipeline._comment_archive_complete"),
+        ):
+            pr_result, manifest = run_pipeline("test-change", test_repo, max_retries=1)
+
+        assert pr_result.success is True
+        assert pr_result.pr_url == "https://github.com/test/repo/pull/1"
+        assert manifest.success is True
+
+    def test_pipeline_with_openspec_review_findings(self, test_repo: Path) -> None:
+        """Pipeline fails when OpenSpec review returns findings."""
+        mock = _make_claude_mock(commits=True)
+
+        with (
+            patch("action_harness.worker.subprocess.run", mock),
+            patch("action_harness.pipeline.run_eval", return_value=self._passing_eval()),
+            patch("action_harness.pr.subprocess.run", mock),
+            patch(
+                "action_harness.pipeline.dispatch_openspec_review",
+                return_value=self._findings_review(),
+            ),
+        ):
+            pr_result, manifest = run_pipeline("test-change", test_repo, max_retries=1)
+
+        assert pr_result.success is False
+        assert "OpenSpec review" in (pr_result.error or "")
+        assert manifest.success is False
+
+    def test_archive_comment_posted_on_approval(self, test_repo: Path) -> None:
+        """When review approves with archive, a comment is posted on the PR."""
+        mock = _make_claude_mock(commits=True)
+        mock_comment = MagicMock()
+
+        with (
+            patch("action_harness.worker.subprocess.run", mock),
+            patch("action_harness.pipeline.run_eval", return_value=self._passing_eval()),
+            patch("action_harness.pr.subprocess.run", mock),
+            patch(
+                "action_harness.pipeline.dispatch_openspec_review",
+                return_value=self._approved_review(),
+            ),
+            patch("action_harness.pipeline._comment_archive_complete", mock_comment),
+        ):
+            pr_result, _manifest = run_pipeline("test-change", test_repo, max_retries=1)
+
+        assert pr_result.success is True
+        mock_comment.assert_called_once()

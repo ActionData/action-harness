@@ -1,9 +1,11 @@
 """OpenSpec review agent: spec validation, semantic review, automated archival."""
 
 import json
+import re
 import subprocess
 import time
 from pathlib import Path
+from typing import Any
 
 import typer
 
@@ -57,6 +59,9 @@ def dispatch_openspec_review(
     worktree_path: Path,
     base_branch: str = "main",
     max_turns: int = 200,
+    model: str | None = None,
+    effort: str | None = None,
+    max_budget_usd: float | None = None,
     permission_mode: str = "bypassPermissions",
     verbose: bool = False,
 ) -> tuple[str, float]:
@@ -85,6 +90,12 @@ def dispatch_openspec_review(
         "--permission-mode",
         permission_mode,
     ]
+    if model is not None:
+        cmd.extend(["--model", model])
+    if effort is not None:
+        cmd.extend(["--effort", effort])
+    if max_budget_usd is not None:
+        cmd.extend(["--max-budget-usd", str(max_budget_usd)])
 
     if verbose:
         typer.echo(f"  cwd: {worktree_path}", err=True)
@@ -147,7 +158,7 @@ def parse_review_result(raw_output: str, duration: float) -> OpenSpecReviewResul
     )
 
 
-def _extract_json_block(text: str) -> dict | None:  # type: ignore[type-arg]
+def _extract_json_block(text: str) -> dict[str, Any] | None:
     """Extract a JSON object from text that may contain surrounding prose.
 
     Tries to parse the entire text as JSON first. If that fails, looks for
@@ -165,8 +176,6 @@ def _extract_json_block(text: str) -> dict | None:  # type: ignore[type-arg]
         return None
 
     # Look for ```json ... ``` fenced block
-    import re
-
     fenced = re.search(r"```json\s*\n(.*?)```", text, re.DOTALL)
     if fenced:
         try:

@@ -265,6 +265,9 @@ def _run_pipeline_inner(
         worktree_path,
         _get_worktree_base(repo),
         max_turns,
+        model,
+        effort,
+        max_budget_usd,
         permission_mode,
         verbose,
         pr_result,
@@ -281,6 +284,7 @@ def _run_pipeline_inner(
             stage="pipeline",
             error="OpenSpec review returned findings",
             branch=branch,
+            pr_url=pr_result.pr_url,
         )
 
     typer.echo("[pipeline] complete (success)", err=True)
@@ -292,6 +296,9 @@ def _run_openspec_review(
     worktree_path: Path,
     base_branch: str,
     max_turns: int,
+    model: str | None,
+    effort: str | None,
+    max_budget_usd: float | None,
     permission_mode: str,
     verbose: bool,
     pr_result: PrResult,
@@ -307,6 +314,9 @@ def _run_openspec_review(
         worktree_path,
         base_branch=base_branch,
         max_turns=max_turns,
+        model=model,
+        effort=effort,
+        max_budget_usd=max_budget_usd,
         permission_mode=permission_mode,
         verbose=verbose,
     )
@@ -323,7 +333,13 @@ def _run_openspec_review(
             review_result = OpenSpecReviewResult(
                 success=False,
                 error=push_error,
-                duration_seconds=duration,
+                duration_seconds=review_result.duration_seconds,
+                tasks_total=review_result.tasks_total,
+                tasks_complete=review_result.tasks_complete,
+                validation_passed=review_result.validation_passed,
+                semantic_review_passed=review_result.semantic_review_passed,
+                findings=review_result.findings,
+                archived=review_result.archived,
             )
         elif pushed and pr_result.pr_url:
             # Add a comment on the PR noting the archive was completed

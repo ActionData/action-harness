@@ -1,6 +1,8 @@
 """Tests for git worktree management."""
 
+import shutil
 import subprocess
+from collections.abc import Generator
 from pathlib import Path
 
 import pytest
@@ -9,8 +11,11 @@ from action_harness.worktree import cleanup_worktree, create_worktree
 
 
 @pytest.fixture
-def git_repo(tmp_path: Path) -> Path:
-    """Create a real git repo with an initial commit."""
+def git_repo(tmp_path: Path) -> Generator[Path, None, None]:
+    """Create a real git repo with an initial commit.
+
+    Cleans up any worktrees created in /tmp/action-harness-* after the test.
+    """
     subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
     subprocess.run(
         ["git", "config", "user.email", "test@test.com"],
@@ -33,7 +38,29 @@ def git_repo(tmp_path: Path) -> Path:
         capture_output=True,
         check=True,
     )
-    return tmp_path
+
+    yield tmp_path
+
+    # Teardown: remove all worktrees registered with this repo
+    list_result = subprocess.run(
+        ["git", "worktree", "list", "--porcelain"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+    for line in list_result.stdout.splitlines():
+        if line.startswith("worktree "):
+            wt_path = Path(line.split(" ", 1)[1])
+            if wt_path != tmp_path:
+                subprocess.run(
+                    ["git", "worktree", "remove", "--force", str(wt_path)],
+                    cwd=tmp_path,
+                    capture_output=True,
+                )
+                # Clean up parent temp directory
+                parent = wt_path.parent
+                if parent.name.startswith("action-harness-") and parent.exists():
+                    shutil.rmtree(parent, ignore_errors=True)
 
 
 class TestCreateWorktree:

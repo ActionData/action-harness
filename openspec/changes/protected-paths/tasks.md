@@ -14,7 +14,7 @@
 
 ## 3. Default Config
 
-- [ ] 3.1 Create `.harness/protected-paths.yml` in this repo with default patterns:
+- [x] 3.1 Create `.harness/protected-paths.yml` in this repo with default patterns:
   ```yaml
   protected:
     - "src/action_harness/pipeline.py"

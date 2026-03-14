@@ -3,9 +3,8 @@
 import json
 from pathlib import Path
 
-from action_harness.evaluator import BOOTSTRAP_EVAL_COMMANDS
 from action_harness.profiler import (
-    RepoProfile,
+    BOOTSTRAP_EVAL_COMMANDS,
     _detect_ecosystem,
     _detect_js_commands,
     _detect_python_commands,
@@ -66,47 +65,28 @@ class TestParseClaudeMd:
 
     def test_extracts_commands_from_build_and_test(self, tmp_path: Path) -> None:
         (tmp_path / "CLAUDE.md").write_text(
-            "# Project\n\n"
-            "## Build & Test\n\n"
-            "```bash\n"
-            "uv run pytest -v\n"
-            "uv run ruff check .\n"
-            "```\n"
+            "# Project\n\n## Build & Test\n\n```bash\nuv run pytest -v\nuv run ruff check .\n```\n"
         )
         commands = _parse_claude_md(tmp_path)
         assert commands == ["uv run pytest -v", "uv run ruff check ."]
 
     def test_extracts_from_alternate_heading(self, tmp_path: Path) -> None:
         (tmp_path / "CLAUDE.md").write_text(
-            "## Build and Test\n\n"
-            "```\n"
-            "npm test\n"
-            "npm run lint\n"
-            "```\n"
+            "## Build and Test\n\n```\nnpm test\nnpm run lint\n```\n"
         )
         commands = _parse_claude_md(tmp_path)
         assert commands == ["npm test", "npm run lint"]
 
     def test_ignores_comment_lines_in_code_blocks(self, tmp_path: Path) -> None:
         (tmp_path / "CLAUDE.md").write_text(
-            "## Build & Test\n\n"
-            "```bash\n"
-            "# install deps first\n"
-            "uv sync\n"
-            "uv run pytest -v\n"
-            "```\n"
+            "## Build & Test\n\n```bash\n# install deps first\nuv sync\nuv run pytest -v\n```\n"
         )
         commands = _parse_claude_md(tmp_path)
         assert commands == ["uv sync", "uv run pytest -v"]
 
     def test_ignores_empty_lines(self, tmp_path: Path) -> None:
         (tmp_path / "CLAUDE.md").write_text(
-            "## Build & Test\n\n"
-            "```bash\n"
-            "uv run pytest -v\n"
-            "\n"
-            "uv run ruff check .\n"
-            "```\n"
+            "## Build & Test\n\n```bash\nuv run pytest -v\n\nuv run ruff check .\n```\n"
         )
         commands = _parse_claude_md(tmp_path)
         assert commands == ["uv run pytest -v", "uv run ruff check ."]
@@ -119,11 +99,7 @@ class TestParseClaudeMd:
         assert _parse_claude_md(tmp_path) is None
 
     def test_returns_none_when_code_block_is_empty(self, tmp_path: Path) -> None:
-        (tmp_path / "CLAUDE.md").write_text(
-            "## Build & Test\n\n"
-            "```bash\n"
-            "```\n"
-        )
+        (tmp_path / "CLAUDE.md").write_text("## Build & Test\n\n```bash\n```\n")
         assert _parse_claude_md(tmp_path) is None
 
     def test_stops_at_next_heading(self, tmp_path: Path) -> None:
@@ -158,7 +134,7 @@ class TestDetectPythonCommands:
     def test_all_tools_configured(self, tmp_path: Path) -> None:
         (tmp_path / "pyproject.toml").write_text(
             "[tool.pytest.ini_options]\n"
-            "testpaths = [\"tests\"]\n\n"
+            'testpaths = ["tests"]\n\n'
             "[tool.ruff]\n"
             "line-length = 100\n\n"
             "[tool.mypy]\n"
@@ -173,17 +149,13 @@ class TestDetectPythonCommands:
 
     def test_only_pytest_configured(self, tmp_path: Path) -> None:
         (tmp_path / "pyproject.toml").write_text(
-            "[tool.pytest.ini_options]\n"
-            "testpaths = [\"tests\"]\n"
+            '[tool.pytest.ini_options]\ntestpaths = ["tests"]\n'
         )
         commands = _detect_python_commands(tmp_path)
         assert commands == ["uv run pytest -v"]
 
     def test_no_tools_configured(self, tmp_path: Path) -> None:
-        (tmp_path / "pyproject.toml").write_text(
-            "[project]\n"
-            'name = "myproject"\n'
-        )
+        (tmp_path / "pyproject.toml").write_text('[project]\nname = "myproject"\n')
         commands = _detect_python_commands(tmp_path)
         assert commands == []
 
@@ -210,9 +182,7 @@ class TestDetectJsCommands:
         assert commands == []
 
     def test_tsconfig_present_adds_tsc_command(self, tmp_path: Path) -> None:
-        (tmp_path / "package.json").write_text(
-            json.dumps({"scripts": {"test": "jest"}})
-        )
+        (tmp_path / "package.json").write_text(json.dumps({"scripts": {"test": "jest"}}))
         (tmp_path / "tsconfig.json").touch()
         commands = _detect_js_commands(tmp_path)
         assert "npm test" in commands
@@ -224,15 +194,9 @@ class TestProfileRepo:
 
     def test_claude_md_takes_precedence_over_pyproject(self, tmp_path: Path) -> None:
         (tmp_path / "pyproject.toml").write_text(
-            "[tool.pytest.ini_options]\n"
-            "testpaths = [\"tests\"]\n"
+            '[tool.pytest.ini_options]\ntestpaths = ["tests"]\n'
         )
-        (tmp_path / "CLAUDE.md").write_text(
-            "## Build & Test\n\n"
-            "```bash\n"
-            "make test\n"
-            "```\n"
-        )
+        (tmp_path / "CLAUDE.md").write_text("## Build & Test\n\n```bash\nmake test\n```\n")
         profile = profile_repo(tmp_path)
         assert profile.source == "claude-md"
         assert profile.eval_commands == ["make test"]
@@ -240,10 +204,7 @@ class TestProfileRepo:
 
     def test_python_convention_detection(self, tmp_path: Path) -> None:
         (tmp_path / "pyproject.toml").write_text(
-            "[tool.pytest.ini_options]\n"
-            "testpaths = [\"tests\"]\n\n"
-            "[tool.ruff]\n"
-            "line-length = 100\n"
+            '[tool.pytest.ini_options]\ntestpaths = ["tests"]\n\n[tool.ruff]\nline-length = 100\n'
         )
         profile = profile_repo(tmp_path)
         assert profile.source == "convention"
@@ -268,15 +229,13 @@ class TestProfileRepo:
         assert profile.source == "convention"
 
         # CLAUDE.md
-        (tmp_path / "CLAUDE.md").write_text(
-            "## Build & Test\n\n```\ncargo test\n```\n"
-        )
+        (tmp_path / "CLAUDE.md").write_text("## Build & Test\n\n```\ncargo test\n```\n")
         profile = profile_repo(tmp_path)
         assert profile.source == "claude-md"
 
     def test_profile_is_json_serializable(self, tmp_path: Path) -> None:
         (tmp_path / "pyproject.toml").write_text(
-            "[tool.pytest.ini_options]\ntestpaths = [\"tests\"]\n"
+            '[tool.pytest.ini_options]\ntestpaths = ["tests"]\n'
         )
         profile = profile_repo(tmp_path)
         json_str = profile.model_dump_json()

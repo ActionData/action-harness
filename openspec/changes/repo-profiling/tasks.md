@@ -46,9 +46,9 @@
 
 ## 5. Self-Validation
 
-- [ ] 5.1 Run `uv run pytest tests/test_profiler.py -v` and verify all profiler tests pass.
-- [ ] 5.2 Run `uv run pytest -v` and verify no existing tests are broken.
-- [ ] 5.3 Run `uv run ruff check .` and verify no lint errors.
-- [ ] 5.4 Run `uv run ruff format --check .` and verify no formatting issues.
-- [ ] 5.5 Run `uv run mypy src/` and verify no type errors.
-- [ ] 5.6 Run `action-harness run --change repo-profiling --repo . --dry-run` and verify the output shows detected ecosystem, source, and eval commands.
+- [x] 5.1 Run `uv run pytest tests/test_profiler.py -v` and verify all profiler tests pass.
+- [x] 5.2 Run `uv run pytest -v` and verify no existing tests are broken.
+- [x] 5.3 Run `uv run ruff check .` and verify no lint errors.
+- [x] 5.4 Run `uv run ruff format --check .` and verify no formatting issues.
+- [x] 5.5 Run `uv run mypy src/` and verify no type errors.
+- [x] 5.6 Run `action-harness run --change repo-profiling --repo . --dry-run` and verify the output shows detected ecosystem, source, and eval commands.

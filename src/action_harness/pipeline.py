@@ -6,7 +6,7 @@ from pathlib import Path
 
 import typer
 
-from action_harness.evaluator import BOOTSTRAP_EVAL_COMMANDS, run_eval
+from action_harness.evaluator import run_eval
 from action_harness.models import (
     OpenSpecReviewResult,
     PrResult,
@@ -20,7 +20,7 @@ from action_harness.openspec_reviewer import (
     push_archive_if_needed,
 )
 from action_harness.pr import create_pr
-from action_harness.profiler import RepoProfile, profile_repo
+from action_harness.profiler import BOOTSTRAP_EVAL_COMMANDS, RepoProfile, profile_repo
 from action_harness.worker import count_commits_ahead, dispatch_worker
 from action_harness.worktree import cleanup_worktree, create_worktree
 

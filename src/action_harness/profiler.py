@@ -8,7 +8,13 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from action_harness.evaluator import BOOTSTRAP_EVAL_COMMANDS
+# Canonical fallback eval commands. Imported by evaluator.py.
+BOOTSTRAP_EVAL_COMMANDS = [
+    "uv run pytest -v",
+    "uv run ruff check .",
+    "uv run ruff format --check .",
+    "uv run mypy src/",
+]
 
 # Priority-ordered marker files: first match wins.
 _MARKER_FILES: list[tuple[str, str]] = [

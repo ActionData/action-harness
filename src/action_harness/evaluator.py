@@ -7,13 +7,9 @@ from pathlib import Path
 import typer
 
 from action_harness.models import EvalResult
+from action_harness.profiler import BOOTSTRAP_EVAL_COMMANDS
 
-BOOTSTRAP_EVAL_COMMANDS = [
-    "uv run pytest -v",
-    "uv run ruff check .",
-    "uv run ruff format --check .",
-    "uv run mypy src/",
-]
+__all__ = ["BOOTSTRAP_EVAL_COMMANDS", "run_eval", "format_feedback"]
 
 
 def format_feedback(command: str, exit_code: int, output: str) -> str:

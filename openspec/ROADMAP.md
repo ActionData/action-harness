@@ -26,3 +26,4 @@ Priority order. Each is an OpenSpec change the harness implements on itself.
 8. `failure-reporting` — Aggregate failure logs, identify systemic patterns
 9. `always-on` — Event-driven intake from webhooks, recurring maintenance, Slack escalation
 10. `checkpoint-resume` — Checkpoint pipeline state so interrupted runs can resume from the last completed stage. Needs specs.
+11. `live-progress-feed` — Real-time visibility into worker progress (task completion, file edits, tool calls) during pipeline runs. Needs specs.

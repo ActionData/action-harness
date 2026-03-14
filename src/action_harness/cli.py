@@ -1,6 +1,8 @@
 """CLI entrypoint for action-harness."""
 
+import os
 import shutil
+import subprocess
 from pathlib import Path
 
 import click
@@ -75,10 +77,28 @@ def validate_inputs(change: str, repo: Path) -> None:
         raise ValidationError("gh CLI not found in PATH")
 
 
+def _resolve_harness_home(harness_home: Path | None) -> Path:
+    """Resolve harness home: CLI flag > HARNESS_HOME env var > ~/harness/."""
+    if harness_home is not None:
+        return harness_home.resolve()
+    env_val = os.environ.get("HARNESS_HOME")
+    if env_val:
+        return Path(env_val).resolve()
+    return Path.home() / "harness"
+
+
 @app.command()
 def run(
     change: str = typer.Option(..., help="OpenSpec change name to implement"),
-    repo: Path = typer.Option(..., help="Path to the target repository"),
+    repo: str = typer.Option(
+        ...,
+        help="Target repository: local path, owner/repo shorthand, or full GitHub URL",
+    ),
+    harness_home: Path | None = typer.Option(
+        None,
+        "--harness-home",
+        help="Harness home directory (default: HARNESS_HOME env or ~/harness/)",
+    ),
     max_retries: int = typer.Option(3, help="Maximum eval retry attempts"),
     max_turns: int = typer.Option(200, help="Maximum Claude Code turns per dispatch"),
     model: str | None = typer.Option(None, help="Claude model to use (e.g., opus, sonnet)"),
@@ -106,21 +126,42 @@ def run(
     worker via opsx:apply, runs eval (pytest, ruff, mypy), retries with
     structured feedback on failure, and opens a PR for human review.
 
+    The `--repo` flag accepts a local path (e.g., `.` or `/abs/path`),
+    GitHub shorthand (e.g., `owner/repo`), or a full URL
+    (e.g., `https://github.com/owner/repo` or `git@github.com:owner/repo.git`).
+
     The change must exist at REPO/openspec/changes/NAME/.
     """
-    repo = repo.resolve()
+    resolved_home = _resolve_harness_home(harness_home)
+
+    # Resolve repo: local path or remote reference
+    from action_harness.repo import resolve_repo
 
     try:
-        validate_inputs(change, repo)
+        resolved_repo, repo_name = resolve_repo(repo, resolved_home, verbose=verbose)
     except ValidationError as e:
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(code=1) from None
 
+    try:
+        validate_inputs(change, resolved_repo)
+    except ValidationError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=1) from None
+
+    # Determine if this is a managed repo (cloned to harness home)
+    is_managed = _is_managed_repo(resolved_repo, resolved_home)
+
     if dry_run:
-        worktree_path = f"/tmp/action-harness/worktrees/harness/{change}"
+        if is_managed:
+            workspace_path = str(
+                resolved_home / "workspaces" / repo_name / change
+            )
+        else:
+            workspace_path = f"/tmp/action-harness-*/{ change}"
         typer.echo(f"Dry-run plan for change '{change}':")
-        typer.echo(f"  repo: {repo}")
-        typer.echo(f"  worktree: {worktree_path}")
+        typer.echo(f"  repo: {resolved_repo}")
+        typer.echo(f"  worktree: {workspace_path}")
         typer.echo(f"  branch: harness/{change}")
         typer.echo(f"  worker: claude --output-format json --max-turns {max_turns}")
         typer.echo(f"  model: {model or 'default'}")
@@ -138,7 +179,7 @@ def run(
 
     pr_result, manifest = run_pipeline(
         change_name=change,
-        repo=repo,
+        repo=resolved_repo,
         max_retries=max_retries,
         max_turns=max_turns,
         model=model,
@@ -146,6 +187,8 @@ def run(
         max_budget_usd=max_budget_usd,
         permission_mode=permission_mode,
         verbose=verbose,
+        harness_home=resolved_home if is_managed else None,
+        repo_name=repo_name if is_managed else None,
     )
 
     if manifest.manifest_path:
@@ -153,3 +196,142 @@ def run(
 
     if not pr_result.success:
         raise typer.Exit(code=1)
+
+
+def _is_managed_repo(repo_path: Path, harness_home: Path) -> bool:
+    """Check if a repo path is under harness_home/repos/ (i.e., managed)."""
+    try:
+        repo_path.resolve().relative_to(harness_home.resolve() / "repos")
+        return True
+    except ValueError:
+        return False
+
+
+@app.command()
+def clean(
+    repo: str | None = typer.Option(None, help="Repo to clean workspaces for (owner/repo or path)"),
+    change: str | None = typer.Option(None, help="Specific change workspace to clean"),
+    all_workspaces: bool = typer.Option(False, "--all", help="Remove all workspaces"),
+    harness_home: Path | None = typer.Option(
+        None,
+        "--harness-home",
+        help="Harness home directory (default: HARNESS_HOME env or ~/harness/)",
+    ),
+) -> None:
+    """Remove workspaces (worktrees) created by the harness.
+
+    Removes workspace directories and prunes git worktrees. Does NOT
+    remove cloned repos.
+
+    Examples:
+
+        action-harness clean --repo user/app --change fix-bug
+
+        action-harness clean --repo user/app
+
+        action-harness clean --all
+    """
+    resolved_home = _resolve_harness_home(harness_home)
+    workspaces_root = resolved_home / "workspaces"
+
+    if not workspaces_root.exists():
+        typer.echo("[clean] no workspaces directory found", err=True)
+        raise typer.Exit(code=0)
+
+    if not all_workspaces and repo is None:
+        typer.echo("Error: specify --repo or --all", err=True)
+        raise typer.Exit(code=1)
+
+    if all_workspaces:
+        # Remove all workspaces
+        _clean_all_workspaces(workspaces_root, resolved_home)
+    elif repo is not None:
+        # Resolve repo name
+        from action_harness.repo import resolve_repo
+
+        try:
+            resolved_repo, repo_name = resolve_repo(repo, resolved_home)
+        except ValidationError as e:
+            typer.echo(f"Error: {e}", err=True)
+            raise typer.Exit(code=1) from None
+
+        repo_ws_dir = workspaces_root / repo_name
+        if not repo_ws_dir.exists():
+            typer.echo(f"[clean] no workspaces found for {repo_name}", err=True)
+            raise typer.Exit(code=0)
+
+        if change is not None:
+            # Clean specific workspace
+            ws_path = repo_ws_dir / change
+            if ws_path.exists():
+                _remove_workspace(ws_path, resolved_repo)
+                typer.echo(f"[clean] removed workspace {repo_name}/{change}", err=True)
+            else:
+                typer.echo(f"[clean] workspace not found: {repo_name}/{change}", err=True)
+        else:
+            # Clean all workspaces for this repo
+            for ws_path in sorted(repo_ws_dir.iterdir()):
+                if ws_path.is_dir():
+                    _remove_workspace(ws_path, resolved_repo)
+                    typer.echo(
+                        f"[clean] removed workspace {repo_name}/{ws_path.name}",
+                        err=True,
+                    )
+            # Remove the repo workspace directory if empty
+            if repo_ws_dir.exists() and not any(repo_ws_dir.iterdir()):
+                repo_ws_dir.rmdir()
+
+        # Prune worktrees in the repo clone
+        _prune_worktrees(resolved_repo)
+
+
+def _remove_workspace(ws_path: Path, repo_path: Path) -> None:
+    """Remove a workspace directory and its git worktree reference."""
+    # Try git worktree remove first
+    subprocess.run(
+        ["git", "worktree", "remove", "--force", str(ws_path)],
+        cwd=repo_path,
+        capture_output=True,
+        text=True,
+    )
+    # If directory still exists, force-remove it
+    if ws_path.exists():
+        shutil.rmtree(ws_path, ignore_errors=True)
+
+
+def _prune_worktrees(repo_path: Path) -> None:
+    """Run git worktree prune in the given repo."""
+    subprocess.run(
+        ["git", "worktree", "prune"],
+        cwd=repo_path,
+        capture_output=True,
+        text=True,
+    )
+    typer.echo(f"[clean] pruned worktrees in {repo_path}", err=True)
+
+
+def _clean_all_workspaces(workspaces_root: Path, harness_home: Path) -> None:
+    """Remove all workspaces across all repos."""
+    repos_dir = harness_home / "repos"
+    for repo_dir in sorted(workspaces_root.iterdir()):
+        if not repo_dir.is_dir():
+            continue
+        # Find the corresponding clone for worktree pruning
+        clone_dir = repos_dir / repo_dir.name if repos_dir.exists() else None
+        for ws_path in sorted(repo_dir.iterdir()):
+            if ws_path.is_dir():
+                if clone_dir and clone_dir.exists():
+                    _remove_workspace(ws_path, clone_dir)
+                else:
+                    shutil.rmtree(ws_path, ignore_errors=True)
+                typer.echo(
+                    f"[clean] removed workspace {repo_dir.name}/{ws_path.name}",
+                    err=True,
+                )
+        # Remove the repo workspace directory if empty
+        if repo_dir.exists() and not any(repo_dir.iterdir()):
+            repo_dir.rmdir()
+        # Prune worktrees if clone exists
+        if clone_dir and clone_dir.exists():
+            _prune_worktrees(clone_dir)
+    typer.echo("[clean] all workspaces removed", err=True)

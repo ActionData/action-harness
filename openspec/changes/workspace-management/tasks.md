@@ -15,11 +15,11 @@ Prerequisites: implement after `worker-config` and `enrich-pr-description` (both
 
 ## 3. CLI Updates
 
-- [ ] 3.1 In `cli.py`: add `--harness-home` option (Path | None, default None). Resolve: CLI flag > `HARNESS_HOME` env var > `~/harness/`. Pass to pipeline.
-- [ ] 3.2 In `cli.py`: update `--repo` handling to call `resolve_repo(repo_arg, harness_home)` before validation. Unpack `(resolved_path, repo_name)`. Pass both to `validate_inputs` and `run_pipeline`.
-- [ ] 3.3 In `cli.py`: add `clean` subcommand with `--repo` (str, optional), `--change` (str, optional), `--all` (bool) options. For each workspace being cleaned: (1) resolve the repo string to the clone path under `harness_home/repos/` using `resolve_repo`, (2) run `git worktree remove` for the workspace, (3) remove the workspace directory, (4) run `git worktree prune` in the clone dir. Log actions to stderr.
-- [ ] 3.4 In `cli.py`: update `--help` text to document that `--repo` accepts local paths, `owner/repo`, or full URLs.
-- [ ] 3.5 In `cli.py`: update dry-run output to show the resolved repo path and workspace path. Replace the hardcoded `/tmp/action-harness/worktrees/harness/{change}` with the computed workspace path from `harness_home / "workspaces" / repo_name / change_name`.
+- [x] 3.1 In `cli.py`: add `--harness-home` option (Path | None, default None). Resolve: CLI flag > `HARNESS_HOME` env var > `~/harness/`. Pass to pipeline.
+- [x] 3.2 In `cli.py`: update `--repo` handling to call `resolve_repo(repo_arg, harness_home)` before validation. Unpack `(resolved_path, repo_name)`. Pass both to `validate_inputs` and `run_pipeline`.
+- [x] 3.3 In `cli.py`: add `clean` subcommand with `--repo` (str, optional), `--change` (str, optional), `--all` (bool) options. For each workspace being cleaned: (1) resolve the repo string to the clone path under `harness_home/repos/` using `resolve_repo`, (2) run `git worktree remove` for the workspace, (3) remove the workspace directory, (4) run `git worktree prune` in the clone dir. Log actions to stderr.
+- [x] 3.4 In `cli.py`: update `--help` text to document that `--repo` accepts local paths, `owner/repo`, or full URLs.
+- [x] 3.5 In `cli.py`: update dry-run output to show the resolved repo path and workspace path. Replace the hardcoded `/tmp/action-harness/worktrees/harness/{change}` with the computed workspace path from `harness_home / "workspaces" / repo_name / change_name`.
 
 ## 4. Pipeline Updates
 

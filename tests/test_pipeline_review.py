@@ -17,6 +17,21 @@ from action_harness.openspec_reviewer import parse_review_result
 from action_harness.pipeline import run_pipeline
 
 
+def _needs_human_review_result() -> OpenSpecReviewResult:
+    review_json = {
+        "status": "needs-human",
+        "tasks_total": 10,
+        "tasks_complete": 7,
+        "human_tasks_remaining": 3,
+        "validation_passed": True,
+        "semantic_review_passed": True,
+        "findings": ["3 human tasks remaining: verify API tokens, watch CI run, merge to master"],
+        "archived": False,
+    }
+    raw = json.dumps({"result": json.dumps(review_json)})
+    return parse_review_result(raw, 1.0)
+
+
 def _approved_review_result() -> OpenSpecReviewResult:
     review_json = {
         "status": "approved",
@@ -340,3 +355,59 @@ class TestPipelineWithReviewAgents:
         # Worker cost: 0.10, Review costs: 3 * 0.02 = 0.06
         assert manifest.total_cost_usd is not None
         assert abs(manifest.total_cost_usd - 0.16) < 0.001
+
+    def test_needs_human_pipeline(self, test_repo: Path) -> None:
+        """Pipeline succeeds with needs_human=True when only human tasks remain."""
+        mock = _make_claude_mock(commits=True)
+
+        # Track gh commands to verify comment and label
+        gh_calls: list[list[str]] = []
+
+        def tracking_side_effect(
+            cmd: list[str], **kwargs: object
+        ) -> MagicMock | subprocess.CompletedProcess[str]:
+            if cmd[0] == "gh":
+                gh_calls.append(cmd)
+            return mock.side_effect(cmd, **kwargs)
+
+        tracking_mock = MagicMock(side_effect=tracking_side_effect)
+
+        with (
+            patch("action_harness.worker.subprocess.run", mock),
+            patch("action_harness.pipeline.run_eval", return_value=_passing_eval()),
+            patch("action_harness.pr.subprocess.run", mock),
+            patch("action_harness.pipeline.subprocess.run", tracking_mock),
+            patch(
+                "action_harness.pipeline.dispatch_review_agents",
+                return_value=_no_findings_review_results(),
+            ),
+            patch(
+                "action_harness.pipeline.dispatch_openspec_review",
+                return_value=('{"result": "{}"}', 1.0),
+            ),
+            patch(
+                "action_harness.pipeline.parse_review_result",
+                return_value=_needs_human_review_result(),
+            ),
+            patch(
+                "action_harness.pipeline.push_archive_if_needed",
+                return_value=(False, None),
+            ),
+        ):
+            pr_result, manifest = run_pipeline("test-change", test_repo, max_retries=1)
+
+        # Pipeline reports success
+        assert pr_result.success is True
+
+        # Manifest has needs_human flag
+        assert manifest.needs_human is True
+
+        # Verify PR comment was posted with human tasks
+        comment_calls = [c for c in gh_calls if "comment" in c]
+        assert len(comment_calls) >= 1
+        comment_body = comment_calls[-1][comment_calls[-1].index("--body") + 1]
+        assert "Human Tasks Remaining" in comment_body
+
+        # Verify needs-human label was added
+        label_calls = [c for c in gh_calls if "--add-label" in c and "needs-human" in c]
+        assert len(label_calls) >= 1

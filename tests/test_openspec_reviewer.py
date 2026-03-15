@@ -171,6 +171,32 @@ class TestParseReviewResult:
         assert result.error is not None
         assert "Failed to parse" in result.error
 
+    def test_needs_human_result(self) -> None:
+        review_json = {
+            "status": "needs-human",
+            "tasks_total": 10,
+            "tasks_complete": 7,
+            "human_tasks_remaining": 3,
+            "validation_passed": True,
+            "semantic_review_passed": True,
+            "findings": [
+                "3 human tasks remaining: verify API tokens, watch CI run, merge to master"
+            ],
+            "archived": False,
+        }
+        raw = json.dumps({"result": json.dumps(review_json)})
+
+        result = parse_review_result(raw, 12.0)
+
+        assert result.success is True
+        assert result.human_tasks_remaining == 3
+        assert result.tasks_total == 10
+        assert result.tasks_complete == 7
+        assert result.validation_passed is True
+        assert result.archived is False
+        assert len(result.findings) == 1
+        assert result.duration_seconds == 12.0
+
     def test_json_embedded_in_prose(self) -> None:
         review_json = {
             "status": "approved",

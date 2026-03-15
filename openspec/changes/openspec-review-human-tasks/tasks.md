@@ -15,8 +15,8 @@
 
 ## 4. Tests
 
-- [ ] 4.1 In `tests/test_openspec_reviewer.py`: test `parse_review_result` with `status: "needs-human"`, `human_tasks_remaining: 3` — returns `success=True`, `human_tasks_remaining=3`.
-- [ ] 4.2 In `tests/test_pipeline_review.py`: test pipeline with needs-human status — mock openspec reviewer to return needs-human. Assert pipeline exits successfully (exit code 0), `manifest.needs_human` is `True`, PR comment and label are posted.
+- [x] 4.1 In `tests/test_openspec_reviewer.py`: test `parse_review_result` with `status: "needs-human"`, `human_tasks_remaining: 3` — returns `success=True`, `human_tasks_remaining=3`.
+- [x] 4.2 In `tests/test_pipeline_review.py`: test pipeline with needs-human status — mock openspec reviewer to return needs-human. Assert pipeline exits successfully (exit code 0), `manifest.needs_human` is `True`, PR comment and label are posted.
 
 ## 5. Validation
 

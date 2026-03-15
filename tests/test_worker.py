@@ -111,14 +111,10 @@ class TestReadHarnessMd:
         assert result == content
 
     def test_returns_none_on_permission_error(self, tmp_path: Path) -> None:
-        harness_md = tmp_path / "HARNESS.md"
-        harness_md.write_text("content")
-        harness_md.chmod(0o000)
-        try:
+        (tmp_path / "HARNESS.md").write_text("content")
+        with patch.object(Path, "read_text", side_effect=PermissionError("denied")):
             result = read_harness_md(tmp_path)
-            assert result is None
-        finally:
-            harness_md.chmod(0o644)
+        assert result is None
 
     def test_returns_none_on_encoding_error(self, tmp_path: Path) -> None:
         harness_md = tmp_path / "HARNESS.md"
@@ -552,3 +548,34 @@ class TestHarnessMdInjection:
         cmd = get_claude_cmd(mock)
         assert "--system-prompt" not in cmd
         assert "--resume" in cmd
+
+    def test_harness_md_with_feedback_on_fresh_dispatch(self, tmp_path: Path) -> None:
+        """HARNESS.md goes to system prompt, feedback goes to user prompt."""
+        harness_content = "Run uv run pytest -v after changes."
+        (tmp_path / "HARNESS.md").write_text(harness_content)
+
+        mock = make_mock_subprocess(claude_stdout=_OK_JSON)
+        with patch("action_harness.worker.subprocess.run", mock):
+            dispatch_worker("t", tmp_path, feedback="focus on error handling")
+
+        system_prompt = get_claude_system_prompt(mock)
+        assert harness_content in system_prompt
+        user_prompt = get_claude_prompt(mock)
+        assert "focus on error handling" in user_prompt
+        assert harness_content not in user_prompt
+
+    def test_harness_md_with_progress_file(self, tmp_path: Path) -> None:
+        """HARNESS.md in system prompt and progress in user prompt coexist."""
+        harness_content = "Always run tests."
+        (tmp_path / "HARNESS.md").write_text(harness_content)
+        progress_content = "# Harness Progress\n\n## Attempt 1\n"
+        (tmp_path / PROGRESS_FILENAME).write_text(progress_content)
+
+        mock = make_mock_subprocess(claude_stdout=_OK_JSON)
+        with patch("action_harness.worker.subprocess.run", mock):
+            dispatch_worker("t", tmp_path)
+
+        system_prompt = get_claude_system_prompt(mock)
+        assert harness_content in system_prompt
+        user_prompt = get_claude_prompt(mock)
+        assert progress_content in user_prompt

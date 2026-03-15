@@ -23,7 +23,6 @@ def read_harness_md(worktree_path: Path) -> str | None:
     """
     harness_md_path = worktree_path / HARNESS_MD_FILENAME
     if not harness_md_path.exists():
-        typer.echo(f"[worker] no HARNESS.md in {worktree_path}", err=True)
         return None
     try:
         contents = harness_md_path.read_text(encoding="utf-8")
@@ -34,7 +33,6 @@ def read_harness_md(worktree_path: Path) -> str | None:
         )
         return None
     if not contents.strip():
-        typer.echo(f"[worker] HARNESS.md is empty in {worktree_path}", err=True)
         return None
     typer.echo(
         f"[worker] loaded HARNESS.md ({len(contents)} chars) from {worktree_path}",

@@ -71,6 +71,15 @@ class OpenSpecReviewResult(StageResult):
     human_tasks_remaining: int = 0
 
 
+class MergeResult(StageResult):
+    """Result from the auto-merge stage."""
+
+    stage: Literal["merge"] = "merge"
+    merged: bool = False
+    merge_blocked_reason: str | None = None
+    ci_passed: bool | None = None
+
+
 class ReviewFinding(BaseModel):
     """A single finding from a review agent."""
 
@@ -94,7 +103,7 @@ class ReviewResult(StageResult):
 # Discriminated union so Pydantic preserves subtypes through serialization.
 # Only includes concrete stage types used in the pipeline (not the base StageResult).
 StageResultUnion = Annotated[
-    WorktreeResult | WorkerResult | EvalResult | PrResult | OpenSpecReviewResult | ReviewResult,
+    WorktreeResult | WorkerResult | EvalResult | PrResult | OpenSpecReviewResult | ReviewResult | MergeResult,
     Field(discriminator="stage"),
 ]
 

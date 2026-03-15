@@ -1,7 +1,7 @@
 ## 1. MergeResult Model [no dependencies]
 
-- [ ] 1.1 Add `MergeResult(StageResult)` to `models.py` with `stage: Literal["merge"] = "merge"`, `merged: bool = False`, `merge_blocked_reason: str | None = None`, `ci_passed: bool | None = None`. Add `MergeResult` to the `StageResultUnion` discriminated union (add it to the union type on the same line as the other stage types).
-- [ ] 1.2 Add tests: `MergeResult` construction (success with `merged=True`, blocked with `merged=False` and `merge_blocked_reason` set, failed with `success=False`). Roundtrip through `RunManifest.stages` via `model_dump_json()` / `model_validate_json()` — assert `type(stages[-1]) is MergeResult`, `stages[-1].merged == True`, `stages[-1].merge_blocked_reason is None`.
+- [x] 1.1 Add `MergeResult(StageResult)` to `models.py` with `stage: Literal["merge"] = "merge"`, `merged: bool = False`, `merge_blocked_reason: str | None = None`, `ci_passed: bool | None = None`. Add `MergeResult` to the `StageResultUnion` discriminated union (add it to the union type on the same line as the other stage types).
+- [x] 1.2 Add tests: `MergeResult` construction (success with `merged=True`, blocked with `merged=False` and `merge_blocked_reason` set, failed with `success=False`). Roundtrip through `RunManifest.stages` via `model_dump_json()` / `model_validate_json()` — assert `type(stages[-1]) is MergeResult`, `stages[-1].merged == True`, `stages[-1].merge_blocked_reason is None`.
 
 ## 2. Merge Logic [depends: 1]
 

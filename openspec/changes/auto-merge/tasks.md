@@ -13,10 +13,10 @@
 
 ## 3. CLI Flag [depends: 1]
 
-- [ ] 3.1 Add `--auto-merge` flag (bool, default False) and `--wait-for-ci` flag (bool, default False) to the `run` command in `cli.py`. If `--wait-for-ci` is provided without `--auto-merge`, exit with error "`--wait-for-ci` requires `--auto-merge`". Pass both through to `run_pipeline()`.
-- [ ] 3.2 Update `--dry-run` output to show `auto-merge: enabled/disabled` and `wait-for-ci: enabled/disabled`.
-- [ ] 3.3 Update `run()` docstring and help text to document the new flags.
-- [ ] 3.4 Add CLI tests: `--help` includes auto-merge and wait-for-ci, `--dry-run` with `--auto-merge` shows the flag, `--wait-for-ci` without `--auto-merge` exits with error.
+- [x] 3.1 Add `--auto-merge` flag (bool, default False) and `--wait-for-ci` flag (bool, default False) to the `run` command in `cli.py`. If `--wait-for-ci` is provided without `--auto-merge`, exit with error "`--wait-for-ci` requires `--auto-merge`". Pass both through to `run_pipeline()`.
+- [x] 3.2 Update `--dry-run` output to show `auto-merge: enabled/disabled` and `wait-for-ci: enabled/disabled`.
+- [x] 3.3 Update `run()` docstring and help text to document the new flags.
+- [x] 3.4 Add CLI tests: `--help` includes auto-merge and wait-for-ci, `--dry-run` with `--auto-merge` shows the flag, `--wait-for-ci` without `--auto-merge` exits with error.
 
 ## 4. Pipeline Integration [depends: 2, 3]
 

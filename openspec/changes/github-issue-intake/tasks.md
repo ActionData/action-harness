@@ -24,8 +24,8 @@ Prerequisites: `unspecced-tasks` must be merged first. This change assumes `--ch
 
 ## 4. PR Linking [depends: 3]
 
-- [ ] 4.1 Add `issue_number: int | None = None` parameter to `run_pipeline()`, `_run_pipeline_inner()`, and `create_pr()`. In `create_pr()`, pass `issue_number` through to `_build_pr_body()`. In `_build_pr_body()`, when `issue_number` is set, append `\n\nCloses #<number>` to the PR body.
-- [ ] 4.2 Add tests: PR body includes `Closes #42` when `issue_number=42` is set. PR body unchanged when `issue_number` is None.
+- [x] 4.1 Add `issue_number: int | None = None` parameter to `run_pipeline()`, `_run_pipeline_inner()`, and `create_pr()`. In `create_pr()`, pass `issue_number` through to `_build_pr_body()`. In `_build_pr_body()`, when `issue_number` is set, append `\n\nCloses #<number>` to the PR body.
+- [x] 4.2 Add tests: PR body includes `Closes #42` when `issue_number=42` is set. PR body unchanged when `issue_number` is None.
 
 ## 5. Pipeline Issue Labeling [depends: 2, 3]
 

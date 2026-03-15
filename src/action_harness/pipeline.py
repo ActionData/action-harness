@@ -133,6 +133,7 @@ def run_pipeline(
     auto_merge: bool = False,
     wait_for_ci: bool = False,
     prompt: str | None = None,
+    issue_number: int | None = None,
 ) -> tuple[PrResult, RunManifest]:
     """Run the full pipeline: worktree -> worker -> eval -> retry -> PR.
 
@@ -210,6 +211,7 @@ def run_pipeline(
             auto_merge=auto_merge,
             wait_for_ci=wait_for_ci,
             prompt=prompt,
+            issue_number=issue_number,
         )
     except Exception as e:
         typer.echo(f"[pipeline] unexpected error: {e}", err=True)
@@ -267,6 +269,7 @@ def _run_pipeline_inner(
     auto_merge: bool = False,
     wait_for_ci: bool = False,
     prompt: str | None = None,
+    issue_number: int | None = None,
 ) -> PrResult:
     """Inner pipeline logic. Appends to stages list as side effect.
 
@@ -528,6 +531,7 @@ def _run_pipeline_inner(
         base_branch=base_branch,
         verbose=verbose,
         prompt=prompt,
+        issue_number=issue_number,
     )
     stages.append(pr_result)
 

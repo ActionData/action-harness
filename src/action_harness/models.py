@@ -66,6 +66,7 @@ class OpenSpecReviewResult(StageResult):
     semantic_review_passed: bool = False
     findings: list[str] = []
     archived: bool = False
+    human_tasks_remaining: int = 0
 
 
 class ReviewFinding(BaseModel):

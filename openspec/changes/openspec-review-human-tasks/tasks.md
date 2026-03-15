@@ -1,11 +1,11 @@
 ## 1. Update Result Model
 
-- [ ] 1.1 In `models.py:OpenSpecReviewResult`: add `human_tasks_remaining: int = 0` field. This stores the count of `[HUMAN]` tasks that are incomplete.
+- [x] 1.1 In `models.py:OpenSpecReviewResult`: add `human_tasks_remaining: int = 0` field. This stores the count of `[HUMAN]` tasks that are incomplete.
 
 ## 2. Update OpenSpec Review Agent
 
-- [ ] 2.1 In `openspec_reviewer.py:REVIEW_SYSTEM_PROMPT`: add instruction to recognize `[HUMAN]` tagged tasks. Add to the prompt: "When checking tasks.md, tasks containing `[HUMAN]` in the task text are expected to be agent-incomplete. Count them separately. If all non-HUMAN tasks are `[x]` and only HUMAN tasks remain `[ ]`, output `status: 'needs-human'` with `human_tasks_remaining` set to the count. Do NOT archive when status is `needs-human` — the change is not fully complete. Validation and semantic review still run normally."
-- [ ] 2.2 In `openspec_reviewer.py:parse_review_result`: handle `status == "needs-human"`. Change the success check from `status == "approved"` to `status in ("approved", "needs-human")`. Extract `human_tasks_remaining` from the parsed JSON: `human_tasks_remaining=review_data.get("human_tasks_remaining", 0)`.
+- [x] 2.1 In `openspec_reviewer.py:REVIEW_SYSTEM_PROMPT`: add instruction to recognize `[HUMAN]` tagged tasks. Add to the prompt: "When checking tasks.md, tasks containing `[HUMAN]` in the task text are expected to be agent-incomplete. Count them separately. If all non-HUMAN tasks are `[x]` and only HUMAN tasks remain `[ ]`, output `status: 'needs-human'` with `human_tasks_remaining` set to the count. Do NOT archive when status is `needs-human` — the change is not fully complete. Validation and semantic review still run normally."
+- [x] 2.2 In `openspec_reviewer.py:parse_review_result`: handle `status == "needs-human"`. Change the success check from `status == "approved"` to `status in ("approved", "needs-human")`. Extract `human_tasks_remaining` from the parsed JSON: `human_tasks_remaining=review_data.get("human_tasks_remaining", 0)`.
 
 ## 3. Pipeline Integration
 

@@ -29,15 +29,22 @@ Steps:
 
 ```json
 {{
-  "status": "approved" or "findings",
+  "status": "approved" or "findings" or "needs-human",
   "tasks_total": <int>,
   "tasks_complete": <int>,
+  "human_tasks_remaining": <int>,
   "validation_passed": <bool>,
   "semantic_review_passed": <bool>,
   "findings": [<list of strings describing any issues>],
   "archived": <bool>
 }}
 ```
+
+When checking tasks.md, tasks containing `[HUMAN]` in the task text are expected to be
+agent-incomplete. Count them separately. If all non-HUMAN tasks are `[x]` and only HUMAN
+tasks remain `[ ]`, output `status: 'needs-human'` with `human_tasks_remaining` set to the
+count. Do NOT archive when status is `needs-human` — the change is not fully complete.
+Validation and semantic review still run normally.
 
 For OpenSpec conventions (delta spec rules, archive semantics, validation), consult
 Fission-AI/OpenSpec on deepwiki.
@@ -146,7 +153,7 @@ def parse_review_result(raw_output: str, duration: float) -> OpenSpecReviewResul
     findings = review_data.get("findings", [])
 
     return OpenSpecReviewResult(
-        success=status == "approved",
+        success=status in ("approved", "needs-human"),
         duration_seconds=duration,
         tasks_total=review_data.get("tasks_total", 0),
         tasks_complete=review_data.get("tasks_complete", 0),
@@ -154,6 +161,7 @@ def parse_review_result(raw_output: str, duration: float) -> OpenSpecReviewResul
         semantic_review_passed=review_data.get("semantic_review_passed", False),
         findings=findings if isinstance(findings, list) else [str(findings)],
         archived=review_data.get("archived", False),
+        human_tasks_remaining=review_data.get("human_tasks_remaining", 0),
     )
 
 

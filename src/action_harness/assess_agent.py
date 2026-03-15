@@ -150,9 +150,7 @@ def dispatch_readonly_worker(
             json_start = worker_result.find("{")
             json_end = worker_result.rfind("}") + 1
             if json_start >= 0 and json_end > json_start:
-                assessment_json: dict[str, object] = json.loads(
-                    worker_result[json_start:json_end]
-                )
+                assessment_json: dict[str, object] = json.loads(worker_result[json_start:json_end])
                 return assessment_json
 
         typer.echo("[assess_agent] could not parse agent output as JSON", err=True)

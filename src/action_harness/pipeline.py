@@ -691,7 +691,9 @@ def _run_pipeline_inner(
         )
 
     # Stage 7: Auto-merge (optional)
-    if auto_merge:
+    if auto_merge and not pr_result.pr_url:
+        typer.echo("[pipeline] auto-merge: skipping, no PR URL available", err=True)
+    elif auto_merge and pr_result.pr_url:
         openspec_review_passed = review_result is None or review_result.success
         gates, all_passed = check_merge_gates(
             protected_files, findings_remain, openspec_review_passed, skip_review
@@ -702,13 +704,11 @@ def _run_pipeline_inner(
             ci_passed: bool | None = None
             if wait_for_ci:
                 typer.echo("[pipeline] auto-merge: waiting for CI", err=True)
-                ci_passed = wait_for_ci_checks(
-                    pr_result.pr_url or "", worktree_path, verbose=verbose
-                )
+                ci_passed = wait_for_ci_checks(pr_result.pr_url, worktree_path, verbose=verbose)
 
             if not wait_for_ci or ci_passed:
                 typer.echo("[pipeline] auto-merge: all gates passed, merging PR", err=True)
-                merge_result = merge_pr(pr_result.pr_url or "", worktree_path, verbose=verbose)
+                merge_result = merge_pr(pr_result.pr_url, worktree_path, verbose=verbose)
                 merge_result = merge_result.model_copy(update={"ci_passed": ci_passed})
             else:
                 reason = "CI checks failed"
@@ -719,13 +719,13 @@ def _run_pipeline_inner(
                     merge_blocked_reason=reason,
                     ci_passed=ci_passed,
                 )
+                post_merge_blocked_comment(pr_result.pr_url, worktree_path, gates, verbose=verbose)
         else:
             failed_gates = [name for name, passed in gates.items() if not passed]
             reason = f"Gates failed: {', '.join(failed_gates)}"
             typer.echo(f"[pipeline] auto-merge blocked: {reason}", err=True)
             merge_result = MergeResult(success=True, merged=False, merge_blocked_reason=reason)
-            if pr_result.pr_url:
-                post_merge_blocked_comment(pr_result.pr_url, worktree_path, gates, verbose=verbose)
+            post_merge_blocked_comment(pr_result.pr_url, worktree_path, gates, verbose=verbose)
 
         stages.append(merge_result)
 

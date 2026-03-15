@@ -171,6 +171,15 @@ class TestWaitForCi:
 
         assert result is False
 
+    def test_os_error(self, tmp_path: Path) -> None:
+        with patch(
+            "action_harness.merge.subprocess.run",
+            side_effect=OSError("connection refused"),
+        ):
+            result = wait_for_ci("https://github.com/org/repo/pull/1", tmp_path)
+
+        assert result is False
+
     def test_custom_timeout_passed_to_subprocess(self, tmp_path: Path) -> None:
         mock_result = MagicMock()
         mock_result.returncode = 0

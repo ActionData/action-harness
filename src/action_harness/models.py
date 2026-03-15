@@ -72,7 +72,13 @@ class OpenSpecReviewResult(StageResult):
 
 
 class MergeResult(StageResult):
-    """Result from the auto-merge stage."""
+    """Result from the auto-merge stage.
+
+    Success semantics: ``success=True`` means the stage ran without error,
+    NOT that the PR was merged. A gate-blocked merge has ``success=True,
+    merged=False``. Only ``success=False`` indicates the merge command
+    itself failed (e.g. ``gh pr merge`` returned non-zero).
+    """
 
     stage: Literal["merge"] = "merge"
     merged: bool = False

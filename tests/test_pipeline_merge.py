@@ -2,6 +2,8 @@
 
 import json
 import subprocess
+from collections.abc import Generator
+from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -113,12 +115,13 @@ def _make_claude_mock(commits: bool = True) -> MagicMock:
     return MagicMock(side_effect=side_effect)
 
 
-def _standard_patches(mock: MagicMock, review: OpenSpecReviewResult | None = None):
-    """Return a stack of patches for the standard pipeline stages."""
-    from contextlib import contextmanager
+def _standard_patches(
+    mock: MagicMock, review: OpenSpecReviewResult | None = None
+) -> Generator[None]:
+    """Return a context manager of patches for the standard pipeline stages."""
 
     @contextmanager
-    def patched():
+    def patched() -> Generator[None]:
         with (
             patch("action_harness.worker.subprocess.run", mock),
             patch("action_harness.pipeline.run_eval", return_value=_passing_eval()),
@@ -290,12 +293,13 @@ class TestAutoMerge:
         assert merge_stages[0].ci_passed is True
 
     def test_wait_for_ci_fail_blocked(self, test_repo: Path) -> None:
-        """auto-merge + CI fail → blocked."""
+        """auto-merge + CI fail → blocked + comment posted."""
         mock = _make_claude_mock()
 
         with (
             _standard_patches(mock),
             patch("action_harness.pipeline.wait_for_ci_checks", return_value=False),
+            patch("action_harness.pipeline.post_merge_blocked_comment") as mock_comment,
         ):
             pr_result, manifest = run_pipeline(
                 "test-change",
@@ -311,28 +315,14 @@ class TestAutoMerge:
         assert merge_stages[0].merged is False
         assert merge_stages[0].ci_passed is False
         assert "CI" in (merge_stages[0].merge_blocked_reason or "")
+        mock_comment.assert_called_once()
 
     def test_skip_review_no_openspec_review_gates_pass(self, test_repo: Path) -> None:
         """auto-merge + skip_review + prompt mode (no openspec review) → gates pass."""
         mock = _make_claude_mock()
 
-        # Use a review_result of None to simulate prompt mode where openspec review is skipped
         with (
-            patch("action_harness.worker.subprocess.run", mock),
-            patch("action_harness.pipeline.run_eval", return_value=_passing_eval()),
-            patch("action_harness.pr.subprocess.run", mock),
-            patch(
-                "action_harness.pipeline.dispatch_openspec_review",
-                return_value=('{"result": "{}"}', 1.0),
-            ),
-            patch(
-                "action_harness.pipeline.parse_review_result",
-                return_value=_approved_review_result(),
-            ),
-            patch(
-                "action_harness.pipeline.push_archive_if_needed",
-                return_value=(False, None),
-            ),
+            _standard_patches(mock),
             patch("action_harness.pipeline.merge_pr") as mock_merge,
         ):
             mock_merge.return_value = MergeResult(success=True, merged=True)
@@ -347,3 +337,68 @@ class TestAutoMerge:
         merge_stages = [s for s in manifest.stages if isinstance(s, MergeResult)]
         assert len(merge_stages) == 1
         assert merge_stages[0].merged is True
+
+    def test_openspec_review_fails_no_merge_result(self, test_repo: Path) -> None:
+        """auto-merge + openspec review fails → early return, no MergeResult."""
+        mock = _make_claude_mock()
+        failed_review = parse_review_result(
+            json.dumps(
+                {
+                    "result": json.dumps(
+                        {
+                            "status": "findings",
+                            "tasks_total": 1,
+                            "tasks_complete": 0,
+                            "validation_passed": False,
+                            "semantic_review_passed": False,
+                            "findings": ["Task incomplete"],
+                            "archived": False,
+                        }
+                    )
+                }
+            ),
+            1.0,
+        )
+
+        with _standard_patches(mock, review=failed_review):
+            pr_result, manifest = run_pipeline(
+                "test-change",
+                test_repo,
+                max_retries=1,
+                skip_review=True,
+                auto_merge=True,
+            )
+
+        # Pipeline fails due to openspec review, no MergeResult
+        assert pr_result.success is False
+        merge_stages = [s for s in manifest.stages if isinstance(s, MergeResult)]
+        assert len(merge_stages) == 0
+
+    def test_merge_pr_command_fails(self, test_repo: Path) -> None:
+        """auto-merge + gh pr merge fails → MergeResult(success=False) in stages."""
+        mock = _make_claude_mock()
+
+        with (
+            _standard_patches(mock),
+            patch("action_harness.pipeline.merge_pr") as mock_merge,
+        ):
+            mock_merge.return_value = MergeResult(
+                success=False,
+                merged=False,
+                error="merge conflict",
+            )
+            pr_result, manifest = run_pipeline(
+                "test-change",
+                test_repo,
+                max_retries=1,
+                skip_review=True,
+                auto_merge=True,
+            )
+
+        # Pipeline still succeeds (merge is advisory)
+        assert pr_result.success is True
+        merge_stages = [s for s in manifest.stages if isinstance(s, MergeResult)]
+        assert len(merge_stages) == 1
+        assert merge_stages[0].success is False
+        assert merge_stages[0].merged is False
+        assert merge_stages[0].error == "merge conflict"

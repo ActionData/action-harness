@@ -7,6 +7,9 @@ import typer
 
 from action_harness.models import MergeResult
 
+# Timeout for gh commands that should complete quickly (merge, comment).
+_GH_COMMAND_TIMEOUT_SECONDS = 120
+
 
 def merge_pr(
     pr_url: str,
@@ -32,7 +35,14 @@ def merge_pr(
             cwd=worktree_path,
             capture_output=True,
             text=True,
+            timeout=_GH_COMMAND_TIMEOUT_SECONDS,
         )
+    except subprocess.TimeoutExpired:
+        typer.echo(
+            f"[merge] gh pr merge timed out after {_GH_COMMAND_TIMEOUT_SECONDS}s",
+            err=True,
+        )
+        return MergeResult(success=False, merged=False, error="gh pr merge timed out")
     except (FileNotFoundError, OSError) as e:
         typer.echo(f"[merge] gh pr merge failed: {e}", err=True)
         return MergeResult(success=False, merged=False, error=str(e))
@@ -138,6 +148,7 @@ def post_merge_blocked_comment(
             cwd=worktree_path,
             capture_output=True,
             text=True,
+            timeout=_GH_COMMAND_TIMEOUT_SECONDS,
         )
         if result.returncode != 0:
             typer.echo(
@@ -146,5 +157,5 @@ def post_merge_blocked_comment(
             )
         elif verbose:
             typer.echo("[merge] posted merge-blocked comment on PR", err=True)
-    except (FileNotFoundError, OSError) as e:
+    except (FileNotFoundError, OSError, subprocess.TimeoutExpired) as e:
         typer.echo(f"[merge] warning: failed to post blocked comment: {e}", err=True)

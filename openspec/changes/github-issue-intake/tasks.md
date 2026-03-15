@@ -34,6 +34,6 @@ Prerequisites: `unspecced-tasks` must be merged first. This change assumes `--ch
 
 ## 6. Validation [depends: all]
 
-- [ ] 6.1 Run full test suite (`uv run pytest -v`) and verify no regressions
-- [ ] 6.2 Run lint and type checks (`uv run ruff check .` and `uv run mypy src/`)
-- [ ] 6.3 Run `harness run --issue 1 --repo . --dry-run` and verify output shows issue number, resolved mode, and computed change/prompt (requires a real or mock issue; if no issue exists, verify the error message is clear).
+- [x] 6.1 Run full test suite (`uv run pytest -v`) and verify no regressions
+- [x] 6.2 Run lint and type checks (`uv run ruff check .` and `uv run mypy src/`)
+- [x] 6.3 Run `harness run --issue 1 --repo . --dry-run` and verify output shows issue number, resolved mode, and computed change/prompt (requires a real or mock issue; if no issue exists, verify the error message is clear).

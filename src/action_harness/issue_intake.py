@@ -92,9 +92,7 @@ def detect_openspec_change(body: str, repo_path: Path) -> str | None:
     return None
 
 
-def label_issue(
-    issue_number: int, label: str, repo_path: Path, verbose: bool = False
-) -> None:
+def label_issue(issue_number: int, label: str, repo_path: Path, verbose: bool = False) -> None:
     """Add a label to a GitHub issue. Best-effort — never raises."""
     typer.echo(f"[issue-intake] labeling issue #{issue_number} with '{label}'", err=True)
 
@@ -115,9 +113,7 @@ def label_issue(
         typer.echo(f"[issue-intake] labeled issue #{issue_number} with '{label}'", err=True)
 
 
-def comment_on_issue(
-    issue_number: int, body: str, repo_path: Path, verbose: bool = False
-) -> None:
+def comment_on_issue(issue_number: int, body: str, repo_path: Path, verbose: bool = False) -> None:
     """Post a comment on a GitHub issue. Best-effort — never raises."""
     typer.echo(f"[issue-intake] commenting on issue #{issue_number}", err=True)
 

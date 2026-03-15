@@ -561,9 +561,7 @@ def _run_pipeline_inner(
 
         label_issue(issue_number, "harness:pr-created", repo, verbose=verbose)
         if pr_result.pr_url:
-            comment_on_issue(
-                issue_number, f"PR created: {pr_result.pr_url}", repo, verbose=verbose
-            )
+            comment_on_issue(issue_number, f"PR created: {pr_result.pr_url}", repo, verbose=verbose)
 
     # Stage 4.5: Protected paths check
     patterns = load_protected_patterns(repo)

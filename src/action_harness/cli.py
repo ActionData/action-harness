@@ -113,8 +113,7 @@ def run(
     ),
     issue: int | None = typer.Option(
         None,
-        help="GitHub issue number to dispatch "
-        "(mutually exclusive with --change and --prompt)",
+        help="GitHub issue number to dispatch (mutually exclusive with --change and --prompt)",
     ),
     repo: str = typer.Option(
         ...,
@@ -189,9 +188,7 @@ def run(
     # Mutual exclusion validation: exactly one of --change, --prompt, --issue
     provided = sum(x is not None for x in (change, prompt, issue))
     if provided > 1:
-        typer.echo(
-            "Error: Specify only one of --change, --prompt, or --issue", err=True
-        )
+        typer.echo("Error: Specify only one of --change, --prompt, or --issue", err=True)
         raise typer.Exit(code=1)
 
     if provided == 0:

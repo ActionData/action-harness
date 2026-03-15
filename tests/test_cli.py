@@ -466,7 +466,11 @@ class TestIssueModeCli:
                 "action_harness.issue_intake.subprocess.run",
                 return_value=MagicMock(
                     returncode=0,
-                    stdout='{"title": "Implement logging", "body": "See openspec:add-logging for details", "state": "OPEN"}',
+                    stdout=(
+                        '{"title": "Implement logging",'
+                        ' "body": "See openspec:add-logging for details",'
+                        ' "state": "OPEN"}'
+                    ),
                     stderr="",
                 ),
             ),

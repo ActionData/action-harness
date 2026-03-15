@@ -113,7 +113,9 @@ class TestLabelIssue:
         cmd = mock.call_args[0][0]
         assert cmd == ["gh", "issue", "edit", "42", "--add-label", "harness:in-progress"]
 
-    def test_label_failure_is_non_fatal(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_label_failure_is_non_fatal(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         mock = self._mock_gh(returncode=1, stderr="label not found")
         with patch("action_harness.issue_intake.subprocess.run", mock):
             # Should NOT raise
@@ -141,7 +143,9 @@ class TestCommentOnIssue:
         cmd = mock.call_args[0][0]
         assert cmd == ["gh", "issue", "comment", "42", "--body", "PR created: https://..."]
 
-    def test_comment_failure_is_non_fatal(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_comment_failure_is_non_fatal(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         mock = self._mock_gh(returncode=1, stderr="permission denied")
         with patch("action_harness.issue_intake.subprocess.run", mock):
             # Should NOT raise

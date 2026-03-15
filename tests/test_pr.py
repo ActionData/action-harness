@@ -595,9 +595,7 @@ class TestBuildPrBodyIssueLink:
     def test_pr_body_includes_closes_when_issue_set(self, tmp_path: Path) -> None:
         mock = self._mock_git_calls()
         with patch("action_harness.pr.subprocess.run", mock):
-            body = _build_pr_body(
-                "test", _success_eval(), tmp_path, "main", issue_number=42
-            )
+            body = _build_pr_body("test", _success_eval(), tmp_path, "main", issue_number=42)
         assert "Closes #42" in body
 
     def test_pr_body_no_closes_when_issue_none(self, tmp_path: Path) -> None:

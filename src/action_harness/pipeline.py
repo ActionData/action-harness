@@ -742,9 +742,7 @@ def _run_openspec_review(
 
     # Handle needs-human: post PR comment and add label
     if review_result.success and review_result.human_tasks_remaining > 0 and pr_result.pr_url:
-        _flag_pr_needs_human(
-            worktree_path, pr_result.pr_url, review_result.findings, verbose
-        )
+        _flag_pr_needs_human(worktree_path, pr_result.pr_url, review_result.findings, verbose)
 
     if review_result.success and review_result.archived:
         pushed, push_error = push_archive_if_needed(
@@ -752,17 +750,7 @@ def _run_openspec_review(
         )
         if push_error:
             typer.echo(f"[pipeline] failed to push archive: {push_error}", err=True)
-            review_result = OpenSpecReviewResult(
-                success=False,
-                error=push_error,
-                duration_seconds=review_result.duration_seconds,
-                tasks_total=review_result.tasks_total,
-                tasks_complete=review_result.tasks_complete,
-                validation_passed=review_result.validation_passed,
-                semantic_review_passed=review_result.semantic_review_passed,
-                findings=review_result.findings,
-                archived=review_result.archived,
-            )
+            review_result = review_result.model_copy(update={"success": False, "error": push_error})
         elif pushed and pr_result.pr_url:
             # Add a comment on the PR noting the archive was completed
             _comment_archive_complete(worktree_path, pr_result.pr_url, verbose)

@@ -78,6 +78,24 @@ def _is_https_github_url(url: str) -> bool:
     return bool(re.match(r"https?://github\.com/", url))
 
 
+def _normalize_github_identity(url: str) -> str | None:
+    """Extract 'owner/repo' identity from a GitHub URL (HTTPS or SSH).
+
+    Returns None if the URL is not a recognized GitHub URL.
+    """
+    # HTTPS: https://github.com/owner/repo[.git][/]
+    https_match = re.match(r"https?://github\.com/([^/]+)/([^/]+?)(?:\.git)?/?$", url)
+    if https_match:
+        return f"{https_match.group(1)}/{https_match.group(2)}"
+
+    # SSH: git@github.com:owner/repo[.git]
+    ssh_match = re.match(r"git@github\.com:([^/]+)/([^/]+?)(?:\.git)?$", url)
+    if ssh_match:
+        return f"{ssh_match.group(1)}/{ssh_match.group(2)}"
+
+    return None
+
+
 def _get_repo_dir(owner: str, repo_name: str, clone_url: str, harness_home: Path) -> Path:
     """Return the directory to clone into, handling name collisions.
 
@@ -97,6 +115,13 @@ def _get_repo_dir(owner: str, repo_name: str, clone_url: str, harness_home: Path
     )
     if result.returncode == 0:
         existing_url = result.stdout.strip()
+        # Protocol-aware comparison: normalize both to owner/repo identity
+        # so HTTPS and SSH URLs for the same repo are recognized as equal
+        existing_identity = _normalize_github_identity(existing_url)
+        clone_identity = _normalize_github_identity(clone_url)
+        if existing_identity and clone_identity and existing_identity == clone_identity:
+            return default_dir
+        # Fall back to exact match for non-GitHub URLs
         if existing_url == clone_url:
             return default_dir
 

@@ -11,6 +11,7 @@ from action_harness.repo import (
     _clone_or_fetch,
     _detect_gh_protocol,
     _get_repo_dir,
+    _normalize_github_identity,
     _parse_repo_ref,
     resolve_repo,
 )
@@ -162,6 +163,38 @@ class TestGetRepoDir:
 
         assert result == repo_dir
 
+    def test_same_repo_https_existing_ssh_clone_url(self, tmp_path: Path) -> None:
+        """Existing remote is HTTPS, clone_url is SSH — same repo, no collision."""
+        repo_dir = tmp_path / "repos" / "utils"
+        repo_dir.mkdir(parents=True)
+
+        with patch("action_harness.repo.subprocess.run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess(
+                args=[],
+                returncode=0,
+                stdout="https://github.com/orgA/utils.git\n",
+                stderr="",
+            )
+            result = _get_repo_dir("orgA", "utils", "git@github.com:orgA/utils.git", tmp_path)
+
+        assert result == repo_dir
+
+    def test_same_repo_ssh_existing_https_clone_url(self, tmp_path: Path) -> None:
+        """Existing remote is SSH, clone_url is HTTPS — same repo, no collision."""
+        repo_dir = tmp_path / "repos" / "utils"
+        repo_dir.mkdir(parents=True)
+
+        with patch("action_harness.repo.subprocess.run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess(
+                args=[],
+                returncode=0,
+                stdout="git@github.com:orgA/utils.git\n",
+                stderr="",
+            )
+            result = _get_repo_dir("orgA", "utils", "https://github.com/orgA/utils.git", tmp_path)
+
+        assert result == repo_dir
+
     def test_collision_falls_back_to_owner_repo(self, tmp_path: Path) -> None:
         repo_dir = tmp_path / "repos" / "utils"
         repo_dir.mkdir(parents=True)
@@ -176,6 +209,31 @@ class TestGetRepoDir:
             result = _get_repo_dir("orgB", "utils", "https://github.com/orgB/utils.git", tmp_path)
 
         assert result == tmp_path / "repos" / "orgB-utils"
+
+
+class TestNormalizeGithubIdentity:
+    """Test _normalize_github_identity — extract owner/repo from any GitHub URL."""
+
+    def test_https_url(self) -> None:
+        assert _normalize_github_identity("https://github.com/owner/repo.git") == "owner/repo"
+
+    def test_https_url_without_git_suffix(self) -> None:
+        assert _normalize_github_identity("https://github.com/owner/repo") == "owner/repo"
+
+    def test_https_url_with_trailing_slash(self) -> None:
+        assert _normalize_github_identity("https://github.com/owner/repo/") == "owner/repo"
+
+    def test_ssh_url(self) -> None:
+        assert _normalize_github_identity("git@github.com:owner/repo.git") == "owner/repo"
+
+    def test_ssh_url_without_git_suffix(self) -> None:
+        assert _normalize_github_identity("git@github.com:owner/repo") == "owner/repo"
+
+    def test_non_github_url_returns_none(self) -> None:
+        assert _normalize_github_identity("https://gitlab.com/owner/repo.git") is None
+
+    def test_invalid_url_returns_none(self) -> None:
+        assert _normalize_github_identity("not-a-url") is None
 
 
 class TestDetectGhProtocol:

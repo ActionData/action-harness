@@ -16,6 +16,68 @@ from action_harness.worker import (
 )
 
 
+def make_mock_subprocess(
+    claude_returncode: int = 0,
+    claude_stdout: str = "",
+    claude_stderr: str = "",
+    commits_ahead: int = 1,
+) -> MagicMock:
+    """Create a mock that handles claude CLI and git rev-list calls."""
+    mock = MagicMock()
+
+    def side_effect(cmd: list[str], **kwargs: object) -> MagicMock:
+        result = MagicMock()
+        if cmd[0] == "claude":
+            result.returncode = claude_returncode
+            result.stdout = claude_stdout
+            result.stderr = claude_stderr
+        elif "rev-list" in cmd:
+            result.returncode = 0
+            result.stdout = f"{commits_ahead}\n"
+            result.stderr = ""
+        else:
+            result.returncode = 0
+            result.stdout = ""
+            result.stderr = ""
+        return result
+
+    mock.side_effect = side_effect
+    return mock
+
+
+def get_claude_cmd(mock: MagicMock) -> list[str]:
+    """Extract the claude CLI command from mock call args."""
+    for call in mock.call_args_list:
+        cmd = call[0][0]
+        if cmd[0] == "claude":
+            return cmd
+    raise AssertionError("claude CLI was never called")
+
+
+def get_claude_prompt(mock: MagicMock) -> str:
+    """Extract the user prompt (-p value) from the claude CLI call."""
+    for call in mock.call_args_list:
+        cmd = call[0][0]
+        if cmd[0] == "claude":
+            idx = cmd.index("-p")
+            return cmd[idx + 1]
+    raise AssertionError("claude CLI was never called")
+
+
+def get_claude_system_prompt(mock: MagicMock) -> str:
+    """Extract the --system-prompt value from the claude CLI call."""
+    for call in mock.call_args_list:
+        cmd = call[0][0]
+        if cmd[0] == "claude" and "--system-prompt" in cmd:
+            idx = cmd.index("--system-prompt")
+            return cmd[idx + 1]
+    raise AssertionError("claude CLI was never called with --system-prompt")
+
+
+# Default JSON output for tests that don't care about specific values
+_OK_JSON = json.dumps({"cost_usd": 0.01, "result": "ok"})
+
+
 class TestReadHarnessMd:
     def test_returns_contents_when_file_exists(self, tmp_path: Path) -> None:
         (tmp_path / "HARNESS.md").write_text("# Worker Instructions\n\nRun tests first.")
@@ -47,6 +109,23 @@ class TestReadHarnessMd:
         (tmp_path / "HARNESS.md").write_text(content)
         result = read_harness_md(tmp_path)
         assert result == content
+
+    def test_returns_none_on_permission_error(self, tmp_path: Path) -> None:
+        harness_md = tmp_path / "HARNESS.md"
+        harness_md.write_text("content")
+        harness_md.chmod(0o000)
+        try:
+            result = read_harness_md(tmp_path)
+            assert result is None
+        finally:
+            harness_md.chmod(0o644)
+
+    def test_returns_none_on_encoding_error(self, tmp_path: Path) -> None:
+        harness_md = tmp_path / "HARNESS.md"
+        # Write raw bytes that are invalid UTF-8
+        harness_md.write_bytes(b"\x80\x81\x82\x83")
+        result = read_harness_md(tmp_path)
+        assert result is None
 
 
 class TestBuildSystemPrompt:
@@ -108,38 +187,9 @@ class TestCountCommitsAhead:
 
 
 class TestDispatchWorker:
-    def _mock_subprocess(
-        self,
-        claude_returncode: int = 0,
-        claude_stdout: str = "",
-        claude_stderr: str = "",
-        commits_ahead: int = 1,
-    ) -> MagicMock:
-        """Create a mock that handles claude CLI and git rev-list calls."""
-        mock = MagicMock()
-
-        def side_effect(cmd: list[str], **kwargs: object) -> MagicMock:
-            result = MagicMock()
-            if cmd[0] == "claude":
-                result.returncode = claude_returncode
-                result.stdout = claude_stdout
-                result.stderr = claude_stderr
-            elif "rev-list" in cmd:
-                result.returncode = 0
-                result.stdout = f"{commits_ahead}\n"
-                result.stderr = ""
-            else:
-                result.returncode = 0
-                result.stdout = ""
-                result.stderr = ""
-            return result
-
-        mock.side_effect = side_effect
-        return mock
-
     def test_successful_dispatch(self) -> None:
         json_output = json.dumps({"cost_usd": 0.15, "result": "implemented feature"})
-        mock = self._mock_subprocess(claude_stdout=json_output, commits_ahead=2)
+        mock = make_mock_subprocess(claude_stdout=json_output, commits_ahead=2)
 
         with patch("action_harness.worker.subprocess.run", mock):
             result = dispatch_worker("test-change", Path("/fake/worktree"))
@@ -153,7 +203,7 @@ class TestDispatchWorker:
         assert isinstance(result, WorkerResult)
 
     def test_cli_failure(self) -> None:
-        mock = self._mock_subprocess(claude_returncode=1, claude_stderr="something went wrong")
+        mock = make_mock_subprocess(claude_returncode=1, claude_stderr="something went wrong")
 
         with patch("action_harness.worker.subprocess.run", mock):
             result = dispatch_worker("test-change", Path("/fake/worktree"))
@@ -166,7 +216,7 @@ class TestDispatchWorker:
 
     def test_no_commits_detected(self) -> None:
         json_output = json.dumps({"cost_usd": 0.10, "result": "did nothing"})
-        mock = self._mock_subprocess(claude_stdout=json_output, commits_ahead=0)
+        mock = make_mock_subprocess(claude_stdout=json_output, commits_ahead=0)
 
         with patch("action_harness.worker.subprocess.run", mock):
             result = dispatch_worker("test-change", Path("/fake/worktree"))
@@ -176,8 +226,7 @@ class TestDispatchWorker:
         assert result.commits_ahead == 0
 
     def test_invocation_uses_system_prompt_flag(self) -> None:
-        json_output = json.dumps({"cost_usd": 0.05, "result": "ok"})
-        mock = self._mock_subprocess(claude_stdout=json_output)
+        mock = make_mock_subprocess(claude_stdout=_OK_JSON)
 
         with patch("action_harness.worker.subprocess.run", mock):
             dispatch_worker("my-change", Path("/fake/wt"), max_turns=50)
@@ -199,8 +248,7 @@ class TestDispatchWorker:
         assert claude_call[1]["cwd"] == Path("/fake/wt")
 
     def test_base_branch_passed_to_commit_count(self) -> None:
-        json_output = json.dumps({"cost_usd": 0.05, "result": "ok"})
-        mock = self._mock_subprocess(claude_stdout=json_output, commits_ahead=1)
+        mock = make_mock_subprocess(claude_stdout=_OK_JSON, commits_ahead=1)
 
         with patch("action_harness.worker.subprocess.run", mock):
             dispatch_worker("test-change", Path("/fake/wt"), base_branch="develop")
@@ -215,7 +263,7 @@ class TestDispatchWorker:
             raise AssertionError("git rev-list was never called")
 
     def test_invalid_json_output(self) -> None:
-        mock = self._mock_subprocess(claude_stdout="not valid json", commits_ahead=1)
+        mock = make_mock_subprocess(claude_stdout="not valid json", commits_ahead=1)
 
         with patch("action_harness.worker.subprocess.run", mock):
             result = dispatch_worker("test-change", Path("/fake/worktree"))
@@ -225,8 +273,7 @@ class TestDispatchWorker:
         assert result.cost_usd is None
 
     def test_duration_tracked(self) -> None:
-        json_output = json.dumps({"cost_usd": 0.01, "result": "ok"})
-        mock = self._mock_subprocess(claude_stdout=json_output)
+        mock = make_mock_subprocess(claude_stdout=_OK_JSON)
 
         with patch("action_harness.worker.subprocess.run", mock):
             result = dispatch_worker("test-change", Path("/fake/worktree"))
@@ -234,80 +281,64 @@ class TestDispatchWorker:
         assert result.duration_seconds is not None
         assert result.duration_seconds >= 0
 
-    def _get_claude_cmd(self, mock: MagicMock) -> list[str]:
-        """Extract the claude CLI command from mock call args."""
-        for call in mock.call_args_list:
-            cmd = call[0][0]
-            if cmd[0] == "claude":
-                return cmd
-        raise AssertionError("claude CLI was never called")
-
     def test_model_flag_present(self) -> None:
-        json_output = json.dumps({"cost_usd": 0.01, "result": "ok"})
-        mock = self._mock_subprocess(claude_stdout=json_output)
+        mock = make_mock_subprocess(claude_stdout=_OK_JSON)
         with patch("action_harness.worker.subprocess.run", mock):
             dispatch_worker("t", Path("/fake"), model="opus")
-        cmd = self._get_claude_cmd(mock)
+        cmd = get_claude_cmd(mock)
         idx = cmd.index("--model")
         assert cmd[idx + 1] == "opus"
 
     def test_model_flag_absent(self) -> None:
-        json_output = json.dumps({"cost_usd": 0.01, "result": "ok"})
-        mock = self._mock_subprocess(claude_stdout=json_output)
+        mock = make_mock_subprocess(claude_stdout=_OK_JSON)
         with patch("action_harness.worker.subprocess.run", mock):
             dispatch_worker("t", Path("/fake"))
-        cmd = self._get_claude_cmd(mock)
+        cmd = get_claude_cmd(mock)
         assert "--model" not in cmd
 
     def test_effort_flag_present(self) -> None:
-        json_output = json.dumps({"cost_usd": 0.01, "result": "ok"})
-        mock = self._mock_subprocess(claude_stdout=json_output)
+        mock = make_mock_subprocess(claude_stdout=_OK_JSON)
         with patch("action_harness.worker.subprocess.run", mock):
             dispatch_worker("t", Path("/fake"), effort="high")
-        cmd = self._get_claude_cmd(mock)
+        cmd = get_claude_cmd(mock)
         idx = cmd.index("--effort")
         assert cmd[idx + 1] == "high"
 
     def test_effort_flag_absent(self) -> None:
-        json_output = json.dumps({"cost_usd": 0.01, "result": "ok"})
-        mock = self._mock_subprocess(claude_stdout=json_output)
+        mock = make_mock_subprocess(claude_stdout=_OK_JSON)
         with patch("action_harness.worker.subprocess.run", mock):
             dispatch_worker("t", Path("/fake"))
-        cmd = self._get_claude_cmd(mock)
+        cmd = get_claude_cmd(mock)
         assert "--effort" not in cmd
 
     def test_budget_flag_present(self) -> None:
-        json_output = json.dumps({"cost_usd": 0.01, "result": "ok"})
-        mock = self._mock_subprocess(claude_stdout=json_output)
+        mock = make_mock_subprocess(claude_stdout=_OK_JSON)
         with patch("action_harness.worker.subprocess.run", mock):
             dispatch_worker("t", Path("/fake"), max_budget_usd=5.0)
-        cmd = self._get_claude_cmd(mock)
+        cmd = get_claude_cmd(mock)
         idx = cmd.index("--max-budget-usd")
         assert cmd[idx + 1] == "5.0"
 
     def test_budget_flag_absent(self) -> None:
-        json_output = json.dumps({"cost_usd": 0.01, "result": "ok"})
-        mock = self._mock_subprocess(claude_stdout=json_output)
+        mock = make_mock_subprocess(claude_stdout=_OK_JSON)
         with patch("action_harness.worker.subprocess.run", mock):
             dispatch_worker("t", Path("/fake"))
-        cmd = self._get_claude_cmd(mock)
+        cmd = get_claude_cmd(mock)
         assert "--max-budget-usd" not in cmd
 
     def test_permission_mode_default(self) -> None:
-        json_output = json.dumps({"cost_usd": 0.01, "result": "ok"})
-        mock = self._mock_subprocess(claude_stdout=json_output)
+        mock = make_mock_subprocess(claude_stdout=_OK_JSON)
         with patch("action_harness.worker.subprocess.run", mock):
             dispatch_worker("t", Path("/fake"))
-        cmd = self._get_claude_cmd(mock)
+        cmd = get_claude_cmd(mock)
         idx = cmd.index("--permission-mode")
         assert cmd[idx + 1] == "bypassPermissions"
 
     def test_permission_mode_custom(self) -> None:
-        json_output = json.dumps({"cost_usd": 0.01, "result": "ok"})
-        mock = self._mock_subprocess(claude_stdout=json_output)
+        mock = make_mock_subprocess(claude_stdout=_OK_JSON)
         with patch("action_harness.worker.subprocess.run", mock):
             dispatch_worker("t", Path("/fake"), permission_mode="plan")
-        cmd = self._get_claude_cmd(mock)
+        cmd = get_claude_cmd(mock)
         idx = cmd.index("--permission-mode")
         assert cmd[idx + 1] == "plan"
 
@@ -328,27 +359,25 @@ class TestDispatchWorker:
                 },
             }
         )
-        mock = self._mock_subprocess(claude_stdout=json_output)
+        mock = make_mock_subprocess(claude_stdout=json_output)
         with patch("action_harness.worker.subprocess.run", mock):
             result = dispatch_worker("t", Path("/fake"))
         assert result.session_id == "sess_xyz"
         assert result.context_usage_pct == pytest.approx(0.07)
 
     def test_fresh_dispatch_includes_system_prompt_no_resume(self) -> None:
-        json_output = json.dumps({"cost_usd": 0.01, "result": "ok"})
-        mock = self._mock_subprocess(claude_stdout=json_output)
+        mock = make_mock_subprocess(claude_stdout=_OK_JSON)
         with patch("action_harness.worker.subprocess.run", mock):
             dispatch_worker("t", Path("/fake"))
-        cmd = self._get_claude_cmd(mock)
+        cmd = get_claude_cmd(mock)
         assert "--system-prompt" in cmd
         assert "--resume" not in cmd
 
     def test_resume_dispatch_includes_resume_no_system_prompt(self) -> None:
-        json_output = json.dumps({"cost_usd": 0.01, "result": "ok"})
-        mock = self._mock_subprocess(claude_stdout=json_output)
+        mock = make_mock_subprocess(claude_stdout=_OK_JSON)
         with patch("action_harness.worker.subprocess.run", mock):
             dispatch_worker("t", Path("/fake"), session_id="sess_abc", feedback="fix the tests")
-        cmd = self._get_claude_cmd(mock)
+        cmd = get_claude_cmd(mock)
         assert "--resume" in cmd
         idx = cmd.index("--resume")
         assert cmd[idx + 1] == "sess_abc"
@@ -369,7 +398,7 @@ class TestDispatchWorker:
                 "result": "error",
             }
         )
-        mock = self._mock_subprocess(
+        mock = make_mock_subprocess(
             claude_returncode=1, claude_stdout=json_output, claude_stderr="oops"
         )
         with patch("action_harness.worker.subprocess.run", mock):
@@ -385,7 +414,7 @@ class TestDispatchWorker:
                 "result": "did nothing",
             }
         )
-        mock = self._mock_subprocess(claude_stdout=json_output, commits_ahead=0)
+        mock = make_mock_subprocess(claude_stdout=json_output, commits_ahead=0)
         with patch("action_harness.worker.subprocess.run", mock):
             result = dispatch_worker("t", Path("/fake"))
         assert result.success is False
@@ -401,7 +430,7 @@ class TestDispatchWorker:
                 "usage": {"input_tokens": 100000, "output_tokens": 50000},
             }
         )
-        mock = self._mock_subprocess(claude_stdout=json_output)
+        mock = make_mock_subprocess(claude_stdout=json_output)
         with patch("action_harness.worker.subprocess.run", mock):
             result = dispatch_worker("t", Path("/fake"))
         # 150000 / 1_000_000 = 0.15
@@ -417,7 +446,7 @@ class TestDispatchWorker:
                 "modelUsage": {"model": {"contextWindow": 500000}},
             }
         )
-        mock = self._mock_subprocess(claude_stdout=json_output)
+        mock = make_mock_subprocess(claude_stdout=json_output)
         with patch("action_harness.worker.subprocess.run", mock):
             result = dispatch_worker("t", Path("/fake"))
         # 0 / 500000 = 0.0
@@ -427,57 +456,24 @@ class TestDispatchWorker:
 class TestProgressFileInjection:
     """Worker prepends .harness-progress.md contents to the user prompt."""
 
-    def _mock_subprocess(
-        self,
-        commits_ahead: int = 1,
-    ) -> MagicMock:
-        mock = MagicMock()
-
-        def side_effect(cmd: list[str], **kwargs: object) -> MagicMock:
-            result = MagicMock()
-            if cmd[0] == "claude":
-                result.returncode = 0
-                result.stdout = json.dumps({"cost_usd": 0.01, "result": "ok"})
-                result.stderr = ""
-            elif "rev-list" in cmd:
-                result.returncode = 0
-                result.stdout = f"{commits_ahead}\n"
-                result.stderr = ""
-            else:
-                result.returncode = 0
-                result.stdout = ""
-                result.stderr = ""
-            return result
-
-        mock.side_effect = side_effect
-        return mock
-
-    def _get_claude_prompt(self, mock: MagicMock) -> str:
-        for call in mock.call_args_list:
-            cmd = call[0][0]
-            if cmd[0] == "claude":
-                idx = cmd.index("-p")
-                return cmd[idx + 1]
-        raise AssertionError("claude CLI was never called")
-
     def test_progress_prepended_when_file_exists(self, tmp_path: Path) -> None:
         progress_content = "# Harness Progress\n\n## Attempt 1\n- **Commits**: 3\n"
         (tmp_path / PROGRESS_FILENAME).write_text(progress_content)
 
-        mock = self._mock_subprocess()
+        mock = make_mock_subprocess(claude_stdout=_OK_JSON)
         with patch("action_harness.worker.subprocess.run", mock):
             dispatch_worker("t", tmp_path)
 
-        prompt = self._get_claude_prompt(mock)
+        prompt = get_claude_prompt(mock)
         assert prompt.startswith(progress_content)
         assert "opsx:apply" in prompt
 
     def test_prompt_unchanged_when_no_progress(self, tmp_path: Path) -> None:
-        mock = self._mock_subprocess()
+        mock = make_mock_subprocess(claude_stdout=_OK_JSON)
         with patch("action_harness.worker.subprocess.run", mock):
             dispatch_worker("t", tmp_path)
 
-        prompt = self._get_claude_prompt(mock)
+        prompt = get_claude_prompt(mock)
         assert prompt.startswith("Implement the OpenSpec change")
         assert PROGRESS_FILENAME not in prompt
 
@@ -485,11 +481,11 @@ class TestProgressFileInjection:
         progress_content = "# Harness Progress\n\n## Attempt 1\n"
         (tmp_path / PROGRESS_FILENAME).write_text(progress_content)
 
-        mock = self._mock_subprocess()
+        mock = make_mock_subprocess(claude_stdout=_OK_JSON)
         with patch("action_harness.worker.subprocess.run", mock):
             dispatch_worker("t", tmp_path, feedback="fix the tests")
 
-        prompt = self._get_claude_prompt(mock)
+        prompt = get_claude_prompt(mock)
         progress_pos = prompt.index("Harness Progress")
         task_pos = prompt.index("opsx:apply")
         assert progress_pos < task_pos
@@ -498,11 +494,11 @@ class TestProgressFileInjection:
         progress_content = "# Harness Progress\n\n## Attempt 1\n"
         (tmp_path / PROGRESS_FILENAME).write_text(progress_content)
 
-        mock = self._mock_subprocess()
+        mock = make_mock_subprocess(claude_stdout=_OK_JSON)
         with patch("action_harness.worker.subprocess.run", mock):
             dispatch_worker("t", tmp_path, session_id="sess_abc", feedback="fix the tests")
 
-        prompt = self._get_claude_prompt(mock)
+        prompt = get_claude_prompt(mock)
         assert prompt.startswith(progress_content)
         assert "fix the tests" in prompt
         # Progress appears before feedback
@@ -514,66 +510,45 @@ class TestProgressFileInjection:
 class TestHarnessMdInjection:
     """dispatch_worker reads HARNESS.md and injects it into the system prompt."""
 
-    def _mock_subprocess(
-        self,
-        commits_ahead: int = 1,
-    ) -> MagicMock:
-        mock = MagicMock()
-
-        def side_effect(cmd: list[str], **kwargs: object) -> MagicMock:
-            result = MagicMock()
-            if cmd[0] == "claude":
-                result.returncode = 0
-                result.stdout = json.dumps({"cost_usd": 0.01, "result": "ok"})
-                result.stderr = ""
-            elif "rev-list" in cmd:
-                result.returncode = 0
-                result.stdout = f"{commits_ahead}\n"
-                result.stderr = ""
-            else:
-                result.returncode = 0
-                result.stdout = ""
-                result.stderr = ""
-            return result
-
-        mock.side_effect = side_effect
-        return mock
-
-    def _get_claude_system_prompt(self, mock: MagicMock) -> str:
-        for call in mock.call_args_list:
-            cmd = call[0][0]
-            if cmd[0] == "claude" and "--system-prompt" in cmd:
-                idx = cmd.index("--system-prompt")
-                return cmd[idx + 1]
-        raise AssertionError("claude CLI was never called with --system-prompt")
-
     def test_harness_md_injected_into_system_prompt(self, tmp_path: Path) -> None:
         harness_content = "Always run pytest before committing.\nUse typer.echo for logging."
         (tmp_path / "HARNESS.md").write_text(harness_content)
 
-        mock = self._mock_subprocess()
+        mock = make_mock_subprocess(claude_stdout=_OK_JSON)
         with patch("action_harness.worker.subprocess.run", mock):
             dispatch_worker("t", tmp_path)
 
-        system_prompt = self._get_claude_system_prompt(mock)
+        system_prompt = get_claude_system_prompt(mock)
         assert "## Repo-Specific Instructions" in system_prompt
         assert harness_content in system_prompt
 
     def test_no_harness_md_no_repo_specific_section(self, tmp_path: Path) -> None:
-        mock = self._mock_subprocess()
+        mock = make_mock_subprocess(claude_stdout=_OK_JSON)
         with patch("action_harness.worker.subprocess.run", mock):
             dispatch_worker("t", tmp_path)
 
-        system_prompt = self._get_claude_system_prompt(mock)
+        system_prompt = get_claude_system_prompt(mock)
         assert "Repo-Specific Instructions" not in system_prompt
 
     def test_harness_md_content_verbatim(self, tmp_path: Path) -> None:
         harness_content = "Use {curly_braces} and $variables and {{templates}}"
         (tmp_path / "HARNESS.md").write_text(harness_content)
 
-        mock = self._mock_subprocess()
+        mock = make_mock_subprocess(claude_stdout=_OK_JSON)
         with patch("action_harness.worker.subprocess.run", mock):
             dispatch_worker("t", tmp_path)
 
-        system_prompt = self._get_claude_system_prompt(mock)
+        system_prompt = get_claude_system_prompt(mock)
         assert harness_content in system_prompt
+
+    def test_resume_mode_does_not_inject_harness_md(self, tmp_path: Path) -> None:
+        """On resume, HARNESS.md is not re-injected — the session already has it."""
+        (tmp_path / "HARNESS.md").write_text("repo instructions")
+
+        mock = make_mock_subprocess(claude_stdout=_OK_JSON)
+        with patch("action_harness.worker.subprocess.run", mock):
+            dispatch_worker("t", tmp_path, session_id="sess_abc", feedback="retry")
+
+        cmd = get_claude_cmd(mock)
+        assert "--system-prompt" not in cmd
+        assert "--resume" in cmd

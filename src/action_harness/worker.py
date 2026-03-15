@@ -17,14 +17,29 @@ def read_harness_md(worktree_path: Path) -> str | None:
     """Read HARNESS.md from the worktree root.
 
     Returns the file contents as a string, or None if the file is absent,
-    empty, or contains only whitespace.
+    empty, or contains only whitespace. Returns None and logs a warning
+    on read errors (permissions, encoding) so an optional config file
+    cannot crash the dispatch pipeline.
     """
     harness_md_path = worktree_path / HARNESS_MD_FILENAME
     if not harness_md_path.exists():
+        typer.echo(f"[worker] no HARNESS.md in {worktree_path}", err=True)
         return None
-    contents = harness_md_path.read_text()
+    try:
+        contents = harness_md_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        typer.echo(
+            f"[worker] warning: could not read {harness_md_path}: {exc}",
+            err=True,
+        )
+        return None
     if not contents.strip():
+        typer.echo(f"[worker] HARNESS.md is empty in {worktree_path}", err=True)
         return None
+    typer.echo(
+        f"[worker] loaded HARNESS.md ({len(contents)} chars) from {worktree_path}",
+        err=True,
+    )
     return contents
 
 

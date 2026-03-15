@@ -27,8 +27,8 @@
 
 ## 5. Logging [depends: 4]
 
-- [ ] 5.1 Log merge decisions to stderr: "auto-merge: all gates passed, merging PR" or "auto-merge blocked: {reason}". Log `gh pr merge` outcome.
-- [ ] 5.2 Add merge event to event logger: `merge.completed` with `gates`, `merged`, `blocked_reason`, `ci_passed`.
+- [x] 5.1 Log merge decisions to stderr: "auto-merge: all gates passed, merging PR" or "auto-merge blocked: {reason}". Log `gh pr merge` outcome.
+- [x] 5.2 Add merge event to event logger: `merge.completed` with `gates`, `merged`, `blocked_reason`, `ci_passed`.
 
 ## 6. Validation [depends: all]
 

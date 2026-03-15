@@ -36,6 +36,8 @@ class WorkerResult(StageResult):
     commits_ahead: int = 0
     cost_usd: float | None = None
     worker_output: str | None = None
+    session_id: str | None = None
+    context_usage_pct: float | None = None
 
 
 class EvalResult(StageResult):

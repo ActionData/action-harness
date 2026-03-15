@@ -287,13 +287,20 @@ def _run_pipeline_inner(
     # Stage 2+3: Worker dispatch + eval with retry loop
     attempt = 0
     feedback: str | None = None
+    resume_session_id: str | None = None
 
     while attempt <= max_retries:
         # Dispatch worker
         if feedback:
             typer.echo(f"[pipeline] retry {attempt}/{max_retries} with feedback", err=True)
 
-        logger.emit("worker.dispatched", stage="worker", attempt=attempt)
+        logger.emit(
+            "worker.dispatched",
+            stage="worker",
+            attempt=attempt,
+            session_id=resume_session_id,
+            resumed=resume_session_id is not None,
+        )
 
         worker_result = dispatch_worker(
             change_name,
@@ -306,39 +313,70 @@ def _run_pipeline_inner(
             max_budget_usd=max_budget_usd,
             permission_mode=permission_mode,
             verbose=verbose,
+            session_id=resume_session_id,
         )
         stages.append(worker_result)
 
         if not worker_result.success:
-            logger.emit(
-                "worker.failed",
-                stage="worker",
-                duration_seconds=worker_result.duration_seconds,
-                success=False,
-                error=worker_result.error,
-            )
-            if attempt >= max_retries:
+            # Resume fallback: if we were resuming and it failed, try fresh dispatch
+            # in the same iteration without incrementing attempt
+            if resume_session_id is not None:
                 typer.echo(
-                    f"[pipeline] worker failed after {attempt + 1} attempt(s): "
-                    f"{worker_result.error}",
+                    "[pipeline] session resume failed, retrying with fresh dispatch",
                     err=True,
                 )
-                cleanup_worktree(repo, worktree_path, branch, verbose=verbose)
-                return PrResult(
-                    success=False,
-                    stage="pipeline",
-                    error=f"Worker failed: {worker_result.error}",
-                    branch=branch,
+                logger.emit(
+                    "worker.resume_fallback",
+                    stage="worker",
+                    session_id=resume_session_id,
                 )
-            logger.emit(
-                "retry.scheduled",
-                attempt=attempt + 1,
-                reason="worker_failed",
-                max_retries=max_retries,
-            )
-            attempt += 1
-            feedback = worker_result.error
-            continue
+                resume_session_id = None
+                worker_result = dispatch_worker(
+                    change_name,
+                    worktree_path,
+                    base_branch=_get_worktree_base(repo),
+                    max_turns=max_turns,
+                    feedback=feedback,
+                    model=model,
+                    effort=effort,
+                    max_budget_usd=max_budget_usd,
+                    permission_mode=permission_mode,
+                    verbose=verbose,
+                    session_id=None,
+                )
+                stages.append(worker_result)
+
+            if not worker_result.success:
+                logger.emit(
+                    "worker.failed",
+                    stage="worker",
+                    duration_seconds=worker_result.duration_seconds,
+                    success=False,
+                    error=worker_result.error,
+                )
+                if attempt >= max_retries:
+                    typer.echo(
+                        f"[pipeline] worker failed after {attempt + 1} attempt(s): "
+                        f"{worker_result.error}",
+                        err=True,
+                    )
+                    cleanup_worktree(repo, worktree_path, branch, verbose=verbose)
+                    return PrResult(
+                        success=False,
+                        stage="pipeline",
+                        error=f"Worker failed: {worker_result.error}",
+                        branch=branch,
+                    )
+                logger.emit(
+                    "retry.scheduled",
+                    attempt=attempt + 1,
+                    reason="worker_failed",
+                    max_retries=max_retries,
+                )
+                attempt += 1
+                feedback = worker_result.error
+                resume_session_id = None
+                continue
 
         logger.emit(
             "worker.completed",
@@ -347,6 +385,8 @@ def _run_pipeline_inner(
             success=True,
             commits_ahead=worker_result.commits_ahead,
             cost_usd=worker_result.cost_usd,
+            session_id=worker_result.session_id,
+            context_usage_pct=worker_result.context_usage_pct,
         )
 
         # Run eval
@@ -370,7 +410,7 @@ def _run_pipeline_inner(
             typer.echo("[pipeline] eval passed, creating PR", err=True)
             break
 
-        # Eval failed — retry with feedback
+        # Eval failed — decide whether to resume or fresh dispatch on retry
         if attempt >= max_retries:
             typer.echo(
                 f"[pipeline] eval failed after {attempt + 1} attempt(s): {eval_result.error}",
@@ -384,11 +424,29 @@ def _run_pipeline_inner(
                 branch=branch,
             )
 
+        # Determine resume eligibility for next retry
+        ctx_pct = worker_result.context_usage_pct
+        if ctx_pct is not None and ctx_pct < 0.6 and worker_result.session_id is not None:
+            resume_session_id = worker_result.session_id
+            typer.echo(
+                f"[pipeline] resuming session {resume_session_id} (context {ctx_pct:.0%})",
+                err=True,
+            )
+        else:
+            resume_session_id = None
+            if ctx_pct is not None and ctx_pct >= 0.6:
+                typer.echo(
+                    f"[pipeline] context usage {ctx_pct:.0%} exceeds threshold, "
+                    f"using fresh dispatch",
+                    err=True,
+                )
+
         logger.emit(
             "retry.scheduled",
             attempt=attempt + 1,
             reason="eval_failed",
             max_retries=max_retries,
+            resume_session_id=resume_session_id,
         )
         attempt += 1
         feedback = eval_result.feedback_prompt
@@ -701,6 +759,19 @@ def _run_review_fix_retry(
         raise ValueError(msg)
     feedback = format_review_feedback(review_results)
 
+    # Find session_id from the last successful WorkerResult for resume
+    fix_session_id: str | None = None
+    for stage in reversed(stages):
+        if isinstance(stage, WorkerResult) and stage.success:
+            fix_session_id = stage.session_id
+            break
+
+    if fix_session_id is not None:
+        typer.echo(
+            f"[pipeline] review fix-retry resuming session {fix_session_id}",
+            err=True,
+        )
+
     worker_result = dispatch_worker(
         change_name,
         worktree_path,
@@ -712,8 +783,31 @@ def _run_review_fix_retry(
         max_budget_usd=max_budget_usd,
         permission_mode=permission_mode,
         verbose=verbose,
+        session_id=fix_session_id,
     )
     stages.append(worker_result)
+
+    if not worker_result.success:
+        # Resume fallback: if we tried to resume and it failed, try fresh
+        if fix_session_id is not None:
+            typer.echo(
+                "[pipeline] review fix session resume failed, retrying fresh",
+                err=True,
+            )
+            worker_result = dispatch_worker(
+                change_name,
+                worktree_path,
+                base_branch=_get_worktree_base(repo),
+                max_turns=max_turns,
+                feedback=feedback,
+                model=model,
+                effort=effort,
+                max_budget_usd=max_budget_usd,
+                permission_mode=permission_mode,
+                verbose=verbose,
+                session_id=None,
+            )
+            stages.append(worker_result)
 
     if not worker_result.success:
         typer.echo(f"[pipeline] review fix worker failed: {worker_result.error}", err=True)

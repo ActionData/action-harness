@@ -495,6 +495,34 @@ class TestDispatchWorkerPromptMode:
         user_prompt = get_claude_prompt(mock)
         assert "opsx:apply" in user_prompt
 
+    def test_prompt_with_feedback_appends(self, tmp_path: Path) -> None:
+        """In prompt mode with feedback (retry), feedback is appended to prompt."""
+        mock = make_mock_subprocess(claude_stdout=_OK_JSON)
+        with patch("action_harness.worker.subprocess.run", mock):
+            dispatch_worker(
+                "prompt-fix-bug", tmp_path, prompt="Fix bug", feedback="Tests still fail"
+            )
+
+        user_prompt = get_claude_prompt(mock)
+        assert "Fix bug" in user_prompt
+        assert "Tests still fail" in user_prompt
+        # Prompt comes before feedback
+        assert user_prompt.index("Fix bug") < user_prompt.index("Tests still fail")
+
+    def test_prompt_with_progress_file(self, tmp_path: Path) -> None:
+        """In prompt mode with progress file, progress is prepended to prompt."""
+        progress_content = "# Harness Progress\n\n## Attempt 1\n"
+        (tmp_path / PROGRESS_FILENAME).write_text(progress_content)
+
+        mock = make_mock_subprocess(claude_stdout=_OK_JSON)
+        with patch("action_harness.worker.subprocess.run", mock):
+            dispatch_worker("prompt-fix-bug", tmp_path, prompt="Fix bug")
+
+        user_prompt = get_claude_prompt(mock)
+        assert progress_content in user_prompt
+        assert "Fix bug" in user_prompt
+        assert user_prompt.index("Harness Progress") < user_prompt.index("Fix bug")
+
 
 class TestProgressFileInjection:
     """Worker prepends .harness-progress.md contents to the user prompt."""

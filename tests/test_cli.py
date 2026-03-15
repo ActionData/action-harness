@@ -303,6 +303,22 @@ class TestValidateInputsPrompt:
         with patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"):
             validate_inputs_prompt(tmp_path)
 
+    def test_missing_claude_cli_prompt_mode(self, fake_repo: Path) -> None:
+        def selective_which(cmd: str) -> str | None:
+            return None if cmd == "claude" else "/usr/bin/mock"
+
+        with patch("action_harness.cli.shutil.which", side_effect=selective_which):
+            with pytest.raises(ValidationError, match="claude CLI not found"):
+                validate_inputs_prompt(fake_repo)
+
+    def test_missing_gh_cli_prompt_mode(self, fake_repo: Path) -> None:
+        def selective_which(cmd: str) -> str | None:
+            return None if cmd == "gh" else "/usr/bin/mock"
+
+        with patch("action_harness.cli.shutil.which", side_effect=selective_which):
+            with pytest.raises(ValidationError, match="gh CLI not found"):
+                validate_inputs_prompt(fake_repo)
+
 
 class TestPromptModeCli:
     """Test --prompt flag behavior in the CLI."""
@@ -389,6 +405,16 @@ class TestPromptModeCli:
         result = runner.invoke(app, ["run", "--help"])
         assert result.exit_code == 0
         assert "--prompt" in result.output
+
+    def test_empty_prompt_fails(self) -> None:
+        result = runner.invoke(app, ["run", "--prompt", "", "--repo", "/some/path"])
+        assert result.exit_code == 1
+        assert "--prompt must not be empty" in result.output
+
+    def test_whitespace_only_prompt_fails(self) -> None:
+        result = runner.invoke(app, ["run", "--prompt", "   ", "--repo", "/some/path"])
+        assert result.exit_code == 1
+        assert "--prompt must not be empty" in result.output
 
 
 class TestCleanCommand:

@@ -46,6 +46,21 @@ def main(
     """
 
 
+def _validate_common(repo: Path) -> None:
+    """Shared validation: repo exists, is git repo, required CLIs in PATH."""
+    if not repo.exists():
+        raise ValidationError(f"Repository path does not exist: {repo}")
+
+    if not (repo / ".git").exists():
+        raise ValidationError(f"Not a git repository: {repo}")
+
+    if shutil.which("claude") is None:
+        raise ValidationError("claude CLI not found in PATH")
+
+    if shutil.which("gh") is None:
+        raise ValidationError("gh CLI not found in PATH")
+
+
 def validate_inputs(change: str, repo: Path) -> None:
     """Validate CLI inputs before starting the pipeline.
 
@@ -55,11 +70,7 @@ def validate_inputs(change: str, repo: Path) -> None:
     - claude CLI is in PATH
     - gh CLI is in PATH
     """
-    if not repo.exists():
-        raise ValidationError(f"Repository path does not exist: {repo}")
-
-    if not (repo / ".git").exists():
-        raise ValidationError(f"Not a git repository: {repo}")
+    _validate_common(repo)
 
     changes_root = repo / "openspec" / "changes"
     change_dir = (changes_root / change).resolve()
@@ -67,12 +78,6 @@ def validate_inputs(change: str, repo: Path) -> None:
         raise ValidationError(f"Invalid change name (path traversal): {change}")
     if not change_dir.exists():
         raise ValidationError(f"Change directory not found: {change_dir}")
-
-    if shutil.which("claude") is None:
-        raise ValidationError("claude CLI not found in PATH")
-
-    if shutil.which("gh") is None:
-        raise ValidationError("gh CLI not found in PATH")
 
 
 def validate_inputs_prompt(repo: Path) -> None:
@@ -83,17 +88,7 @@ def validate_inputs_prompt(repo: Path) -> None:
     - claude CLI is in PATH
     - gh CLI is in PATH
     """
-    if not repo.exists():
-        raise ValidationError(f"Repository path does not exist: {repo}")
-
-    if not (repo / ".git").exists():
-        raise ValidationError(f"Not a git repository: {repo}")
-
-    if shutil.which("claude") is None:
-        raise ValidationError("claude CLI not found in PATH")
-
-    if shutil.which("gh") is None:
-        raise ValidationError("gh CLI not found in PATH")
+    _validate_common(repo)
 
 
 def _resolve_harness_home(harness_home: Path | None) -> Path:
@@ -190,6 +185,10 @@ def run(
 
     if change is None and prompt is None:
         typer.echo("Error: Specify either --change or --prompt", err=True)
+        raise typer.Exit(code=1)
+
+    if prompt is not None and not prompt.strip():
+        typer.echo("Error: --prompt must not be empty", err=True)
         raise typer.Exit(code=1)
 
     if wait_for_ci and not auto_merge:

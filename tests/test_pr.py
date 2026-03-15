@@ -502,3 +502,49 @@ class TestCreatePrPromptMode:
         body_idx = cmd.index("--body")
         body = cmd[body_idx + 1]
         assert multi_prompt in body
+
+
+class TestBuildPrBodyPromptMode:
+    """Tests for _build_pr_body with prompt parameter."""
+
+    def _mock_git_calls(self) -> MagicMock:
+        mock = MagicMock()
+
+        def side_effect(cmd: list[str], **kwargs: object) -> MagicMock:
+            result = MagicMock()
+            result.returncode = 0
+            result.stdout = ""
+            result.stderr = ""
+            return result
+
+        mock.side_effect = side_effect
+        return mock
+
+    def test_prompt_mode_uses_task_header(self, tmp_path: Path) -> None:
+        mock = self._mock_git_calls()
+        with patch("action_harness.pr.subprocess.run", mock):
+            body = _build_pr_body(
+                "prompt-fix", _success_eval(), tmp_path, "main", prompt="Fix the bug"
+            )
+        assert "## Task" in body
+        assert "## Change" not in body
+
+    def test_prompt_mode_skips_background(self, tmp_path: Path) -> None:
+        # Create a proposal that would normally produce a Background section
+        change_dir = tmp_path / "openspec" / "changes" / "prompt-fix"
+        change_dir.mkdir(parents=True)
+        (change_dir / "proposal.md").write_text("## Why\n\nBecause reasons.\n")
+        mock = self._mock_git_calls()
+        with patch("action_harness.pr.subprocess.run", mock):
+            body = _build_pr_body(
+                "prompt-fix", _success_eval(), tmp_path, "main", prompt="Fix the bug"
+            )
+        assert "### Background" not in body
+        assert "Because reasons" not in body
+
+    def test_change_mode_uses_change_header(self, tmp_path: Path) -> None:
+        mock = self._mock_git_calls()
+        with patch("action_harness.pr.subprocess.run", mock):
+            body = _build_pr_body("my-change", _success_eval(), tmp_path, "main")
+        assert "## Change: my-change" in body
+        assert "## Task" not in body

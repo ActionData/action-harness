@@ -52,6 +52,12 @@ Do NOT modify any files. You are a read-only reviewer.
     "quality-reviewer": """\
 You are a code quality specialist reviewing a pull request.
 
+Before reviewing, read the repo's CLAUDE.md (if it exists) and check linter
+configuration in pyproject.toml or equivalent. Ground every finding in a
+specific rule from these files or an observable existing pattern in the
+codebase. Do not raise findings based on personal preference — cite the rule
+you are enforcing.
+
 Your job is to check:
 - Correctness patterns and defensive coding
 - Convention adherence and consistency with the codebase
@@ -317,40 +323,37 @@ def dispatch_review_agents(
 def triage_findings(results: list[ReviewResult]) -> bool:
     """Determine if review findings require a fix retry.
 
-    Returns True if any finding has severity "critical" or "high".
+    Returns True if any findings exist, regardless of severity.
     Returns False otherwise (including when all results failed).
     """
-    for result in results:
-        for finding in result.findings:
-            if finding.severity in ("critical", "high"):
-                return True
-    return False
+    return any(r.findings for r in results)
 
 
 def format_review_feedback(results: list[ReviewResult]) -> str:
-    """Format high/critical review findings as structured markdown feedback.
+    """Format all review findings as structured markdown feedback.
 
     Used as the feedback string when re-dispatching the code worker.
+    Groups findings by agent with severity/file/line/description for each.
     """
     lines = ["## Review Agent Findings", ""]
 
     has_findings = False
     for result in results:
+        if not result.findings:
+            continue
+        has_findings = True
+        lines.append(f"### {result.agent_name}")
         for finding in result.findings:
-            if finding.severity in ("critical", "high"):
-                has_findings = True
-                location = finding.file
-                if finding.line is not None:
-                    location += f":{finding.line}"
-                lines.append(
-                    f"### [{finding.severity.upper()}] {finding.title} (agent: {finding.agent})"
-                )
-                lines.append(f"- **File:** {location}")
-                lines.append(f"- **Description:** {finding.description}")
-                lines.append("")
+            location = finding.file
+            if finding.line is not None:
+                location += f":{finding.line}"
+            lines.append(f"#### [{finding.severity.upper()}] {finding.title}")
+            lines.append(f"- **File:** {location}")
+            lines.append(f"- **Description:** {finding.description}")
+            lines.append("")
 
     if not has_findings:
-        return "## Review Agent Findings\n\nNo high or critical findings."
+        return "## Review Agent Findings\n\nNo findings."
 
-    lines.append("Fix the high/critical issues above and re-run eval to verify.")
+    lines.append("Fix the issues above and re-run eval to verify.")
     return "\n".join(lines)

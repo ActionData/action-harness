@@ -317,9 +317,12 @@ class TestPipelineFailure:
         )
         pass_eval = EvalResult(success=True, stage="eval", commands_run=4, commands_passed=4)
 
+        # Eval sequence: initial eval fails, pre-work eval fails, retry eval passes
         with (
             patch("action_harness.worker.subprocess.run", mock),
-            patch("action_harness.pipeline.run_eval", side_effect=[fail_eval, pass_eval]),
+            patch(
+                "action_harness.pipeline.run_eval", side_effect=[fail_eval, fail_eval, pass_eval]
+            ),
             patch("action_harness.pr.subprocess.run", mock),
             patch(
                 "action_harness.pipeline.dispatch_openspec_review",
@@ -492,9 +495,12 @@ class TestManifestPersistence:
         )
         pass_eval = EvalResult(success=True, stage="eval", commands_run=4, commands_passed=4)
 
+        # Eval sequence: initial eval fails, pre-work eval fails, retry eval passes
         with (
             patch("action_harness.worker.subprocess.run", mock),
-            patch("action_harness.pipeline.run_eval", side_effect=[fail_eval, pass_eval]),
+            patch(
+                "action_harness.pipeline.run_eval", side_effect=[fail_eval, fail_eval, pass_eval]
+            ),
             patch("action_harness.pr.subprocess.run", mock),
             patch(
                 "action_harness.pipeline.dispatch_openspec_review",

@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from action_harness.models import WorkerResult
+from action_harness.progress import PROGRESS_FILENAME
 from action_harness.worker import build_system_prompt, count_commits_ahead, dispatch_worker
 
 
@@ -363,3 +364,90 @@ class TestDispatchWorker:
             result = dispatch_worker("t", Path("/fake"))
         # 0 / 500000 = 0.0
         assert result.context_usage_pct == pytest.approx(0.0)
+
+
+class TestProgressFileInjection:
+    """Worker prepends .harness-progress.md contents to the user prompt."""
+
+    def _mock_subprocess(
+        self,
+        commits_ahead: int = 1,
+    ) -> MagicMock:
+        mock = MagicMock()
+
+        def side_effect(cmd: list[str], **kwargs: object) -> MagicMock:
+            result = MagicMock()
+            if cmd[0] == "claude":
+                result.returncode = 0
+                result.stdout = json.dumps({"cost_usd": 0.01, "result": "ok"})
+                result.stderr = ""
+            elif "rev-list" in cmd:
+                result.returncode = 0
+                result.stdout = f"{commits_ahead}\n"
+                result.stderr = ""
+            else:
+                result.returncode = 0
+                result.stdout = ""
+                result.stderr = ""
+            return result
+
+        mock.side_effect = side_effect
+        return mock
+
+    def _get_claude_prompt(self, mock: MagicMock) -> str:
+        for call in mock.call_args_list:
+            cmd = call[0][0]
+            if cmd[0] == "claude":
+                idx = cmd.index("-p")
+                return cmd[idx + 1]
+        raise AssertionError("claude CLI was never called")
+
+    def test_progress_prepended_when_file_exists(self, tmp_path: Path) -> None:
+        progress_content = "# Harness Progress\n\n## Attempt 1\n- **Commits**: 3\n"
+        (tmp_path / PROGRESS_FILENAME).write_text(progress_content)
+
+        mock = self._mock_subprocess()
+        with patch("action_harness.worker.subprocess.run", mock):
+            dispatch_worker("t", tmp_path)
+
+        prompt = self._get_claude_prompt(mock)
+        assert prompt.startswith(progress_content)
+        assert "opsx:apply" in prompt
+
+    def test_prompt_unchanged_when_no_progress(self, tmp_path: Path) -> None:
+        mock = self._mock_subprocess()
+        with patch("action_harness.worker.subprocess.run", mock):
+            dispatch_worker("t", tmp_path)
+
+        prompt = self._get_claude_prompt(mock)
+        assert prompt.startswith("Implement the OpenSpec change")
+        assert PROGRESS_FILENAME not in prompt
+
+    def test_progress_before_task_prompt(self, tmp_path: Path) -> None:
+        progress_content = "# Harness Progress\n\n## Attempt 1\n"
+        (tmp_path / PROGRESS_FILENAME).write_text(progress_content)
+
+        mock = self._mock_subprocess()
+        with patch("action_harness.worker.subprocess.run", mock):
+            dispatch_worker("t", tmp_path, feedback="fix the tests")
+
+        prompt = self._get_claude_prompt(mock)
+        progress_pos = prompt.index("Harness Progress")
+        task_pos = prompt.index("opsx:apply")
+        assert progress_pos < task_pos
+
+    def test_progress_prepended_in_resume_mode(self, tmp_path: Path) -> None:
+        progress_content = "# Harness Progress\n\n## Attempt 1\n"
+        (tmp_path / PROGRESS_FILENAME).write_text(progress_content)
+
+        mock = self._mock_subprocess()
+        with patch("action_harness.worker.subprocess.run", mock):
+            dispatch_worker("t", tmp_path, session_id="sess_abc", feedback="fix the tests")
+
+        prompt = self._get_claude_prompt(mock)
+        assert prompt.startswith(progress_content)
+        assert "fix the tests" in prompt
+        # Progress appears before feedback
+        progress_pos = prompt.index("Harness Progress")
+        feedback_pos = prompt.index("fix the tests")
+        assert progress_pos < feedback_pos

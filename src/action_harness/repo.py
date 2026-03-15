@@ -9,6 +9,24 @@ import typer
 from action_harness.models import ValidationError
 
 
+def _detect_gh_protocol() -> str:
+    """Detect whether to use HTTPS or SSH for GitHub clones.
+
+    Runs `gh auth token` to check if HTTPS auth is configured.
+    Returns "https" if a token exists, "ssh" if not.
+    Defaults to "https" if `gh` is not available.
+    """
+    try:
+        result = subprocess.run(
+            ["gh", "auth", "token"],
+            capture_output=True,
+            text=True,
+        )
+        return "https" if result.returncode == 0 else "ssh"
+    except FileNotFoundError:
+        return "https"
+
+
 def _parse_repo_ref(repo_arg: str) -> tuple[str, str, str]:
     """Parse a repo reference into (owner, repo_name, clone_url).
 
@@ -36,6 +54,28 @@ def _parse_repo_ref(repo_arg: str) -> tuple[str, str, str]:
         return owner, repo_name, f"https://github.com/{owner}/{repo_name}.git"
 
     raise ValidationError(f"Cannot parse repo reference: {repo_arg}")
+
+
+def _is_shorthand(repo_arg: str) -> bool:
+    """Return True if repo_arg is GitHub shorthand (owner/repo)."""
+    return bool(re.match(r"^([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)$", repo_arg))
+
+
+def _https_to_ssh(https_url: str) -> str:
+    """Convert a GitHub HTTPS URL to its SSH equivalent.
+
+    https://github.com/owner/repo.git -> git@github.com:owner/repo.git
+    """
+    match = re.match(r"https?://github\.com/([^/]+)/([^/]+?)(?:\.git)?/?$", https_url)
+    if not match:
+        return https_url
+    owner, repo_name = match.group(1), match.group(2)
+    return f"git@github.com:{owner}/{repo_name}.git"
+
+
+def _is_https_github_url(url: str) -> bool:
+    """Return True if url is an HTTPS GitHub URL."""
+    return bool(re.match(r"https?://github\.com/", url))
 
 
 def _get_repo_dir(owner: str, repo_name: str, clone_url: str, harness_home: Path) -> Path:
@@ -83,8 +123,36 @@ def _clone_or_fetch(clone_url: str, repo_dir: Path, verbose: bool) -> None:
             text=True,
         )
         if result.returncode != 0:
-            raise ValidationError(f"Failed to clone {clone_url}: {result.stderr.strip()}")
-        if verbose:
+            # Fallback: if HTTPS GitHub URL failed, try SSH
+            if _is_https_github_url(clone_url):
+                ssh_url = _https_to_ssh(clone_url)
+                typer.echo(
+                    f"[repo] HTTPS clone failed, falling back to SSH: {ssh_url}",
+                    err=True,
+                )
+                ssh_result = subprocess.run(
+                    ["git", "clone", ssh_url, str(repo_dir)],
+                    capture_output=True,
+                    text=True,
+                )
+                if ssh_result.returncode != 0:
+                    raise ValidationError(
+                        f"Failed to clone {clone_url} (HTTPS: {result.stderr.strip()}) "
+                        f"and {ssh_url} (SSH: {ssh_result.stderr.strip()})"
+                    )
+                # Update remote URL to SSH so collision detection works next run
+                subprocess.run(
+                    ["git", "-C", str(repo_dir), "remote", "set-url", "origin", ssh_url],
+                    capture_output=True,
+                    text=True,
+                )
+                if verbose:
+                    typer.echo("  clone complete (SSH fallback)", err=True)
+            else:
+                raise ValidationError(
+                    f"Failed to clone {clone_url}: {result.stderr.strip()}"
+                )
+        elif verbose:
             typer.echo("  clone complete", err=True)
     else:
         typer.echo(f"[repo] fetching origin in {repo_dir}", err=True)
@@ -116,6 +184,13 @@ def resolve_repo(repo_arg: str, harness_home: Path, verbose: bool = False) -> tu
 
     # Remote reference — parse, locate/clone, return
     owner, repo_name, clone_url = _parse_repo_ref(repo_arg)
+
+    # For shorthand input, detect auth protocol and swap URL if needed
+    if _is_shorthand(repo_arg):
+        protocol = _detect_gh_protocol()
+        if protocol == "ssh":
+            clone_url = _https_to_ssh(clone_url)
+
     repo_dir = _get_repo_dir(owner, repo_name, clone_url, harness_home)
 
     # Ensure repos directory exists

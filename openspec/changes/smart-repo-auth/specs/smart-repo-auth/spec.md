@@ -27,7 +27,7 @@ When an HTTPS clone fails, the harness SHALL retry with the SSH equivalent URL b
 - **THEN** the harness reports the SSH error (last attempt) as the failure message
 
 ### Requirement: Explicit SSH/HTTPS URLs bypass detection
-When a full SSH or HTTPS URL is provided (not shorthand), the harness SHALL use it directly without protocol detection or fallback.
+When a full SSH or HTTPS URL is provided (not shorthand), the harness SHALL use it directly without protocol detection. SSH fallback still applies to explicit HTTPS URLs on clone failure.
 
 #### Scenario: Explicit SSH URL
 - **WHEN** `--repo git@github.com:user/repo.git` is provided
@@ -35,4 +35,5 @@ When a full SSH or HTTPS URL is provided (not shorthand), the harness SHALL use 
 
 #### Scenario: Explicit HTTPS URL
 - **WHEN** `--repo https://github.com/user/repo` is provided
-- **THEN** the HTTPS URL is used directly, no SSH fallback
+- **THEN** the HTTPS URL is used directly, no protocol detection
+- **BUT** if the HTTPS clone fails, SSH fallback still applies

@@ -329,7 +329,8 @@ class TestPipelineWithReviewAgents:
         """After 2 fix-retry rounds with persistent findings, post comment and continue."""
         mock = _make_claude_mock(commits=True)
 
-        # Review agents always return findings (never clean)
+        # Review agents always return findings (never clean) — including
+        # the verification review that runs after the loop.
         with (
             patch("action_harness.worker.subprocess.run", mock),
             patch("action_harness.pipeline.run_eval", return_value=_passing_eval()),
@@ -360,6 +361,10 @@ class TestPipelineWithReviewAgents:
         worker_stages = [s for s in manifest.stages if isinstance(s, WorkerResult)]
         assert len(worker_stages) == 3  # initial + 2 fix-retries
 
+        # 3 review rounds: round 1, round 2, + verification review
+        review_stages = [s for s in manifest.stages if isinstance(s, ReviewResult)]
+        assert len(review_stages) == 9  # 3 agents * 3 review dispatches
+
         # Verify a "Remaining findings" comment was posted
         gh_calls = [
             call
@@ -372,6 +377,62 @@ class TestPipelineWithReviewAgents:
             if "Remaining findings" in call[0][0][call[0][0].index("--body") + 1]
         ]
         assert len(remaining_calls) >= 1
+
+    def test_verification_review_clears_findings(self, test_repo: Path) -> None:
+        """When fix-retry resolves all findings, verification review prevents stale comment."""
+        mock = _make_claude_mock(commits=True)
+
+        # Rounds 1 and 2 return findings; verification review returns clean
+        review_call_count = {"n": 0}
+
+        def review_side_effect(**kwargs: object) -> list[ReviewResult]:
+            review_call_count["n"] += 1
+            if review_call_count["n"] <= 2:
+                return _high_severity_review_results()
+            return _no_findings_review_results()  # verification review
+
+        with (
+            patch("action_harness.worker.subprocess.run", mock),
+            patch("action_harness.pipeline.run_eval", return_value=_passing_eval()),
+            patch("action_harness.pr.subprocess.run", mock),
+            patch("action_harness.pipeline.subprocess.run", mock) as mock_subprocess,
+            patch(
+                "action_harness.pipeline.dispatch_review_agents",
+                side_effect=review_side_effect,
+            ),
+            patch(
+                "action_harness.pipeline.dispatch_openspec_review",
+                return_value=('{"result": "{}"}', 1.0),
+            ),
+            patch(
+                "action_harness.pipeline.parse_review_result",
+                return_value=_approved_review_result(),
+            ),
+            patch(
+                "action_harness.pipeline.push_archive_if_needed",
+                return_value=(False, None),
+            ),
+        ):
+            pr_result, manifest = run_pipeline("test-change", test_repo, max_retries=3)
+
+        assert pr_result.success is True
+
+        # Still 3 worker dispatches (initial + 2 fix-retries)
+        worker_stages = [s for s in manifest.stages if isinstance(s, WorkerResult)]
+        assert len(worker_stages) == 3
+
+        # No "Remaining findings" comment should be posted since verification was clean
+        gh_calls = [
+            call
+            for call in mock_subprocess.call_args_list
+            if call[0][0][0] == "gh" and "comment" in call[0][0]
+        ]
+        remaining_calls = [
+            call
+            for call in gh_calls
+            if "Remaining findings" in call[0][0][call[0][0].index("--body") + 1]
+        ]
+        assert len(remaining_calls) == 0
 
     def test_review_costs_included_in_manifest(self, test_repo: Path) -> None:
         """ReviewResult costs are summed in manifest total_cost_usd."""

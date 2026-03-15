@@ -447,6 +447,7 @@ def _run_pipeline_inner(
     if not skip_review:
         latest_review_results: list[ReviewResult] = []
         findings_remain = False
+        last_fix_succeeded = False
 
         for review_round in range(2):
             typer.echo(
@@ -470,7 +471,7 @@ def _run_pipeline_inner(
                 break
 
             findings_remain = True
-            fix_succeeded = _run_review_fix_retry(
+            last_fix_succeeded = _run_review_fix_retry(
                 change_name,
                 pr_result,
                 worktree_path,
@@ -486,9 +487,29 @@ def _run_pipeline_inner(
                 logger=logger,
                 review_results=latest_review_results,
             )
-            if not fix_succeeded:
+            if not last_fix_succeeded:
                 typer.echo("[pipeline] review fix-retry failed", err=True)
                 break
+
+        # After the loop, if findings were detected but the last fix-retry
+        # succeeded, run a final verification review to check whether the
+        # fix actually resolved them.  Without this, we would post stale
+        # findings from the pre-fix review.
+        if findings_remain and last_fix_succeeded:
+            typer.echo("[pipeline] running verification review", err=True)
+            still_needs_fix, latest_review_results = _run_review_agents(
+                pr_result,
+                worktree_path,
+                max_turns,
+                model,
+                effort,
+                max_budget_usd,
+                permission_mode,
+                verbose,
+                stages,
+            )
+            if not still_needs_fix:
+                findings_remain = False
 
         if findings_remain and pr_result.pr_url:
             _post_review_comment(

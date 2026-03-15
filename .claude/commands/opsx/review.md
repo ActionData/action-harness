@@ -37,6 +37,10 @@ Review OpenSpec artifacts for quality, completeness, and agent-implementability.
 
 3. **Launch spec-writer agent**
 
+   **IMPORTANT: Always run review agents in foreground (do NOT use `run_in_background`).** The review results are needed immediately to present to the user. Background agents complete but their findings are difficult to extract from transcripts, leading to wasted retries.
+
+   When reviewing multiple changes, launch them in parallel using multiple Agent tool calls in a single message (foreground parallel, not background).
+
    Launch a spec-writer agent with subagent_type "spec-writer" to perform the review. The agent should:
 
    - Read CLAUDE.md for project conventions

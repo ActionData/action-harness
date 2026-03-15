@@ -1,7 +1,7 @@
 ## 1. Prompt Slug Utility [no dependencies]
 
-- [ ] 1.1 Add a `slugify_prompt(prompt: str, max_length: int = 50) -> str` function (in a utils module or worker.py) that converts a prompt to a branch-safe slug: take the first line only, lowercase, non-alphanumeric chars replaced with hyphens, consecutive hyphens collapsed, leading/trailing hyphens stripped, truncated to `max_length`
-- [ ] 1.2 Add tests for `slugify_prompt`: basic text, special characters, long prompt truncation, unicode, empty string, multiline prompt (uses first line only)
+- [x] 1.1 Add a `slugify_prompt(prompt: str, max_length: int = 50) -> str` function (in a utils module or worker.py) that converts a prompt to a branch-safe slug: take the first line only, lowercase, non-alphanumeric chars replaced with hyphens, consecutive hyphens collapsed, leading/trailing hyphens stripped, truncated to `max_length`
+- [x] 1.2 Add tests for `slugify_prompt`: basic text, special characters, long prompt truncation, unicode, empty string, multiline prompt (uses first line only)
 
 ## 2. Worker Prompt Construction [no dependencies]
 

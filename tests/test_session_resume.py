@@ -9,6 +9,7 @@ from action_harness.event_log import EventLogger
 from action_harness.models import (
     EvalResult,
     OpenSpecReviewResult,
+    PrResult,
     ReviewFinding,
     ReviewResult,
     StageResultUnion,
@@ -70,12 +71,12 @@ def dummy_logger(tmp_path: Path) -> EventLogger:
 
 
 def _run_inner_with_mocks(
-    mock_dispatch: object,
-    mock_eval: object,
+    mock_dispatch: MagicMock,
+    mock_eval: MagicMock,
     stages: list[StageResultUnion],
     dummy_logger: EventLogger,
     max_retries: int = 3,
-) -> object:
+) -> PrResult:
     """Helper to call _run_pipeline_inner with all required mocks."""
     wt_result = WorktreeResult(success=True, worktree_path=Path("/fake/wt"), branch="harness/test")
     if not stages:

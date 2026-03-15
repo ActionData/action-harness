@@ -760,10 +760,19 @@ def _run_review_fix_retry(
     feedback = format_review_feedback(review_results)
 
     # Find session_id from the last successful WorkerResult for resume
+    # Also check context_usage_pct — skip resume if context is exhausted
     fix_session_id: str | None = None
     for stage in reversed(stages):
         if isinstance(stage, WorkerResult) and stage.success:
-            fix_session_id = stage.session_id
+            ctx_pct = stage.context_usage_pct
+            if ctx_pct is not None and ctx_pct >= 0.6:
+                typer.echo(
+                    f"[pipeline] review fix-retry: context usage {ctx_pct:.0%} "
+                    f"exceeds threshold, using fresh dispatch",
+                    err=True,
+                )
+            else:
+                fix_session_id = stage.session_id
             break
 
     if fix_session_id is not None:

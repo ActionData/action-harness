@@ -84,9 +84,8 @@ def dispatch_worker(
     else:
         typer.echo(f"[worker] dispatching for '{change_name}'", err=True)
 
-    if session_id is not None:
+    if session_id is not None and feedback is not None:
         # Resume mode: feedback is the user prompt, no system prompt
-        assert feedback is not None  # validated above, but help mypy
         user_prompt: str = feedback
         cmd = [
             "claude",
@@ -156,14 +155,21 @@ def dispatch_worker(
 
             # Compute context usage percentage from token counts
             usage = output_data.get("usage", {})
-            model_info: dict[str, int | float] = next(
-                iter(output_data.get("modelUsage", {}).values()), {}
+            model_usage = output_data.get("modelUsage", {})
+            # model_info comes from json.loads output — values are JSON primitives
+            model_info: dict[str, int] = (
+                next(iter(model_usage.values()), {}) if model_usage else {}
             )
-            context_window = model_info.get("contextWindow", 1_000_000)
-            input_tokens = usage.get("input_tokens", 0)
-            output_tokens = usage.get("output_tokens", 0)
+            context_window = int(model_info.get("contextWindow", 1_000_000))
+            input_tokens = int(usage.get("input_tokens", 0))
+            output_tokens = int(usage.get("output_tokens", 0))
             if context_window > 0:
                 context_usage_pct = (input_tokens + output_tokens) / context_window
+            else:
+                typer.echo(
+                    "[worker] warning: contextWindow is 0, cannot compute context usage",
+                    err=True,
+                )
         except json.JSONDecodeError:
             worker_output = result.stdout[:500]
 

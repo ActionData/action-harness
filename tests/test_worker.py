@@ -331,3 +331,35 @@ class TestDispatchWorker:
             result = dispatch_worker("t", Path("/fake"))
         assert result.success is False
         assert result.session_id == "sess_nocommit"
+
+    def test_context_usage_without_model_usage(self) -> None:
+        """When modelUsage is missing, context_window defaults to 1M."""
+        json_output = json.dumps(
+            {
+                "session_id": "sess_x",
+                "cost_usd": 0.01,
+                "result": "ok",
+                "usage": {"input_tokens": 100000, "output_tokens": 50000},
+            }
+        )
+        mock = self._mock_subprocess(claude_stdout=json_output)
+        with patch("action_harness.worker.subprocess.run", mock):
+            result = dispatch_worker("t", Path("/fake"))
+        # 150000 / 1_000_000 = 0.15
+        assert result.context_usage_pct == pytest.approx(0.15)
+
+    def test_context_usage_without_usage_key(self) -> None:
+        """When usage key is missing, tokens default to 0."""
+        json_output = json.dumps(
+            {
+                "session_id": "sess_x",
+                "cost_usd": 0.01,
+                "result": "ok",
+                "modelUsage": {"model": {"contextWindow": 500000}},
+            }
+        )
+        mock = self._mock_subprocess(claude_stdout=json_output)
+        with patch("action_harness.worker.subprocess.run", mock):
+            result = dispatch_worker("t", Path("/fake"))
+        # 0 / 500000 = 0.0
+        assert result.context_usage_pct == pytest.approx(0.0)

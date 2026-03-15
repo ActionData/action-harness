@@ -41,11 +41,25 @@ def read_issue(issue_number: int, repo_path: Path) -> IssueData:
         )
         raise ValidationError(f"Issue #{issue_number} not found")
 
-    data = json.loads(result.stdout)
+    try:
+        data = json.loads(result.stdout)
+    except (json.JSONDecodeError, ValueError) as e:
+        typer.echo(
+            f"[issue-intake] failed to parse gh output: {e}",
+            err=True,
+        )
+        raise ValidationError(f"Issue #{issue_number}: malformed response from gh") from e
+
+    try:
+        title = data["title"]
+        state = data["state"]
+    except KeyError as e:
+        raise ValidationError(f"Issue #{issue_number}: missing field {e} in gh response") from e
+
     issue = IssueData(
-        title=data["title"],
-        body=data.get("body", ""),
-        state=data["state"],
+        title=title,
+        body=data.get("body") or "",
+        state=state,
     )
 
     if issue.state == "CLOSED":
@@ -70,14 +84,14 @@ def detect_openspec_change(body: str, repo_path: Path) -> str | None:
     """Scan issue body for OpenSpec change references.
 
     Checks for patterns like ``openspec:change-name``, ``change: change-name``,
-    or ``openspec/changes/change-name``. Returns the change name if found and
-    the directory exists, None otherwise.
+    or ``openspec/changes/change-name``. For each pattern, checks all matches
+    (not just the first) against the filesystem. Returns the first change name
+    where the directory exists, None otherwise.
     """
     typer.echo("[issue-intake] scanning issue body for OpenSpec change references", err=True)
 
     for pattern in _CHANGE_PATTERNS:
-        match = pattern.search(body)
-        if match:
+        for match in pattern.finditer(body):
             name = match.group(1)
             change_dir = repo_path / "openspec" / "changes" / name
             if change_dir.is_dir():
@@ -96,12 +110,19 @@ def label_issue(issue_number: int, label: str, repo_path: Path, verbose: bool = 
     """Add a label to a GitHub issue. Best-effort — never raises."""
     typer.echo(f"[issue-intake] labeling issue #{issue_number} with '{label}'", err=True)
 
-    result = subprocess.run(
-        ["gh", "issue", "edit", str(issue_number), "--add-label", label],
-        cwd=repo_path,
-        capture_output=True,
-        text=True,
-    )
+    try:
+        result = subprocess.run(
+            ["gh", "issue", "edit", str(issue_number), "--add-label", label],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+        )
+    except (FileNotFoundError, OSError) as e:
+        typer.echo(
+            f"[issue-intake] warning: failed to label issue #{issue_number}: {e}",
+            err=True,
+        )
+        return
 
     if result.returncode != 0:
         typer.echo(
@@ -117,12 +138,19 @@ def comment_on_issue(issue_number: int, body: str, repo_path: Path, verbose: boo
     """Post a comment on a GitHub issue. Best-effort — never raises."""
     typer.echo(f"[issue-intake] commenting on issue #{issue_number}", err=True)
 
-    result = subprocess.run(
-        ["gh", "issue", "comment", str(issue_number), "--body", body],
-        cwd=repo_path,
-        capture_output=True,
-        text=True,
-    )
+    try:
+        result = subprocess.run(
+            ["gh", "issue", "comment", str(issue_number), "--body", body],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+        )
+    except (FileNotFoundError, OSError) as e:
+        typer.echo(
+            f"[issue-intake] warning: failed to comment on issue #{issue_number}: {e}",
+            err=True,
+        )
+        return
 
     if result.returncode != 0:
         typer.echo(

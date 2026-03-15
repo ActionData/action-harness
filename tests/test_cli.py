@@ -510,6 +510,46 @@ class TestIssueModeCli:
         assert "issue #42" in result.output
         assert "prompt" in result.output
 
+    def test_issue_not_found_exits_with_error(self, fake_repo: Path) -> None:
+        """--issue with a bad issue number exits cleanly with error."""
+        with (
+            patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"),
+            patch(
+                "action_harness.issue_intake.subprocess.run",
+                return_value=MagicMock(
+                    returncode=1,
+                    stdout="",
+                    stderr="not found",
+                ),
+            ),
+        ):
+            result = runner.invoke(
+                app,
+                ["run", "--issue", "999", "--repo", str(fake_repo)],
+            )
+        assert result.exit_code == 1
+        assert "Issue #999 not found" in result.output
+
+    def test_issue_closed_exits_with_error(self, fake_repo: Path) -> None:
+        """--issue with a closed issue exits cleanly with error."""
+        with (
+            patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"),
+            patch(
+                "action_harness.issue_intake.subprocess.run",
+                return_value=MagicMock(
+                    returncode=0,
+                    stdout='{"title": "Old", "body": "Done", "state": "CLOSED"}',
+                    stderr="",
+                ),
+            ),
+        ):
+            result = runner.invoke(
+                app,
+                ["run", "--issue", "42", "--repo", str(fake_repo)],
+            )
+        assert result.exit_code == 1
+        assert "already closed" in result.output
+
     def test_dry_run_with_issue_change_mode(self, fake_repo: Path) -> None:
         """--dry-run with --issue in change mode shows issue info."""
         change_dir = fake_repo / "openspec" / "changes" / "fix-auth"

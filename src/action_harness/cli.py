@@ -104,7 +104,8 @@ def _resolve_harness_home(harness_home: Path | None) -> Path:
 @app.command()
 def run(
     change: str | None = typer.Option(
-        None, help="OpenSpec change name to implement (mutually exclusive with --prompt)"
+        None,
+        help="OpenSpec change name to implement (mutually exclusive with --prompt and --issue)",
     ),
     prompt: str | None = typer.Option(
         None,

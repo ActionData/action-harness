@@ -55,6 +55,37 @@ class TestReadIssue:
             with pytest.raises(ValidationError, match="already closed"):
                 read_issue(42, tmp_path)
 
+    def test_null_body_treated_as_empty_string(self, tmp_path: Path) -> None:
+        """gh returns body=null for issues with no body."""
+        data = json.dumps({"title": "No body", "body": None, "state": "OPEN"})
+        mock = self._mock_gh(stdout=data)
+        with patch("action_harness.issue_intake.subprocess.run", mock):
+            issue = read_issue(42, tmp_path)
+        assert issue.body == ""
+
+    def test_malformed_json_raises_validation_error(self, tmp_path: Path) -> None:
+        """gh exits 0 but returns non-JSON output."""
+        mock = self._mock_gh(stdout="not json at all")
+        with patch("action_harness.issue_intake.subprocess.run", mock):
+            with pytest.raises(ValidationError, match="malformed response"):
+                read_issue(42, tmp_path)
+
+    def test_missing_title_key_raises_validation_error(self, tmp_path: Path) -> None:
+        """gh returns JSON missing the title field."""
+        data = json.dumps({"body": "Details", "state": "OPEN"})
+        mock = self._mock_gh(stdout=data)
+        with patch("action_harness.issue_intake.subprocess.run", mock):
+            with pytest.raises(ValidationError, match="missing field"):
+                read_issue(42, tmp_path)
+
+    def test_missing_state_key_raises_validation_error(self, tmp_path: Path) -> None:
+        """gh returns JSON missing the state field."""
+        data = json.dumps({"title": "Bug", "body": "Details"})
+        mock = self._mock_gh(stdout=data)
+        with patch("action_harness.issue_intake.subprocess.run", mock):
+            with pytest.raises(ValidationError, match="missing field"):
+                read_issue(42, tmp_path)
+
 
 class TestDetectOpenspecChange:
     """Tests for detect_openspec_change function."""
@@ -93,6 +124,19 @@ class TestDetectOpenspecChange:
         result = detect_openspec_change(body, tmp_path)
         assert result == "first"
 
+    def test_first_match_missing_falls_through_to_second(self, tmp_path: Path) -> None:
+        """If openspec:nonexistent dir is missing, still finds openspec:real."""
+        (tmp_path / "openspec" / "changes" / "real").mkdir(parents=True)
+        body = "See openspec:nonexistent and openspec:real"
+        result = detect_openspec_change(body, tmp_path)
+        assert result == "real"
+
+    def test_uppercase_change_name_not_matched(self, tmp_path: Path) -> None:
+        """Patterns only match lowercase change names (convention)."""
+        (tmp_path / "openspec" / "changes" / "Add-Feature").mkdir(parents=True)
+        result = detect_openspec_change("See openspec:Add-Feature", tmp_path)
+        assert result is None
+
 
 class TestLabelIssue:
     """Tests for label_issue function."""
@@ -123,6 +167,18 @@ class TestLabelIssue:
         captured = capsys.readouterr()
         assert "warning" in captured.err
 
+    def test_label_subprocess_error_is_non_fatal(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """FileNotFoundError from subprocess.run does not propagate."""
+        with patch(
+            "action_harness.issue_intake.subprocess.run",
+            side_effect=FileNotFoundError("gh not found"),
+        ):
+            label_issue(42, "harness:in-progress", tmp_path)
+        captured = capsys.readouterr()
+        assert "warning" in captured.err
+
 
 class TestCommentOnIssue:
     """Tests for comment_on_issue function."""
@@ -149,6 +205,18 @@ class TestCommentOnIssue:
         mock = self._mock_gh(returncode=1, stderr="permission denied")
         with patch("action_harness.issue_intake.subprocess.run", mock):
             # Should NOT raise
+            comment_on_issue(42, "PR created", tmp_path)
+        captured = capsys.readouterr()
+        assert "warning" in captured.err
+
+    def test_comment_subprocess_error_is_non_fatal(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """FileNotFoundError from subprocess.run does not propagate."""
+        with patch(
+            "action_harness.issue_intake.subprocess.run",
+            side_effect=FileNotFoundError("gh not found"),
+        ):
             comment_on_issue(42, "PR created", tmp_path)
         captured = capsys.readouterr()
         assert "warning" in captured.err

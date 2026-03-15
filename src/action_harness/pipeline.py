@@ -301,6 +301,12 @@ def _run_pipeline_inner(
     worktree_path = wt_result.worktree_path
     branch = wt_result.branch
 
+    # Label issue as in-progress (best-effort)
+    if issue_number is not None:
+        from action_harness.issue_intake import label_issue
+
+        label_issue(issue_number, "harness:in-progress", repo, verbose=verbose)
+
     # Stage 2+3: Worker dispatch + eval with retry loop
     attempt = 0
     feedback: str | None = None
@@ -548,6 +554,16 @@ def _run_pipeline_inner(
         pr_url=pr_result.pr_url,
         branch=pr_result.branch,
     )
+
+    # Label issue with PR-created status and comment with PR URL (best-effort)
+    if issue_number is not None:
+        from action_harness.issue_intake import comment_on_issue, label_issue
+
+        label_issue(issue_number, "harness:pr-created", repo, verbose=verbose)
+        if pr_result.pr_url:
+            comment_on_issue(
+                issue_number, f"PR created: {pr_result.pr_url}", repo, verbose=verbose
+            )
 
     # Stage 4.5: Protected paths check
     patterns = load_protected_patterns(repo)

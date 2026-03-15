@@ -29,8 +29,8 @@ Prerequisites: `unspecced-tasks` must be merged first. This change assumes `--ch
 
 ## 5. Pipeline Issue Labeling [depends: 2, 3]
 
-- [ ] 5.1 In `_run_pipeline_inner()`, when `issue_number` is set: call `label_issue(issue_number, "harness:in-progress", repo)` at pipeline start (after worktree creation). After `create_pr()` succeeds, call `label_issue(issue_number, "harness:pr-created", repo)` and `comment_on_issue(issue_number, f"PR created: {pr_result.pr_url}", repo)`.
-- [ ] 5.2 Add tests: verify `label_issue` called with `"harness:in-progress"` at pipeline start and `"harness:pr-created"` after PR creation (mock). Verify labeling failure doesn't fail pipeline (mock gh exit 1, pipeline still succeeds).
+- [x] 5.1 In `_run_pipeline_inner()`, when `issue_number` is set: call `label_issue(issue_number, "harness:in-progress", repo)` at pipeline start (after worktree creation). After `create_pr()` succeeds, call `label_issue(issue_number, "harness:pr-created", repo)` and `comment_on_issue(issue_number, f"PR created: {pr_result.pr_url}", repo)`.
+- [x] 5.2 Add tests: verify `label_issue` called with `"harness:in-progress"` at pipeline start and `"harness:pr-created"` after PR creation (mock). Verify labeling failure doesn't fail pipeline (mock gh exit 1, pipeline still succeeds).
 
 ## 6. Validation [depends: all]
 

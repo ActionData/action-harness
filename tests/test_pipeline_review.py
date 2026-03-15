@@ -365,7 +365,7 @@ class TestPipelineWithReviewAgents:
         review_stages = [s for s in manifest.stages if isinstance(s, ReviewResult)]
         assert len(review_stages) == 9  # 3 agents * 3 review dispatches
 
-        # Verify a "Remaining findings" comment was posted
+        # Verify a "Remaining findings" comment was posted with specific content
         gh_calls = [
             call
             for call in mock_subprocess.call_args_list
@@ -374,9 +374,77 @@ class TestPipelineWithReviewAgents:
         remaining_calls = [
             call
             for call in gh_calls
-            if "Remaining findings" in call[0][0][call[0][0].index("--body") + 1]
+            if "Remaining findings after" in call[0][0][call[0][0].index("--body") + 1]
         ]
         assert len(remaining_calls) >= 1
+        body = remaining_calls[0][0][0][remaining_calls[0][0][0].index("--body") + 1]
+        assert "fix-retry round(s)" in body
+        assert "Off-by-one error" in body
+        assert "bug-hunter" in body
+
+    def test_fix_retry_failure_breaks_loop(self, test_repo: Path) -> None:
+        """Fix-retry failure breaks loop; remaining findings are posted."""
+        mock = _make_claude_mock(commits=True)
+
+        # Make eval fail on the fix-retry attempt (second eval call)
+        eval_call_count = {"n": 0}
+
+        def eval_side_effect(*args: object, **kwargs: object) -> EvalResult:
+            eval_call_count["n"] += 1
+            if eval_call_count["n"] == 1:
+                return _passing_eval()  # initial eval passes
+            return EvalResult(
+                success=False, stage="eval", commands_run=4, commands_passed=2, error="tests failed"
+            )
+
+        with (
+            patch("action_harness.worker.subprocess.run", mock),
+            patch("action_harness.pipeline.run_eval", side_effect=eval_side_effect),
+            patch("action_harness.pr.subprocess.run", mock),
+            patch("action_harness.pipeline.subprocess.run", mock) as mock_subprocess,
+            patch(
+                "action_harness.pipeline.dispatch_review_agents",
+                return_value=_high_severity_review_results(),
+            ),
+            patch(
+                "action_harness.pipeline.dispatch_openspec_review",
+                return_value=('{"result": "{}"}', 1.0),
+            ),
+            patch(
+                "action_harness.pipeline.parse_review_result",
+                return_value=_approved_review_result(),
+            ),
+            patch(
+                "action_harness.pipeline.push_archive_if_needed",
+                return_value=(False, None),
+            ),
+        ):
+            pr_result, manifest = run_pipeline("test-change", test_repo, max_retries=3)
+
+        assert pr_result.success is True
+
+        # Only 1 fix-retry worker dispatched (loop breaks after first failure)
+        worker_stages = [s for s in manifest.stages if isinstance(s, WorkerResult)]
+        assert len(worker_stages) == 2  # initial + 1 failed fix-retry
+
+        # Only 1 review round (loop breaks before round 2)
+        review_stages = [s for s in manifest.stages if isinstance(s, ReviewResult)]
+        assert len(review_stages) == 3  # 3 agents * 1 round
+
+        # "Remaining findings" comment should be posted since findings remain
+        gh_calls = [
+            call
+            for call in mock_subprocess.call_args_list
+            if call[0][0][0] == "gh" and "comment" in call[0][0]
+        ]
+        remaining_calls = [
+            call
+            for call in gh_calls
+            if "Remaining findings after" in call[0][0][call[0][0].index("--body") + 1]
+        ]
+        assert len(remaining_calls) >= 1
+        body = remaining_calls[0][0][0][remaining_calls[0][0][0].index("--body") + 1]
+        assert "Off-by-one error" in body
 
     def test_verification_review_clears_findings(self, test_repo: Path) -> None:
         """When fix-retry resolves all findings, verification review prevents stale comment."""

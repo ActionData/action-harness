@@ -471,6 +471,17 @@ def _run_pipeline_inner(
                 break
 
             findings_remain = True
+
+            # Post review comment after each review round that finds issues
+            if pr_result.pr_url:
+                _post_review_comment(
+                    worktree_path,
+                    pr_result.pr_url,
+                    latest_review_results,
+                    verbose,
+                    header=f"Review round {review_round + 1} findings",
+                )
+
             last_fix_succeeded = _run_review_fix_retry(
                 change_name,
                 pr_result,
@@ -512,12 +523,13 @@ def _run_pipeline_inner(
                 findings_remain = False
 
         if findings_remain and pr_result.pr_url:
+            rounds_attempted = review_round + 1
             _post_review_comment(
                 worktree_path,
                 pr_result.pr_url,
                 latest_review_results,
                 verbose,
-                header="Remaining findings after 2 fix-retry rounds",
+                header=f"Remaining findings after {rounds_attempted} fix-retry round(s)",
             )
     else:
         typer.echo("[pipeline] skipping review agents (--skip-review)", err=True)
@@ -678,8 +690,8 @@ def _run_review_fix_retry(
     typer.echo("[pipeline] starting review fix retry", err=True)
 
     if review_results is None:
-        # Fallback: collect from stages (legacy behavior)
-        review_results = [s for s in stages if isinstance(s, ReviewResult)]
+        msg = "review_results is required"
+        raise ValueError(msg)
     feedback = format_review_feedback(review_results)
 
     worker_result = dispatch_worker(

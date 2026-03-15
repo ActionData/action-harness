@@ -19,7 +19,7 @@
 
 - [x] 4.1 In `_run_pipeline_inner()`, after each worker dispatch + eval cycle (and before the next retry): call `write_progress(worktree_path, attempt, worker_result, eval_result)`. Do NOT write progress on the first attempt if eval passes (no retry will follow). Write progress only when eval fails and a retry will follow.
 - [x] 4.2 Review and update existing tests in `tests/test_integration.py` that mock the retry loop to account for the new pre-work eval call and progress file writing.
-- [ ] 4.3 Add integration test: 2-retry scenario (mocked). Verify `.harness-progress.md` has 2 attempt sections after both retries. Verify the retry worker's prompt contains progress contents. Verify pre-work eval is called before the second retry dispatch.
+- [x] 4.3 Add integration test: 2-retry scenario (mocked). Verify `.harness-progress.md` has 2 attempt sections after both retries. Verify the retry worker's prompt contains progress contents. Verify pre-work eval is called before the second retry dispatch.
 
 ## 5. Validation [depends: all]
 

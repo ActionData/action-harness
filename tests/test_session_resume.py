@@ -517,3 +517,92 @@ class TestPreWorkEval:
         assert len(dispatch_calls) == 2
         # Only 1 eval call — no pre-work eval was run
         assert eval_idx["i"] == 1
+
+
+class TestRetryProgressIntegration:
+    """Integration test: 2-retry scenario verifying progress file, prompt injection, and pre-work eval."""
+
+    def test_two_retry_scenario(self, tmp_path: Path, dummy_logger: EventLogger) -> None:
+        """Full 2-retry scenario with progress file verification."""
+        from action_harness.progress import PROGRESS_FILENAME
+
+        worktree = tmp_path / "wt"
+        worktree.mkdir()
+
+        dispatch_calls: list[dict[str, object]] = []
+
+        def mock_dispatch(*args: object, **kwargs: object) -> WorkerResult:
+            dispatch_calls.append({"feedback": kwargs.get("feedback")})
+            return _make_worker_result(
+                session_id=f"sess_{len(dispatch_calls)}", context_usage_pct=0.05, commits_ahead=2
+            )
+
+        # Eval sequence:
+        # 1. Initial eval fails
+        # 2. Pre-work eval for retry 1 fails
+        # 3. Retry 1 eval fails
+        # 4. Pre-work eval for retry 2 fails
+        # 5. Retry 2 eval passes
+        eval_results = [
+            _failing_eval("error 1"),
+            _failing_eval("pre-work error 1"),
+            _failing_eval("error 2"),
+            _failing_eval("pre-work error 2"),
+            _passing_eval(),
+        ]
+        eval_idx = {"i": 0}
+
+        def mock_eval(*args: object, **kwargs: object) -> EvalResult:
+            result = eval_results[eval_idx["i"]]
+            eval_idx["i"] += 1
+            return result
+
+        wt_result = WorktreeResult(success=True, worktree_path=worktree, branch="harness/test")
+        stages: list[StageResultUnion] = []
+
+        with (
+            patch("action_harness.pipeline.dispatch_worker", side_effect=mock_dispatch),
+            patch("action_harness.pipeline.run_eval", side_effect=mock_eval),
+            patch("action_harness.pipeline.create_worktree", return_value=wt_result),
+            patch("action_harness.pipeline.create_pr") as mock_pr,
+            patch("action_harness.pipeline._get_worktree_base", return_value="main"),
+            patch("action_harness.pipeline.cleanup_worktree"),
+            patch(
+                "action_harness.pipeline._run_openspec_review",
+                return_value=_approved_review(),
+            ),
+        ):
+            mock_pr.return_value = MagicMock(success=True, pr_url="http://pr/1", branch="b")
+            result = _run_pipeline_inner(
+                "test-change",
+                Path("/fake/repo"),
+                max_retries=3,
+                max_turns=200,
+                model=None,
+                effort=None,
+                max_budget_usd=None,
+                permission_mode="bypassPermissions",
+                verbose=False,
+                stages=stages,
+                logger=dummy_logger,
+                skip_review=True,
+            )
+
+        assert result.success is True
+
+        # 3 worker dispatches (initial + 2 retries)
+        assert len(dispatch_calls) == 3
+
+        # Progress file should have 2 attempt sections (written after eval fails for retries 1 & 2)
+        progress_file = worktree / PROGRESS_FILENAME
+        assert progress_file.exists()
+        content = progress_file.read_text()
+        assert "## Attempt 1" in content
+        assert "## Attempt 2" in content
+
+        # Retry workers should get pre-work eval feedback (not stale feedback)
+        assert dispatch_calls[1]["feedback"] == "pre-work error 1"
+        assert dispatch_calls[2]["feedback"] == "pre-work error 2"
+
+        # Pre-work eval was called before each retry dispatch
+        assert eval_idx["i"] == 5  # all 5 eval calls consumed

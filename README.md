@@ -74,6 +74,7 @@ The pipeline runs in deterministic stages with zero LLM calls in orchestration:
 
 | Document | Description |
 |---|---|
+| [`ARCHITECTURE.md`](ARCHITECTURE.md) | System overview, module map, and pipeline control flow |
 | [`PROJECT_VISION.md`](PROJECT_VISION.md) | Core beliefs, architecture principles, and success criteria |
 | [`openspec/ROADMAP.md`](openspec/ROADMAP.md) | Self-hosted backlog — bootstrap and future changes |
 | [`CLAUDE.md`](CLAUDE.md) | Design rules, build commands, and development conventions |

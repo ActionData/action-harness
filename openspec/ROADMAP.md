@@ -26,10 +26,11 @@ Priority order. Each is an OpenSpec change the harness implements on itself.
 - [x] `repo-profiling` — Detect eval capabilities and context quality before dispatch. Prescriptive gap analysis with prerequisites and recommendations.
 - [x] `session-resume` — Use `--resume <session_id>` for eval retries and review fix-retry so workers retain full context across dispatches. Context-aware: resumes when context is fresh (<60% used), falls back to fresh dispatch when exhausted. Graceful fallback if resume fails.
 - [x] `retry-progress` — Write `.harness-progress.md` in worktree between retries (commits, eval results, what was tried). Workers read it for curated cross-dispatch context. Pre-work eval on retries catches already-fixed issues before dispatching. Fallback for when `--resume` isn't available.
+- [x] `auto-merge` — Merge after review agents approve + CI passes. Opt-in via `--auto-merge` flag. Three gates: no protected files, review clean, openspec review passed. Optional `--wait-for-ci`.
 
 ### Up next
 
-1. `auto-merge` — Merge after review agents approve + CI passes (requires review-agents, protected-paths)
+1. `review-tolerance` — Configurable review depth via tolerance levels (low/med/high) per round, acknowledgment protocol for declined findings, two-strike code comment escalation.
 2. `harness-md` — Per-repo `HARNESS.md` file convention for autonomous worker instructions. Read at dispatch time, injected into system prompt. May include a `## Setup` section with commands the harness executes before worker dispatch (boot dev server, install deps). Requires workspace-management for multi-repo use. See `docs/research/long-running-agent-harness-patterns.md` for the `init.sh` pattern this draws from.
 3. `codebase-assessment` — `harness assess` command that scores a repo's agentic readiness across categories (context, testability, CI guardrails, observability, tooling, isolation). Three modes: base mechanical scan (`--repo`), agent-enriched quality assessment (`--deep`), and auto-generated OpenSpec proposals for each gap (`--propose`). Builds on repo-profiling signals. Assessment agent is read-only; spec-writer agents generate proposals in parallel.
 4. `unspecced-tasks` — `--prompt` flag on `harness run` for freeform tasks without a full OpenSpec change. Worker receives the prompt directly instead of opsx:apply. Everything else (worktree, eval, PR, review agents) stays the same. OpenSpec review skipped.

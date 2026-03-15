@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shlex
 import subprocess
 from pathlib import Path
@@ -44,6 +45,12 @@ def run_eval(
     commands = eval_commands or BOOTSTRAP_EVAL_COMMANDS
     typer.echo(f"[eval] running {len(commands)} eval command(s)", err=True)
 
+    clean_env = {
+        k: v
+        for k, v in os.environ.items()
+        if k not in ("VIRTUAL_ENV", "VIRTUAL_ENV_PROMPT")
+    }
+
     commands_passed = 0
 
     for i, cmd_str in enumerate(commands):
@@ -56,6 +63,7 @@ def run_eval(
                 cwd=worktree_path,
                 capture_output=True,
                 text=True,
+                env=clean_env,
             )
         except (FileNotFoundError, OSError) as e:
             typer.echo(f"[eval] ERROR: failed to run '{cmd_str}': {e}", err=True)

@@ -1,6 +1,6 @@
 ## 1. Implementation
 
-- [ ] 1.1 In `evaluator.py`: add `import os` to the imports section. Before the `for` loop in `run_eval` (after line 44), create `clean_env = {k: v for k, v in os.environ.items() if k not in ("VIRTUAL_ENV", "VIRTUAL_ENV_PROMPT")}`. Pass `env=clean_env` to the single `subprocess.run` call on line 54.
+- [x] 1.1 In `evaluator.py`: add `import os` to the imports section. Before the `for` loop in `run_eval` (after line 44), create `clean_env = {k: v for k, v in os.environ.items() if k not in ("VIRTUAL_ENV", "VIRTUAL_ENV_PROMPT")}`. Pass `env=clean_env` to the single `subprocess.run` call on line 54.
 
 ## 2. Tests
 

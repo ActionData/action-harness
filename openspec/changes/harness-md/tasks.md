@@ -16,5 +16,5 @@
 
 ## 4. Validation
 
-- [ ] 4.1 Run full test suite (`uv run pytest -v`) and verify no regressions
-- [ ] 4.2 Run lint and type checks (`uv run ruff check .` and `uv run mypy src/`)
+- [x] 4.1 Run full test suite (`uv run pytest -v`) and verify no regressions
+- [x] 4.2 Run lint and type checks (`uv run ruff check .` and `uv run mypy src/`)

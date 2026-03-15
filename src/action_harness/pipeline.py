@@ -220,6 +220,11 @@ def run_pipeline(
             success=False, stage="pipeline", error=f"Unexpected error: {e}", branch=""
         )
     finally:
+        # Label issue as failed if pipeline did not succeed (best-effort)
+        if issue_number is not None and not pr_result.success:
+            from action_harness.issue_intake import label_issue
+
+            label_issue(issue_number, "harness:failed", repo)
         # Count retries from stages: each WorkerResult after the first is a retry
         worker_count = sum(1 for s in stages if isinstance(s, WorkerResult))
         retries = max(0, worker_count - 1)
@@ -303,7 +308,7 @@ def _run_pipeline_inner(
 
     # Label issue as in-progress (best-effort)
     if issue_number is not None:
-        from action_harness.issue_intake import label_issue
+        from action_harness.issue_intake import comment_on_issue, label_issue
 
         label_issue(issue_number, "harness:in-progress", repo, verbose=verbose)
 
@@ -557,8 +562,6 @@ def _run_pipeline_inner(
 
     # Label issue with PR-created status and comment with PR URL (best-effort)
     if issue_number is not None:
-        from action_harness.issue_intake import comment_on_issue, label_issue
-
         label_issue(issue_number, "harness:pr-created", repo, verbose=verbose)
         if pr_result.pr_url:
             comment_on_issue(issue_number, f"PR created: {pr_result.pr_url}", repo, verbose=verbose)

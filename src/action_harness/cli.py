@@ -200,8 +200,9 @@ def run(
         typer.echo("Error: --prompt must not be empty", err=True)
         raise typer.Exit(code=1)
 
-    # Track issue number for PR linking and labeling
-    issue_number: int | None = issue
+    if issue is not None and issue <= 0:
+        typer.echo("Error: --issue must be a positive integer", err=True)
+        raise typer.Exit(code=1)
 
     if wait_for_ci and not auto_merge:
         typer.echo("Error: --wait-for-ci requires --auto-merge", err=True)
@@ -242,7 +243,16 @@ def run(
     if prompt is not None:
         slug = slugify_prompt(prompt)
         if not slug:
-            typer.echo("Error: --prompt must contain at least one alphanumeric character", err=True)
+            if issue is not None:
+                typer.echo(
+                    "Error: issue title must contain at least one alphanumeric character",
+                    err=True,
+                )
+            else:
+                typer.echo(
+                    "Error: --prompt must contain at least one alphanumeric character",
+                    err=True,
+                )
             raise typer.Exit(code=1)
         task_label = f"prompt-{slug}"
     else:
@@ -269,9 +279,9 @@ def run(
             workspace_path = str(resolved_home / "workspaces" / repo_name / task_label)
         else:
             workspace_path = f"/tmp/action-harness-*/{task_label}"
-        if issue_number is not None:
+        if issue is not None:
             resolved_mode = "change" if change is not None else "prompt"
-            typer.echo(f"Dry-run plan for issue #{issue_number} (resolved as {resolved_mode}):")
+            typer.echo(f"Dry-run plan for issue #{issue} (resolved as {resolved_mode}):")
             if resolved_mode == "prompt":
                 preview = (prompt or "")[:120]
                 typer.echo(f"  prompt preview: {preview}")
@@ -318,7 +328,7 @@ def run(
         auto_merge=auto_merge,
         wait_for_ci=wait_for_ci,
         prompt=prompt,
-        issue_number=issue_number,
+        issue_number=issue,
     )
 
     if manifest.manifest_path:

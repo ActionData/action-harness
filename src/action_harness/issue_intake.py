@@ -26,12 +26,16 @@ def read_issue(issue_number: int, repo_path: Path) -> IssueData:
     """
     typer.echo(f"[issue-intake] reading issue #{issue_number} from {repo_path}", err=True)
 
-    result = subprocess.run(
-        ["gh", "issue", "view", str(issue_number), "--json", "title,body,state"],
-        cwd=repo_path,
-        capture_output=True,
-        text=True,
-    )
+    try:
+        result = subprocess.run(
+            ["gh", "issue", "view", str(issue_number), "--json", "title,body,state"],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+        )
+    except (FileNotFoundError, OSError) as e:
+        typer.echo(f"[issue-intake] gh issue view failed: {e}", err=True)
+        raise ValidationError(f"Issue #{issue_number}: gh command failed: {e}") from e
 
     if result.returncode != 0:
         typer.echo(
@@ -163,5 +167,10 @@ def comment_on_issue(issue_number: int, body: str, repo_path: Path, verbose: boo
 
 
 def build_issue_prompt(issue_number: int, title: str, body: str) -> str:
-    """Build a freeform prompt from issue metadata."""
-    return f"# GitHub Issue #{issue_number}: {title}\n\n{body}"
+    """Build a freeform prompt from issue metadata.
+
+    The first line doubles as the PR title source (via create_pr), so it must
+    not start with ``#`` — GitHub would display the literal markdown heading
+    character in the PR title.
+    """
+    return f"GitHub Issue #{issue_number}: {title}\n\n{body}"

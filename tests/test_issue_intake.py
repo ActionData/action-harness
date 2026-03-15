@@ -86,6 +86,15 @@ class TestReadIssue:
             with pytest.raises(ValidationError, match="missing field"):
                 read_issue(42, tmp_path)
 
+    def test_subprocess_error_raises_validation_error(self, tmp_path: Path) -> None:
+        """FileNotFoundError from subprocess.run is wrapped in ValidationError."""
+        with patch(
+            "action_harness.issue_intake.subprocess.run",
+            side_effect=FileNotFoundError("gh not found"),
+        ):
+            with pytest.raises(ValidationError, match="gh command failed"):
+                read_issue(42, tmp_path)
+
 
 class TestDetectOpenspecChange:
     """Tests for detect_openspec_change function."""
@@ -130,6 +139,25 @@ class TestDetectOpenspecChange:
         body = "See openspec:nonexistent and openspec:real"
         result = detect_openspec_change(body, tmp_path)
         assert result == "real"
+
+    def test_cross_pattern_fallthrough(self, tmp_path: Path) -> None:
+        """First pattern type fails, second pattern type succeeds."""
+        (tmp_path / "openspec" / "changes" / "real-change").mkdir(parents=True)
+        body = "See openspec:nonexistent then change: real-change"
+        result = detect_openspec_change(body, tmp_path)
+        assert result == "real-change"
+
+    def test_change_colon_no_space(self, tmp_path: Path) -> None:
+        """change:name (no space after colon) is matched by \\s*."""
+        (tmp_path / "openspec" / "changes" / "fix-bug").mkdir(parents=True)
+        result = detect_openspec_change("change:fix-bug", tmp_path)
+        assert result == "fix-bug"
+
+    def test_change_colon_multiple_spaces(self, tmp_path: Path) -> None:
+        """change:  name (multiple spaces) is matched by \\s*."""
+        (tmp_path / "openspec" / "changes" / "fix-bug").mkdir(parents=True)
+        result = detect_openspec_change("change:  fix-bug", tmp_path)
+        assert result == "fix-bug"
 
     def test_uppercase_change_name_not_matched(self, tmp_path: Path) -> None:
         """Patterns only match lowercase change names (convention)."""
@@ -227,4 +255,19 @@ class TestBuildIssuePrompt:
 
     def test_basic_prompt(self) -> None:
         result = build_issue_prompt(42, "Fix bug", "Details")
-        assert result == "# GitHub Issue #42: Fix bug\n\nDetails"
+        assert result == "GitHub Issue #42: Fix bug\n\nDetails"
+
+    def test_first_line_has_no_markdown_heading(self) -> None:
+        """First line is used as PR title — must not start with #."""
+        result = build_issue_prompt(1, "Title", "Body")
+        first_line = result.split("\n")[0]
+        assert not first_line.startswith("#")
+
+    def test_empty_body(self) -> None:
+        result = build_issue_prompt(1, "Title", "")
+        assert result == "GitHub Issue #1: Title\n\n"
+
+    def test_body_with_markdown(self) -> None:
+        body = "## Steps\n1. Do thing\n2. See error"
+        result = build_issue_prompt(1, "Bug", body)
+        assert body in result

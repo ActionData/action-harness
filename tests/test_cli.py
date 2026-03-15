@@ -431,8 +431,8 @@ class TestIssueModeCli:
         assert result.exit_code == 0
         assert "--issue" in result.output
 
-    def test_issue_alone_works(self, fake_repo: Path) -> None:
-        """--issue reads issue and dispatches as prompt mode."""
+    def test_issue_alone_works_and_threads_issue_number(self, fake_repo: Path) -> None:
+        """--issue reads issue, dispatches as prompt mode, passes issue_number."""
         with (
             patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"),
             patch(
@@ -446,13 +446,16 @@ class TestIssueModeCli:
             patch(
                 "action_harness.pipeline.run_pipeline",
                 return_value=_mock_pipeline_success(),
-            ),
+            ) as mock_pipeline,
         ):
             result = runner.invoke(
                 app,
                 ["run", "--issue", "42", "--repo", str(fake_repo)],
             )
         assert result.exit_code == 0
+        call_kwargs = mock_pipeline.call_args[1]
+        assert call_kwargs["issue_number"] == 42
+        assert call_kwargs["prompt"] is not None
 
     def test_issue_resolves_to_change_mode(self, fake_repo: Path) -> None:
         """--issue with openspec reference in body dispatches as change mode."""
@@ -509,6 +512,41 @@ class TestIssueModeCli:
         assert result.exit_code == 0
         assert "issue #42" in result.output
         assert "prompt" in result.output
+
+    def test_all_three_flags_fails(self) -> None:
+        """--change + --prompt + --issue together exits with error."""
+        result = runner.invoke(
+            app,
+            [
+                "run",
+                "--issue",
+                "42",
+                "--change",
+                "x",
+                "--prompt",
+                "y",
+                "--repo",
+                "/some/path",
+            ],
+        )
+        assert result.exit_code == 1
+        assert "Specify only one of --change, --prompt, or --issue" in result.output
+
+    def test_issue_zero_rejected(self) -> None:
+        result = runner.invoke(
+            app,
+            ["run", "--issue", "0", "--repo", "/some/path"],
+        )
+        assert result.exit_code == 1
+        assert "--issue must be a positive integer" in result.output
+
+    def test_issue_negative_rejected(self) -> None:
+        result = runner.invoke(
+            app,
+            ["run", "--issue", "-1", "--repo", "/some/path"],
+        )
+        assert result.exit_code == 1
+        assert "--issue must be a positive integer" in result.output
 
     def test_issue_not_found_exits_with_error(self, fake_repo: Path) -> None:
         """--issue with a bad issue number exits cleanly with error."""

@@ -320,7 +320,9 @@ class TestPipelineFailure:
         # Eval sequence: initial eval fails, pre-work eval fails, retry eval passes
         with (
             patch("action_harness.worker.subprocess.run", mock),
-            patch("action_harness.pipeline.run_eval", side_effect=[fail_eval, fail_eval, pass_eval]),
+            patch(
+                "action_harness.pipeline.run_eval", side_effect=[fail_eval, fail_eval, pass_eval]
+            ),
             patch("action_harness.pr.subprocess.run", mock),
             patch(
                 "action_harness.pipeline.dispatch_openspec_review",
@@ -496,7 +498,9 @@ class TestManifestPersistence:
         # Eval sequence: initial eval fails, pre-work eval fails, retry eval passes
         with (
             patch("action_harness.worker.subprocess.run", mock),
-            patch("action_harness.pipeline.run_eval", side_effect=[fail_eval, fail_eval, pass_eval]),
+            patch(
+                "action_harness.pipeline.run_eval", side_effect=[fail_eval, fail_eval, pass_eval]
+            ),
             patch("action_harness.pr.subprocess.run", mock),
             patch(
                 "action_harness.pipeline.dispatch_openspec_review",

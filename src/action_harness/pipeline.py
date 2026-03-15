@@ -17,7 +17,6 @@ from action_harness.models import (
     StageResultUnion,
     WorkerResult,
 )
-from action_harness.progress import write_progress
 from action_harness.openspec_reviewer import (
     dispatch_openspec_review,
     parse_review_result,
@@ -25,6 +24,7 @@ from action_harness.openspec_reviewer import (
 )
 from action_harness.pr import create_pr
 from action_harness.profiler import BOOTSTRAP_EVAL_COMMANDS, RepoProfile, profile_repo
+from action_harness.progress import write_progress
 from action_harness.protection import (
     check_protected_files,
     flag_pr_protected,
@@ -296,7 +296,11 @@ def _run_pipeline_inner(
     while attempt <= max_retries:
         # Pre-work eval on retries: if the prior worker produced commits,
         # run eval first — the commits may have already fixed the issue.
-        if attempt > 0 and prior_worker_result is not None and prior_worker_result.commits_ahead > 0:
+        if (
+            attempt > 0
+            and prior_worker_result is not None
+            and prior_worker_result.commits_ahead > 0
+        ):
             typer.echo("[pipeline] running pre-work eval before retry", err=True)
             pre_work_eval = run_eval(
                 worktree_path, eval_commands=eval_commands, verbose=verbose, logger=logger

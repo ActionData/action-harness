@@ -133,7 +133,7 @@ class TestEvalRetryWithResume:
                 return _make_worker_result(session_id="sess_a", context_usage_pct=0.05)
             return _make_worker_result(session_id="sess_b", context_usage_pct=0.10)
 
-        # Eval sequence: initial eval fails, pre-work eval fails (triggers dispatch), retry eval passes
+        # Eval: initial fails, pre-work fails (triggers dispatch), retry passes
         eval_results = [_failing_eval(), _failing_eval(), _passing_eval()]
         eval_idx = {"i": 0}
 
@@ -163,7 +163,7 @@ class TestEvalRetryWithResume:
                 return _make_worker_result(session_id="sess_a", context_usage_pct=0.75)
             return _make_worker_result(session_id="sess_b", context_usage_pct=0.10)
 
-        # Eval sequence: initial eval fails, pre-work eval fails (triggers dispatch), retry eval passes
+        # Eval: initial fails, pre-work fails (triggers dispatch), retry passes
         eval_results = [_failing_eval(), _failing_eval(), _passing_eval()]
         eval_idx = {"i": 0}
 
@@ -225,8 +225,14 @@ class TestEvalRetryWithResume:
             else:
                 return _make_worker_result(session_id="sess_c", context_usage_pct=0.15)
 
-        # Eval sequence: initial fails, pre-work fails, retry 1 fails, pre-work fails, retry 2 passes
-        eval_results = [_failing_eval(), _failing_eval(), _failing_eval(), _failing_eval(), _passing_eval()]
+        # Eval: initial fail, pre-work fail, retry1 fail, pre-work fail, retry2 pass
+        eval_results = [
+            _failing_eval(),
+            _failing_eval(),
+            _failing_eval(),
+            _failing_eval(),
+            _passing_eval(),
+        ]
         eval_idx = {"i": 0}
 
         def mock_eval(*args: object, **kwargs: object) -> EvalResult:
@@ -485,9 +491,7 @@ class TestPreWorkEval:
         # Second dispatch should have the fresh feedback from pre-work eval, not stale
         assert dispatch_calls[1]["feedback"] == "mypy error"
 
-    def test_pre_work_eval_not_run_after_zero_commits(
-        self, dummy_logger: EventLogger
-    ) -> None:
+    def test_pre_work_eval_not_run_after_zero_commits(self, dummy_logger: EventLogger) -> None:
         """When prior worker produced zero commits, pre-work eval is NOT run."""
         dispatch_calls: list[dict[str, object]] = []
 
@@ -520,7 +524,7 @@ class TestPreWorkEval:
 
 
 class TestRetryProgressIntegration:
-    """Integration test: 2-retry scenario verifying progress file, prompt injection, and pre-work eval."""
+    """2-retry scenario: progress file, prompt injection, and pre-work eval."""
 
     def test_two_retry_scenario(self, tmp_path: Path, dummy_logger: EventLogger) -> None:
         """Full 2-retry scenario with progress file verification."""

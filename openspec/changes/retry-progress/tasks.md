@@ -23,6 +23,6 @@
 
 ## 5. Validation [depends: all]
 
-- [ ] 5.1 Run full test suite (`uv run pytest -v`) and verify no regressions
-- [ ] 5.2 Run lint and type checks (`uv run ruff check .` and `uv run mypy src/`)
-- [ ] 5.3 Run a targeted test that exercises a 2-retry scenario end-to-end (mocked) and verify: `.harness-progress.md` has 2 attempt sections, retry worker prompt contains progress contents, pre-work eval is called before retry dispatch.
+- [x] 5.1 Run full test suite (`uv run pytest -v`) and verify no regressions
+- [x] 5.2 Run lint and type checks (`uv run ruff check .` and `uv run mypy src/`)
+- [x] 5.3 Run a targeted test that exercises a 2-retry scenario end-to-end (mocked) and verify: `.harness-progress.md` has 2 attempt sections, retry worker prompt contains progress contents, pre-work eval is called before retry dispatch.

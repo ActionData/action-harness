@@ -168,9 +168,7 @@ def dispatch_worker(
             usage = output_data.get("usage", {})
             model_usage = output_data.get("modelUsage", {})
             # model_info comes from json.loads output — values are JSON primitives
-            model_info: dict[str, int] = (
-                next(iter(model_usage.values()), {}) if model_usage else {}
-            )
+            model_info: dict[str, int] = next(iter(model_usage.values()), {}) if model_usage else {}
             context_window = int(model_info.get("contextWindow", 1_000_000))
             input_tokens = int(usage.get("input_tokens", 0))
             output_tokens = int(usage.get("output_tokens", 0))

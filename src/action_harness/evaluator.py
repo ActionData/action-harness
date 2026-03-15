@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shlex
 import subprocess
 from pathlib import Path
@@ -16,6 +17,8 @@ if TYPE_CHECKING:
     from action_harness.event_log import EventLogger
 
 __all__ = ["BOOTSTRAP_EVAL_COMMANDS", "run_eval", "format_feedback"]
+
+_STRIPPED_ENV_VARS = ("VIRTUAL_ENV", "VIRTUAL_ENV_PROMPT")
 
 
 def format_feedback(command: str, exit_code: int, output: str) -> str:
@@ -44,6 +47,14 @@ def run_eval(
     commands = eval_commands or BOOTSTRAP_EVAL_COMMANDS
     typer.echo(f"[eval] running {len(commands)} eval command(s)", err=True)
 
+    venv_dir = os.environ.get("VIRTUAL_ENV")
+    clean_env = {k: v for k, v in os.environ.items() if k not in _STRIPPED_ENV_VARS}
+    if venv_dir and "PATH" in clean_env:
+        venv_bin = venv_dir + "/bin"
+        clean_env["PATH"] = os.pathsep.join(
+            seg for seg in clean_env["PATH"].split(os.pathsep) if seg != venv_bin
+        )
+
     commands_passed = 0
 
     for i, cmd_str in enumerate(commands):
@@ -56,6 +67,7 @@ def run_eval(
                 cwd=worktree_path,
                 capture_output=True,
                 text=True,
+                env=clean_env,
             )
         except (FileNotFoundError, OSError) as e:
             typer.echo(f"[eval] ERROR: failed to run '{cmd_str}': {e}", err=True)

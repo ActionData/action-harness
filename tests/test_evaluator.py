@@ -163,3 +163,59 @@ class TestRunEval:
         assert result.feedback_prompt is not None
         assert "stdout content" in result.feedback_prompt
         assert "stderr content" in result.feedback_prompt
+
+    def test_strips_virtual_env_from_subprocess_env(self) -> None:
+        fake_environ: dict[str, str] = {
+            "VIRTUAL_ENV": "/fake/path",
+            "VIRTUAL_ENV_PROMPT": "fake",
+            "PATH": "/usr/bin",
+            "HOME": "/home/user",
+        }
+        results = [(0, "ok", "")]
+        mock = self._make_mock(results)
+
+        with (
+            patch("action_harness.evaluator.os.environ", fake_environ),
+            patch("action_harness.evaluator.subprocess.run", mock),
+        ):
+            run_eval(Path("/fake/worktree"), eval_commands=["echo hello"])
+
+        assert mock.call_count == 1
+        env: dict[str, str] = mock.call_args.kwargs["env"]
+        assert "VIRTUAL_ENV" not in env
+        assert "VIRTUAL_ENV_PROMPT" not in env
+        assert env["PATH"] == "/usr/bin"
+        assert env["HOME"] == "/home/user"
+
+    def test_strips_venv_bin_from_path(self) -> None:
+        fake_environ: dict[str, str] = {
+            "VIRTUAL_ENV": "/fake/venv",
+            "PATH": "/fake/venv/bin:/usr/local/bin:/usr/bin",
+            "HOME": "/home/user",
+        }
+        results = [(0, "ok", "")]
+        mock = self._make_mock(results)
+
+        with (
+            patch("action_harness.evaluator.os.environ", fake_environ),
+            patch("action_harness.evaluator.subprocess.run", mock),
+        ):
+            run_eval(Path("/fake/worktree"), eval_commands=["echo hello"])
+
+        env: dict[str, str] = mock.call_args.kwargs["env"]
+        assert "/fake/venv/bin" not in env["PATH"].split(":")
+        assert "/usr/local/bin" in env["PATH"].split(":")
+        assert "/usr/bin" in env["PATH"].split(":")
+
+    def test_env_passed_to_all_commands_in_multi_command_run(self) -> None:
+        commands = ["echo one", "echo two", "echo three"]
+        results = [(0, "ok", "") for _ in range(3)]
+        mock = self._make_mock(results)
+
+        with patch("action_harness.evaluator.subprocess.run", mock):
+            result = run_eval(Path("/fake/worktree"), eval_commands=commands)
+
+        assert result.success is True
+        assert mock.call_count == 3
+        for call in mock.call_args_list:
+            assert "env" in call.kwargs, "env kwarg must be passed to every subprocess.run call"

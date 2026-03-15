@@ -66,6 +66,7 @@ class OpenSpecReviewResult(StageResult):
     semantic_review_passed: bool = False
     findings: list[str] = []
     archived: bool = False
+    human_tasks_remaining: int = 0
 
 
 class ReviewFinding(BaseModel):
@@ -112,5 +113,6 @@ class RunManifest(BaseModel):
     error: str | None = None
     manifest_path: str | None = None
     event_log_path: str | None = None
+    needs_human: bool = False
     protected_files: list[str] = []
     profile: RepoProfile | None = None

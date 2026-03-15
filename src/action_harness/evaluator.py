@@ -46,9 +46,7 @@ def run_eval(
     typer.echo(f"[eval] running {len(commands)} eval command(s)", err=True)
 
     clean_env = {
-        k: v
-        for k, v in os.environ.items()
-        if k not in ("VIRTUAL_ENV", "VIRTUAL_ENV_PROMPT")
+        k: v for k, v in os.environ.items() if k not in ("VIRTUAL_ENV", "VIRTUAL_ENV_PROMPT")
     }
 
     commands_passed = 0

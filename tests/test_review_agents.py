@@ -170,7 +170,7 @@ class TestTriageFindings:
         result = ReviewResult(success=True, agent_name="bug-hunter", findings=[finding])
         assert triage_findings([result]) is True
 
-    def test_only_medium_low_returns_false(self) -> None:
+    def test_medium_returns_true(self) -> None:
         findings = [
             ReviewFinding(
                 title="Style",
@@ -179,16 +179,20 @@ class TestTriageFindings:
                 description="d",
                 agent="quality-reviewer",
             ),
-            ReviewFinding(
-                title="Nit",
-                file="g.py",
-                severity="low",
-                description="d",
-                agent="quality-reviewer",
-            ),
         ]
         result = ReviewResult(success=True, agent_name="quality-reviewer", findings=findings)
-        assert triage_findings([result]) is False
+        assert triage_findings([result]) is True
+
+    def test_low_only_returns_true(self) -> None:
+        finding = ReviewFinding(
+            title="Nit",
+            file="g.py",
+            severity="low",
+            description="d",
+            agent="quality-reviewer",
+        )
+        result = ReviewResult(success=True, agent_name="quality-reviewer", findings=[finding])
+        assert triage_findings([result]) is True
 
     def test_empty_findings_returns_false(self) -> None:
         result = ReviewResult(success=True, agent_name="test-reviewer", findings=[])
@@ -241,7 +245,7 @@ class TestFormatReviewFeedback:
         assert "HIGH" in feedback
         assert "bug-hunter" in feedback
 
-    def test_only_high_critical_included(self) -> None:
+    def test_all_severities_included(self) -> None:
         findings = [
             ReviewFinding(
                 title="Critical Bug",
@@ -263,13 +267,15 @@ class TestFormatReviewFeedback:
         feedback = format_review_feedback([r1, r2])
 
         assert "Critical Bug" in feedback
-        assert "Minor Style" not in feedback
+        assert "Minor Style" in feedback
+        assert "CRITICAL" in feedback
+        assert "LOW" in feedback
 
     def test_empty_input_no_findings_message(self) -> None:
         feedback = format_review_feedback([])
-        assert "No high or critical findings" in feedback
+        assert "No findings" in feedback
 
-    def test_only_medium_low_no_findings_message(self) -> None:
+    def test_medium_included_in_feedback(self) -> None:
         finding = ReviewFinding(
             title="Nit",
             file="x.py",
@@ -279,7 +285,8 @@ class TestFormatReviewFeedback:
         )
         result = ReviewResult(success=True, agent_name="a", findings=[finding])
         feedback = format_review_feedback([result])
-        assert "No high or critical findings" in feedback
+        assert "Nit" in feedback
+        assert "MEDIUM" in feedback
 
     def test_contains_footer(self) -> None:
         finding = ReviewFinding(
@@ -291,7 +298,7 @@ class TestFormatReviewFeedback:
         )
         result = ReviewResult(success=True, agent_name="a", findings=[finding])
         feedback = format_review_feedback([result])
-        assert "Fix the high/critical issues" in feedback
+        assert "Fix the issues above" in feedback
 
 
 class TestDispatchSingleReview:

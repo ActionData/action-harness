@@ -14,10 +14,10 @@
 
 ## 4. Tests
 
-- [ ] 4.1 In `tests/test_review_agents.py`: update `test_only_medium_low_returns_false` — rename to `test_medium_returns_true`, change assertion to `assert triage_findings(...) is True`. Add `test_low_only_returns_true`.
-- [ ] 4.2 In `tests/test_review_agents.py`: update `test_format_*` tests — verify all severities appear in feedback. Update footer assertion from "Fix the high/critical issues" to "Fix the issues above".
-- [ ] 4.3 In `tests/test_pipeline_review.py`: rename `test_no_retry_path` to `test_medium_triggers_retry`. Change assertions: medium-only findings now trigger fix-retry (`len(worker_stages) == 2`).
-- [ ] 4.4 In `tests/test_pipeline_review.py`: add `test_two_round_cap` — mock review agents to return findings on every round. Assert worker is dispatched 3 times (initial + 2 fix-retries). Assert a "Remaining findings" comment is posted.
+- [x] 4.1 In `tests/test_review_agents.py`: update `test_only_medium_low_returns_false` — rename to `test_medium_returns_true`, change assertion to `assert triage_findings(...) is True`. Add `test_low_only_returns_true`.
+- [x] 4.2 In `tests/test_review_agents.py`: update `test_format_*` tests — verify all severities appear in feedback. Update footer assertion from "Fix the high/critical issues" to "Fix the issues above".
+- [x] 4.3 In `tests/test_pipeline_review.py`: rename `test_no_retry_path` to `test_medium_triggers_retry`. Change assertions: medium-only findings now trigger fix-retry (`len(worker_stages) == 2`).
+- [x] 4.4 In `tests/test_pipeline_review.py`: add `test_two_round_cap` — mock review agents to return findings on every round. Assert worker is dispatched 3 times (initial + 2 fix-retries). Assert a "Remaining findings" comment is posted.
 
 ## 5. Validation
 

@@ -347,9 +347,7 @@ def format_review_feedback(results: list[ReviewResult]) -> str:
             location = finding.file
             if finding.line is not None:
                 location += f":{finding.line}"
-            lines.append(
-                f"#### [{finding.severity.upper()}] {finding.title}"
-            )
+            lines.append(f"#### [{finding.severity.upper()}] {finding.title}")
             lines.append(f"- **File:** {location}")
             lines.append(f"- **Description:** {finding.description}")
             lines.append("")

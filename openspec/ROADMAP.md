@@ -29,16 +29,16 @@ Priority order. Each is an OpenSpec change the harness implements on itself.
 - [x] `auto-merge` — Merge after review agents approve + CI passes. Opt-in via `--auto-merge` flag. Three gates: no protected files, review clean, openspec review passed. Optional `--wait-for-ci`.
 
 - [x] `harness-md` — Per-repo HARNESS.md file convention for autonomous worker instructions. Read at dispatch time, injected into system prompt.
+- [x] `unspecced-tasks` — `--prompt` flag on `harness run` for freeform tasks without a full OpenSpec change. Worker receives the prompt directly. OpenSpec review skipped.
 
 ### Up next
 
 1. `review-tolerance` — Configurable review depth via tolerance levels (low/med/high) per round, acknowledgment protocol for declined findings, two-strike code comment escalation.
 2. `codebase-assessment` — `harness assess` command that scores a repo's agentic readiness across categories (context, testability, CI guardrails, observability, tooling, isolation). Three modes: base mechanical scan (`--repo`), agent-enriched quality assessment (`--deep`), and auto-generated OpenSpec proposals for each gap (`--propose`). Builds on repo-profiling signals. Assessment agent is read-only; spec-writer agents generate proposals in parallel.
-3. `unspecced-tasks` — `--prompt` flag on `harness run` for freeform tasks without a full OpenSpec change. Worker receives the prompt directly instead of opsx:apply. Everything else (worktree, eval, PR, review agents) stays the same. OpenSpec review skipped.
-4. `github-issue-intake` — Parse GitHub issues for OpenSpec references, dispatch from issues. Depends on `unspecced-tasks` for `--prompt` fallback when issues don't reference an OpenSpec change.
-5. `failure-reporting` — Aggregate failure logs, identify systemic patterns
-6. `always-on` — Event-driven intake from webhooks, recurring maintenance, Slack escalation
-7. `checkpoint-resume` — Checkpoint pipeline state so interrupted runs can resume from the last completed stage. Distinct from `retry-progress` which handles within-stage retry continuity — this is about cross-stage resumption after process crashes. Needs specs.
-8. `live-progress-feed` — Real-time visibility into worker progress (task completion, file edits, tool calls) during pipeline runs. Needs specs.
-9. `rollback-tags` — Git tag-based rollback points and shipped feature markers. Tags main branch before merge (`harness/pre-merge/{label}`) and after (`harness/shipped/{label}`). `harness rollback` reverts via revert commits. `harness history` lists shipped features. Requires auto-merge for inline post-merge tagging.
-10. `ephemeral-observability` — Per-worktree observability stack (Vector → VictoriaLogs/Metrics/Traces) for target apps that emit telemetry. Lets workers query logs (LogsQL), metrics (PromQL), and traces (TraceQL) to validate runtime behavior — not just exit codes. Torn down when task completes. Requires repo-profiling to detect when a target app is a running service. Inspired by OpenAI's Codex harness architecture.
+3. `github-issue-intake` — Parse GitHub issues for OpenSpec references, dispatch from issues. Depends on `unspecced-tasks` for `--prompt` fallback when issues don't reference an OpenSpec change.
+4. `failure-reporting` — Aggregate failure logs, identify systemic patterns
+5. `always-on` — Event-driven intake from webhooks, recurring maintenance, Slack escalation
+6. `checkpoint-resume` — Checkpoint pipeline state so interrupted runs can resume from the last completed stage. Distinct from `retry-progress` which handles within-stage retry continuity — this is about cross-stage resumption after process crashes. Needs specs.
+7. `live-progress-feed` — Real-time visibility into worker progress (task completion, file edits, tool calls) during pipeline runs. Needs specs.
+8. `rollback-tags` — Git tag-based rollback points and shipped feature markers. Tags main branch before merge (`harness/pre-merge/{label}`) and after (`harness/shipped/{label}`). `harness rollback` reverts via revert commits. `harness history` lists shipped features. Requires auto-merge for inline post-merge tagging.
+9. `ephemeral-observability` — Per-worktree observability stack (Vector → VictoriaLogs/Metrics/Traces) for target apps that emit telemetry. Lets workers query logs (LogsQL), metrics (PromQL), and traces (TraceQL) to validate runtime behavior — not just exit codes. Torn down when task completes. Requires repo-profiling to detect when a target app is a running service. Inspired by OpenAI's Codex harness architecture.

@@ -133,6 +133,7 @@ def run_pipeline(
     auto_merge: bool = False,
     wait_for_ci: bool = False,
     prompt: str | None = None,
+    issue_number: int | None = None,
 ) -> tuple[PrResult, RunManifest]:
     """Run the full pipeline: worktree -> worker -> eval -> retry -> PR.
 
@@ -210,6 +211,7 @@ def run_pipeline(
             auto_merge=auto_merge,
             wait_for_ci=wait_for_ci,
             prompt=prompt,
+            issue_number=issue_number,
         )
     except Exception as e:
         typer.echo(f"[pipeline] unexpected error: {e}", err=True)
@@ -218,6 +220,11 @@ def run_pipeline(
             success=False, stage="pipeline", error=f"Unexpected error: {e}", branch=""
         )
     finally:
+        # Label issue as failed if pipeline did not succeed (best-effort)
+        if issue_number is not None and not pr_result.success:
+            from action_harness.issue_intake import label_issue
+
+            label_issue(issue_number, "harness:failed", repo)
         # Count retries from stages: each WorkerResult after the first is a retry
         worker_count = sum(1 for s in stages if isinstance(s, WorkerResult))
         retries = max(0, worker_count - 1)
@@ -267,6 +274,7 @@ def _run_pipeline_inner(
     auto_merge: bool = False,
     wait_for_ci: bool = False,
     prompt: str | None = None,
+    issue_number: int | None = None,
 ) -> PrResult:
     """Inner pipeline logic. Appends to stages list as side effect.
 
@@ -297,6 +305,12 @@ def _run_pipeline_inner(
     assert wt_result.worktree_path is not None
     worktree_path = wt_result.worktree_path
     branch = wt_result.branch
+
+    # Label issue as in-progress (best-effort)
+    if issue_number is not None:
+        from action_harness.issue_intake import comment_on_issue, label_issue
+
+        label_issue(issue_number, "harness:in-progress", repo, verbose=verbose)
 
     # Stage 2+3: Worker dispatch + eval with retry loop
     attempt = 0
@@ -528,6 +542,7 @@ def _run_pipeline_inner(
         base_branch=base_branch,
         verbose=verbose,
         prompt=prompt,
+        issue_number=issue_number,
     )
     stages.append(pr_result)
 
@@ -544,6 +559,12 @@ def _run_pipeline_inner(
         pr_url=pr_result.pr_url,
         branch=pr_result.branch,
     )
+
+    # Label issue with PR-created status and comment with PR URL (best-effort)
+    if issue_number is not None:
+        label_issue(issue_number, "harness:pr-created", repo, verbose=verbose)
+        if pr_result.pr_url:
+            comment_on_issue(issue_number, f"PR created: {pr_result.pr_url}", repo, verbose=verbose)
 
     # Stage 4.5: Protected paths check
     patterns = load_protected_patterns(repo)

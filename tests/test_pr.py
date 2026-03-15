@@ -574,3 +574,32 @@ class TestBuildPrBodyPromptMode:
             body = _build_pr_body("my-change", _success_eval(), tmp_path, "main")
         assert "## Change: my-change" in body
         assert "## Task" not in body
+
+
+class TestBuildPrBodyIssueLink:
+    """Tests for _build_pr_body with issue_number parameter."""
+
+    def _mock_git_calls(self) -> MagicMock:
+        mock = MagicMock()
+
+        def side_effect(cmd: list[str], **kwargs: object) -> MagicMock:
+            result = MagicMock()
+            result.returncode = 0
+            result.stdout = ""
+            result.stderr = ""
+            return result
+
+        mock.side_effect = side_effect
+        return mock
+
+    def test_pr_body_includes_closes_when_issue_set(self, tmp_path: Path) -> None:
+        mock = self._mock_git_calls()
+        with patch("action_harness.pr.subprocess.run", mock):
+            body = _build_pr_body("test", _success_eval(), tmp_path, "main", issue_number=42)
+        assert "Closes #42" in body
+
+    def test_pr_body_no_closes_when_issue_none(self, tmp_path: Path) -> None:
+        mock = self._mock_git_calls()
+        with patch("action_harness.pr.subprocess.run", mock):
+            body = _build_pr_body("test", _success_eval(), tmp_path, "main")
+        assert "Closes #" not in body

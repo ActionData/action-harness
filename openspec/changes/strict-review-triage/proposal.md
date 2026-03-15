@@ -1,28 +1,36 @@
 ## Why
 
-The review agent triage currently only triggers a fix-retry for high/critical severity findings. Medium and low findings are posted as a PR comment and ignored. This is not acceptable — the harness should hold the highest standards for code quality.
+The review agent triage currently only triggers a fix-retry for high/critical severity findings. Medium and low findings are posted as a PR comment and ignored. This means the harness ships PRs with known issues it identified but didn't address.
 
-On the first external repo run (analytics-monorepo hex-guides), a medium bug (workflow publishing on all PRs instead of just master merges) and several low findings (missing tests, glob pattern mismatch) were posted as comments but never fixed by the worker. The PR shipped with known issues that the harness identified but didn't address.
+The harness should treat review findings the way a good engineer treats code review: address everything. The only acceptable reasons to skip a finding are:
+1. The finding is objectively wrong (factual error in the reviewer's analysis)
+2. The suggestion is purely a style opinion not grounded in the repo's established rules
+
+Everything else gets fixed.
+
+Additionally, the quality reviewer should ground its reviews in the repo's actual conventions — CLAUDE.md rules, linter config, existing patterns — not generic opinions. A finding that contradicts the repo's established style is the reviewer's bug, not the code's bug.
 
 ## What Changes
 
-- Change triage logic: fix ALL actionable findings, not just high/critical
-- The worker fix-retry should address high, critical, medium, and substantive low findings
-- Only skip truly advisory items (style opinions, hypothetical future concerns, "consider this")
-- Add severity thresholds to the triage function: `fix` (high/critical/medium + actionable low), `note` (advisory low), `skip` (style only)
-- The fix-retry feedback should include all findings to fix, not just the high/critical subset
+- Change triage logic: the worker addresses ALL findings by default
+- The only skip conditions are: factually incorrect finding, or style opinion not backed by repo rules
+- The fix-retry feedback includes all findings, not just high/critical
+- The quality-reviewer system prompt is updated to read and follow the repo's CLAUDE.md, linter config, and existing conventions — findings must cite the rule they're enforcing
+- The triage function becomes simpler: everything is actionable unless explicitly excluded
+- Multiple fix-retry rounds if needed (currently capped at 1) to address all findings
 
 ## Capabilities
 
 ### New Capabilities
 
-- `strict-review-triage`: Stricter triage that addresses all actionable findings, not just high/critical. Only truly advisory items are noted without action.
+- `strict-review-triage`: Worker addresses all review findings. Skip only for factually wrong findings or style opinions not grounded in repo rules. Quality reviewer anchored to repo conventions.
 
 ### Modified Capabilities
 
 ## Impact
 
-- `src/action_harness/review_agents.py` — update `triage_findings` logic and `format_review_feedback`
-- `src/action_harness/pipeline.py` — update `_run_review_fix_retry` trigger condition
-- `tests/test_review_agents.py` — update triage tests for new thresholds
+- `src/action_harness/review_agents.py` — update `triage_findings` to return all actionable findings, update quality-reviewer prompt to cite repo rules
+- `src/action_harness/pipeline.py` — trigger fix-retry on any actionable findings (not just high/critical)
+- Review agent system prompts — quality reviewer reads CLAUDE.md and linter config, cites rules in findings
+- `tests/test_review_agents.py` — update triage tests
 - `tests/test_pipeline_review.py` — update integration tests

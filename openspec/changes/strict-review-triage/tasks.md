@@ -1,16 +1,16 @@
 ## 1. Update Triage and Feedback Logic
 
-- [ ] 1.1 In `review_agents.py:triage_findings`: change to return `True` if any findings exist (remove the severity filter). The function becomes: `return any(r.findings for r in results)`.
-- [ ] 1.2 In `review_agents.py:format_review_feedback`: remove the severity filter — include ALL findings in the feedback string. Group by agent with severity/file/line/description for each. Update the footer text from "Fix the high/critical issues above" to "Fix the issues above and re-run eval to verify." Update the corresponding test assertion in `test_review_agents.py:test_contains_footer`.
+- [x] 1.1 In `review_agents.py:triage_findings`: change to return `True` if any findings exist (remove the severity filter). The function becomes: `return any(r.findings for r in results)`.
+- [x] 1.2 In `review_agents.py:format_review_feedback`: remove the severity filter — include ALL findings in the feedback string. Group by agent with severity/file/line/description for each. Update the footer text from "Fix the high/critical issues above" to "Fix the issues above and re-run eval to verify." Update the corresponding test assertion in `test_review_agents.py:test_contains_footer`.
 
 ## 2. Update Quality Reviewer Prompt
 
-- [ ] 2.1 In `review_agents.py`: update the quality-reviewer system prompt. Add to the prompt text: "Before reviewing, read the repo's CLAUDE.md (if it exists) and check linter configuration in pyproject.toml or equivalent. Ground every finding in a specific rule from these files or an observable existing pattern in the codebase. Do not raise findings based on personal preference — cite the rule you are enforcing."
+- [x] 2.1 In `review_agents.py`: update the quality-reviewer system prompt. Add to the prompt text: "Before reviewing, read the repo's CLAUDE.md (if it exists) and check linter configuration in pyproject.toml or equivalent. Ground every finding in a specific rule from these files or an observable existing pattern in the codebase. Do not raise findings based on personal preference — cite the rule you are enforcing."
 
 ## 3. Pipeline Review-Fix Loop
 
-- [ ] 3.1 In `pipeline.py:_run_pipeline_inner`: replace the single `needs_fix` / `_run_review_fix_retry` call block (around the Stage 5 section) with a loop: `for review_round in range(2)` that (a) calls `_run_review_agents`, (b) checks `triage_findings`, (c) if needs fix, calls `_run_review_fix_retry`, (d) if no findings, breaks. After the loop exits, if findings remain (triage still True after 2 rounds), call `_post_review_comment` with header "Remaining findings after 2 fix-retry rounds" and continue to openspec-review.
-- [ ] 3.2 Update `_run_review_fix_retry` to accept review results as a parameter (`review_results: list[ReviewResult]`) instead of extracting them from `stages` — this prevents picking up stale results from prior review rounds.
+- [x] 3.1 In `pipeline.py:_run_pipeline_inner`: replace the single `needs_fix` / `_run_review_fix_retry` call block (around the Stage 5 section) with a loop: `for review_round in range(2)` that (a) calls `_run_review_agents`, (b) checks `triage_findings`, (c) if needs fix, calls `_run_review_fix_retry`, (d) if no findings, breaks. After the loop exits, if findings remain (triage still True after 2 rounds), call `_post_review_comment` with header "Remaining findings after 2 fix-retry rounds" and continue to openspec-review.
+- [x] 3.2 Update `_run_review_fix_retry` to accept review results as a parameter (`review_results: list[ReviewResult]`) instead of extracting them from `stages` — this prevents picking up stale results from prior review rounds.
 
 ## 4. Tests
 

@@ -443,21 +443,33 @@ def _run_pipeline_inner(
         patterns_count=len(patterns),
     )
 
-    # Stage 5: Review agents (parallel code review)
+    # Stage 5: Review agents (parallel code review) with fix-retry loop
     if not skip_review:
-        needs_fix = _run_review_agents(
-            pr_result,
-            worktree_path,
-            max_turns,
-            model,
-            effort,
-            max_budget_usd,
-            permission_mode,
-            verbose,
-            stages,
-        )
+        latest_review_results: list[ReviewResult] = []
+        findings_remain = False
 
-        if needs_fix:
+        for review_round in range(2):
+            typer.echo(
+                f"[pipeline] review round {review_round + 1}/2",
+                err=True,
+            )
+            needs_fix, latest_review_results = _run_review_agents(
+                pr_result,
+                worktree_path,
+                max_turns,
+                model,
+                effort,
+                max_budget_usd,
+                permission_mode,
+                verbose,
+                stages,
+            )
+
+            if not needs_fix:
+                findings_remain = False
+                break
+
+            findings_remain = True
             fix_succeeded = _run_review_fix_retry(
                 change_name,
                 pr_result,
@@ -472,9 +484,20 @@ def _run_pipeline_inner(
                 stages,
                 eval_commands=eval_commands,
                 logger=logger,
+                review_results=latest_review_results,
             )
             if not fix_succeeded:
                 typer.echo("[pipeline] review fix-retry failed", err=True)
+                break
+
+        if findings_remain and pr_result.pr_url:
+            _post_review_comment(
+                worktree_path,
+                pr_result.pr_url,
+                latest_review_results,
+                verbose,
+                header="Remaining findings after 2 fix-retry rounds",
+            )
     else:
         typer.echo("[pipeline] skipping review agents (--skip-review)", err=True)
 
@@ -531,11 +554,11 @@ def _run_review_agents(
     permission_mode: str,
     verbose: bool,
     stages: list[StageResultUnion],
-) -> bool:
-    """Run review agents stage. Returns True if fix retry is needed."""
+) -> tuple[bool, list[ReviewResult]]:
+    """Run review agents stage. Returns (needs_fix, review_results)."""
     if pr_result.pr_url is None:
         typer.echo("[pipeline] error: PR URL is None, cannot proceed", err=True)
-        return False
+        return False, []
     # Extract PR number from URL (e.g., https://github.com/org/repo/pull/123)
     pr_number = int(pr_result.pr_url.rstrip("/").split("/")[-1])
 
@@ -555,15 +578,13 @@ def _run_review_agents(
     for result in review_results:
         stages.append(result)
 
-    _post_review_comment(worktree_path, pr_result.pr_url, review_results, verbose)
-
     needs_fix = triage_findings(review_results)
     if needs_fix:
-        typer.echo("[pipeline] high/critical findings detected, fix retry needed", err=True)
+        typer.echo("[pipeline] findings detected, fix retry needed", err=True)
     else:
-        typer.echo("[pipeline] no high/critical findings, proceeding", err=True)
+        typer.echo("[pipeline] no findings, proceeding", err=True)
 
-    return needs_fix
+    return needs_fix, review_results
 
 
 def _post_review_comment(
@@ -571,6 +592,7 @@ def _post_review_comment(
     pr_url: str,
     review_results: list[ReviewResult],
     verbose: bool,
+    header: str = "Review Agent Findings",
 ) -> None:
     """Post a PR comment summarizing review agent findings."""
     total_findings = sum(len(r.findings) for r in review_results)
@@ -578,7 +600,7 @@ def _post_review_comment(
     if total_findings == 0:
         body = "All review agents passed with no findings."
     else:
-        lines = ["## Review Agent Findings", ""]
+        lines = [f"## {header}", ""]
         for result in review_results:
             if not result.findings:
                 continue
@@ -624,15 +646,19 @@ def _run_review_fix_retry(
     stages: list[StageResultUnion],
     eval_commands: list[str] | None = None,
     logger: EventLogger | None = None,
+    review_results: list[ReviewResult] | None = None,
 ) -> bool:
     """Re-dispatch worker with review feedback, re-run eval, push if passing.
 
     Returns True if fix succeeded (eval passed), False otherwise.
+    Accepts review_results directly to avoid picking up stale results from
+    prior review rounds.
     """
     typer.echo("[pipeline] starting review fix retry", err=True)
 
-    # Collect review results from stages
-    review_results = [s for s in stages if isinstance(s, ReviewResult)]
+    if review_results is None:
+        # Fallback: collect from stages (legacy behavior)
+        review_results = [s for s in stages if isinstance(s, ReviewResult)]
     feedback = format_review_feedback(review_results)
 
     worker_result = dispatch_worker(

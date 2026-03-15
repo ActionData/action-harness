@@ -465,6 +465,32 @@ class TestCreatePrPromptMode:
         title = cmd[title_idx + 1]
         assert len(title) <= 72
 
+    def test_pr_title_exactly_62_chars_no_truncation(self) -> None:
+        """A 62-char first line fits exactly (62 + 10 prefix = 72)."""
+        prompt = "A" * 62
+        mock = self._mock_subprocess()
+        with patch("action_harness.pr.subprocess.run", mock):
+            create_pr("prompt-t", Path("/wt"), "harness/prompt-t", _success_eval(), prompt=prompt)
+        gh_calls = [c for c in mock.call_args_list if c[0][0][0] == "gh"]
+        cmd = gh_calls[0][0][0]
+        title_idx = cmd.index("--title")
+        title = cmd[title_idx + 1]
+        assert title == f"[harness] {'A' * 62}"
+        assert len(title) == 72
+
+    def test_pr_title_63_chars_truncated_by_one(self) -> None:
+        """A 63-char first line gets truncated to 62 chars."""
+        prompt = "A" * 63
+        mock = self._mock_subprocess()
+        with patch("action_harness.pr.subprocess.run", mock):
+            create_pr("prompt-t", Path("/wt"), "harness/prompt-t", _success_eval(), prompt=prompt)
+        gh_calls = [c for c in mock.call_args_list if c[0][0][0] == "gh"]
+        cmd = gh_calls[0][0][0]
+        title_idx = cmd.index("--title")
+        title = cmd[title_idx + 1]
+        assert len(title) == 72
+        assert title == f"[harness] {'A' * 62}"
+
     def test_pr_body_contains_full_prompt(self) -> None:
         full_prompt = "Fix the auth bug and also update the tests"
         mock = self._mock_subprocess()

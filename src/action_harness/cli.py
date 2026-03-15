@@ -199,7 +199,11 @@ def run(
 
     # Compute task_label: either the change name or a prompt-derived slug
     if prompt is not None:
-        task_label = f"prompt-{slugify_prompt(prompt)}"
+        slug = slugify_prompt(prompt)
+        if not slug:
+            typer.echo("Error: --prompt must contain at least one alphanumeric character", err=True)
+            raise typer.Exit(code=1)
+        task_label = f"prompt-{slug}"
     else:
         assert change is not None  # validated above
         task_label = change

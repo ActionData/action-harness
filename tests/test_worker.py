@@ -509,6 +509,24 @@ class TestDispatchWorkerPromptMode:
         # Prompt comes before feedback
         assert user_prompt.index("Fix bug") < user_prompt.index("Tests still fail")
 
+    def test_prompt_ignored_in_resume_mode(self, tmp_path: Path) -> None:
+        """On resume, prompt is ignored — feedback is the user prompt."""
+        mock = make_mock_subprocess(claude_stdout=_OK_JSON)
+        with patch("action_harness.worker.subprocess.run", mock):
+            dispatch_worker(
+                "prompt-fix-bug",
+                tmp_path,
+                prompt="Fix bug",
+                session_id="sess_abc",
+                feedback="retry this",
+            )
+
+        cmd = get_claude_cmd(mock)
+        assert "--resume" in cmd
+        user_prompt = get_claude_prompt(mock)
+        assert user_prompt == "retry this"
+        assert "Fix bug" not in user_prompt
+
     def test_prompt_with_progress_file(self, tmp_path: Path) -> None:
         """In prompt mode with progress file, progress is prepended to prompt."""
         progress_content = "# Harness Progress\n\n## Attempt 1\n"

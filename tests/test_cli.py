@@ -13,6 +13,30 @@ from action_harness.models import PrResult, RunManifest
 runner = CliRunner()
 
 
+def _mock_pipeline_success(
+    change_name: str = "test-change",
+) -> tuple[PrResult, RunManifest]:
+    """Shared helper: a successful pipeline result for CLI tests."""
+    pr_result = PrResult(
+        success=True,
+        stage="pipeline",
+        pr_url="https://github.com/test/repo/pull/1",
+        branch="harness/test",
+    )
+    manifest = RunManifest(
+        change_name=change_name,
+        repo_path="/tmp/repo",
+        started_at="2026-01-01T00:00:00+00:00",
+        completed_at="2026-01-01T00:01:00+00:00",
+        success=True,
+        stages=[],
+        total_duration_seconds=60.0,
+        pr_url="https://github.com/test/repo/pull/1",
+        manifest_path="/tmp/repo/.action-harness/runs/test.json",
+    )
+    return pr_result, manifest
+
+
 @pytest.fixture
 def fake_repo(tmp_path: Path) -> Path:
     """Create a minimal fake git repo with an OpenSpec change directory."""
@@ -88,32 +112,10 @@ class TestCliRunner:
         result = runner.invoke(app, ["--change", "x", "--repo", "/some/path"])
         assert result.exit_code != 0
 
-    def _mock_pipeline_success(self) -> tuple[PrResult, RunManifest]:
-        pr_result = PrResult(
-            success=True,
-            stage="pipeline",
-            pr_url="https://github.com/test/repo/pull/1",
-            branch="harness/test",
-        )
-        manifest = RunManifest(
-            change_name="test-change",
-            repo_path="/tmp/repo",
-            started_at="2026-01-01T00:00:00+00:00",
-            completed_at="2026-01-01T00:01:00+00:00",
-            success=True,
-            stages=[],
-            total_duration_seconds=60.0,
-            pr_url="https://github.com/test/repo/pull/1",
-            manifest_path="/tmp/repo/.action-harness/runs/test.json",
-        )
-        return pr_result, manifest
-
     def test_run_valid_inputs(self, fake_repo: Path) -> None:
         with (
             patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"),
-            patch(
-                "action_harness.pipeline.run_pipeline", return_value=self._mock_pipeline_success()
-            ),
+            patch("action_harness.pipeline.run_pipeline", return_value=_mock_pipeline_success()),
         ):
             result = runner.invoke(
                 app, ["run", "--change", "test-change", "--repo", str(fake_repo)]
@@ -137,9 +139,7 @@ class TestCliRunner:
     def test_verbose_flag_accepted(self, fake_repo: Path) -> None:
         with (
             patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"),
-            patch(
-                "action_harness.pipeline.run_pipeline", return_value=self._mock_pipeline_success()
-            ),
+            patch("action_harness.pipeline.run_pipeline", return_value=_mock_pipeline_success()),
         ):
             result = runner.invoke(
                 app,
@@ -323,26 +323,6 @@ class TestValidateInputsPrompt:
 class TestPromptModeCli:
     """Test --prompt flag behavior in the CLI."""
 
-    def _mock_pipeline_success(self) -> tuple[PrResult, RunManifest]:
-        pr_result = PrResult(
-            success=True,
-            stage="pipeline",
-            pr_url="https://github.com/test/repo/pull/1",
-            branch="harness/test",
-        )
-        manifest = RunManifest(
-            change_name="prompt-fix-bug",
-            repo_path="/tmp/repo",
-            started_at="2026-01-01T00:00:00+00:00",
-            completed_at="2026-01-01T00:01:00+00:00",
-            success=True,
-            stages=[],
-            total_duration_seconds=60.0,
-            pr_url="https://github.com/test/repo/pull/1",
-            manifest_path="/tmp/repo/.action-harness/runs/test.json",
-        )
-        return pr_result, manifest
-
     def test_both_change_and_prompt_fails(self) -> None:
         result = runner.invoke(
             app,
@@ -361,7 +341,7 @@ class TestPromptModeCli:
             patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"),
             patch(
                 "action_harness.pipeline.run_pipeline",
-                return_value=self._mock_pipeline_success(),
+                return_value=_mock_pipeline_success(),
             ),
         ):
             result = runner.invoke(
@@ -375,7 +355,7 @@ class TestPromptModeCli:
             patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"),
             patch(
                 "action_harness.pipeline.run_pipeline",
-                return_value=self._mock_pipeline_success(),
+                return_value=_mock_pipeline_success(),
             ),
         ):
             result = runner.invoke(
@@ -415,6 +395,16 @@ class TestPromptModeCli:
         result = runner.invoke(app, ["run", "--prompt", "   ", "--repo", "/some/path"])
         assert result.exit_code == 1
         assert "--prompt must not be empty" in result.output
+
+    def test_special_chars_only_prompt_fails(self, fake_repo: Path) -> None:
+        """A prompt like '!!@@##' passes strip() but yields empty slug."""
+        with patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"):
+            result = runner.invoke(
+                app,
+                ["run", "--prompt", "!!@@##$$", "--repo", str(fake_repo)],
+            )
+        assert result.exit_code == 1
+        assert "alphanumeric" in result.output
 
 
 class TestCleanCommand:

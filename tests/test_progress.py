@@ -129,6 +129,24 @@ class TestWriteProgress:
         # No feedback line when eval passes
         assert "**Feedback**" not in content
 
+    def test_none_cost_and_duration_formatted_as_fallback(self, git_worktree: Path) -> None:
+        """None cost/duration renders as '?' not 'None'."""
+        worker = WorkerResult(
+            success=False,
+            stage="worker",
+            commits_ahead=1,
+            cost_usd=None,
+            duration_seconds=None,
+        )
+        eval_r = _make_eval_result(success=False)
+
+        write_progress(git_worktree, 1, worker, eval_r)
+
+        content = (git_worktree / PROGRESS_FILENAME).read_text()
+        assert "None" not in content
+        assert "- **Duration**: ?" in content
+        assert "- **Cost**: ?" in content
+
     def test_gitignore_not_modified(self, git_worktree: Path) -> None:
         """Tracked .gitignore must not be touched (avoids leaking into PRs)."""
         gitignore = git_worktree / ".gitignore"

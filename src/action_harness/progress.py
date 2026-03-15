@@ -38,8 +38,10 @@ def write_progress(
     ]
     if not eval_result.success and eval_result.feedback_prompt:
         lines.append(f"- **Feedback**: {eval_result.feedback_prompt}")
-    lines.append(f"- **Duration**: {worker_result.duration_seconds}s")
-    lines.append(f"- **Cost**: ${worker_result.cost_usd}")
+    duration = worker_result.duration_seconds
+    lines.append(f"- **Duration**: {f'{duration}s' if duration is not None else '?'}")
+    cost = worker_result.cost_usd
+    lines.append(f"- **Cost**: {f'${cost}' if cost is not None else '?'}")
     lines.append("")  # trailing newline after section
 
     section = "\n".join(lines) + "\n"
@@ -84,7 +86,7 @@ def _ensure_git_excluded(worktree_path: Path) -> None:
             if PROGRESS_FILENAME in existing_lines:
                 return
             with exclude_file.open("a") as f:
-                if existing_lines and not existing_lines[-1] == "":
+                if existing_lines and existing_lines[-1] != "":
                     f.write("\n")
                 f.write(f"{PROGRESS_FILENAME}\n")
         else:

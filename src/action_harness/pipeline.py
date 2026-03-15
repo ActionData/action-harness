@@ -315,6 +315,14 @@ def _run_pipeline_inner(
             if pre_work_eval.success:
                 typer.echo("[pipeline] pre-work eval passed, skipping retry", err=True)
                 eval_result = pre_work_eval
+                # Use prior worker result for PR metadata. If the worker
+                # reported failure (e.g. zero-commit detection glitch) but
+                # actually produced valid commits, mark it successful so
+                # downstream consumers (manifest, PR body) aren't misled.
+                if not prior_worker_result.success:
+                    prior_worker_result = prior_worker_result.model_copy(
+                        update={"success": True, "error": None}
+                    )
                 worker_result = prior_worker_result
                 break
             # Pre-work eval failed — use its feedback if available (fresher than stale)

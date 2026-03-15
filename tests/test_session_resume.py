@@ -77,11 +77,14 @@ def _run_inner_with_mocks(
     dummy_logger: EventLogger,
     max_retries: int = 3,
     mock_create_pr: MagicMock | None = None,
+    mock_write_progress: MagicMock | None = None,
 ) -> PrResult:
     """Helper to call _run_pipeline_inner with all required mocks."""
     wt_result = WorktreeResult(success=True, worktree_path=Path("/fake/wt"), branch="harness/test")
     if not stages:
         stages.append(wt_result)
+
+    wp_mock = mock_write_progress if mock_write_progress is not None else MagicMock()
 
     with (
         patch("action_harness.pipeline.dispatch_worker", side_effect=mock_dispatch),
@@ -94,7 +97,7 @@ def _run_inner_with_mocks(
             "action_harness.pipeline._run_openspec_review",
             return_value=_approved_review(),
         ),
-        patch("action_harness.pipeline.write_progress"),
+        patch("action_harness.pipeline.write_progress", wp_mock),
     ):
         if mock_create_pr is not None:
             mock_pr.side_effect = mock_create_pr
@@ -432,7 +435,10 @@ class TestPreWorkEval:
     """Pre-work eval runs before retry when prior worker produced commits."""
 
     def test_pre_work_eval_passes_skips_retry(self, dummy_logger: EventLogger) -> None:
-        """When pre-work eval passes, worker is NOT dispatched for the retry."""
+        """When pre-work eval passes, worker is NOT dispatched for the retry.
+
+        create_pr receives the prior worker_result and the pre-work eval_result.
+        """
         dispatch_calls: list[dict[str, str | None]] = []
 
         def mock_dispatch(*args: object, **kwargs: object) -> WorkerResult:
@@ -448,10 +454,10 @@ class TestPreWorkEval:
             eval_idx["i"] += 1
             return result
 
-        create_pr_calls: list[dict[str, object]] = []
+        create_pr_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
 
         def mock_create_pr(*args: object, **kwargs: object) -> MagicMock:
-            create_pr_calls.append({"kwargs": kwargs})
+            create_pr_calls.append((args, kwargs))
             return MagicMock(success=True, pr_url="http://pr/1", branch="b")
 
         stages: list[StageResultUnion] = []
@@ -463,6 +469,20 @@ class TestPreWorkEval:
         assert len(dispatch_calls) == 1
         # 2 eval calls: initial eval (fail) + pre-work eval (pass)
         assert eval_idx["i"] == 2
+
+        # create_pr received the prior worker_result and pre-work eval_result
+        assert len(create_pr_calls) == 1
+        pr_args = create_pr_calls[0][0]
+        pr_kwargs = create_pr_calls[0][1]
+        # eval_result arg (positional): should be the passing pre-work eval
+        eval_arg = pr_args[3]  # create_pr(change, wt, branch, eval_result, ...)
+        assert isinstance(eval_arg, EvalResult)
+        assert eval_arg.success is True
+        # worker_result kwarg: should be the original worker (marked successful)
+        worker_arg = pr_kwargs.get("worker_result")
+        assert isinstance(worker_arg, WorkerResult)
+        assert worker_arg.commits_ahead == 3
+        assert worker_arg.success is True
 
     def test_pre_work_eval_fails_dispatches_with_fresh_feedback(
         self, dummy_logger: EventLogger
@@ -492,7 +512,10 @@ class TestPreWorkEval:
         assert dispatch_calls[1]["feedback"] == "mypy error"
 
     def test_pre_work_eval_not_run_after_zero_commits(self, dummy_logger: EventLogger) -> None:
-        """When prior worker produced zero commits, pre-work eval is NOT run."""
+        """When prior worker produced zero commits, pre-work eval is NOT run.
+
+        Also verifies write_progress is NOT called on the worker-failure path.
+        """
         dispatch_calls: list[dict[str, object]] = []
 
         def mock_dispatch(*args: object, **kwargs: object) -> WorkerResult:
@@ -514,13 +537,18 @@ class TestPreWorkEval:
             eval_idx["i"] += 1
             return result
 
+        wp_mock = MagicMock()
         stages: list[StageResultUnion] = []
-        _run_inner_with_mocks(mock_dispatch, mock_eval, stages, dummy_logger)
+        _run_inner_with_mocks(
+            mock_dispatch, mock_eval, stages, dummy_logger, mock_write_progress=wp_mock
+        )
 
         # 2 worker dispatches (initial fail + retry)
         assert len(dispatch_calls) == 2
         # Only 1 eval call — no pre-work eval was run
         assert eval_idx["i"] == 1
+        # write_progress NOT called on worker-failure path (no eval ran)
+        wp_mock.assert_not_called()
 
 
 class TestRetryProgressIntegration:

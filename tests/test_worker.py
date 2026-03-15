@@ -447,3 +447,7 @@ class TestProgressFileInjection:
         prompt = self._get_claude_prompt(mock)
         assert prompt.startswith(progress_content)
         assert "fix the tests" in prompt
+        # Progress appears before feedback
+        progress_pos = prompt.index("Harness Progress")
+        feedback_pos = prompt.index("fix the tests")
+        assert progress_pos < feedback_pos

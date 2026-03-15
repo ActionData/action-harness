@@ -15,12 +15,12 @@
 
 Prerequisites: `unspecced-tasks` must be merged first. This change assumes `--change` is already optional (`typer.Option(None, ...)`), `--prompt` exists, and `slugify_prompt()` is available — all introduced by `unspecced-tasks`.
 
-- [ ] 3.1 Add `--issue` option (`int | None`, default None) to the `run` command in `cli.py`. Update the existing two-way mutual exclusion (from `unspecced-tasks`) to three-way: if more than one of `--change`, `--prompt`, `--issue` is provided, exit with "Specify only one of --change, --prompt, or --issue". If none provided, exit with "Specify one of --change, --prompt, or --issue".
-- [ ] 3.2 When `--issue` is used: call `read_issue(issue, resolved_repo)` to get `IssueData`. Call `detect_openspec_change(issue_data.body, resolved_repo)` to check for change reference. If change found, set `change = detected_name` and proceed as `--change` mode. If no change found, import `slugify_prompt` from the worker/utils module, compute `task_label = f"prompt-{slugify_prompt(issue_data.title)}"` as the change name, and set `prompt = build_issue_prompt(issue, issue_data.title, issue_data.body)`.
-- [ ] 3.3 Pass `issue_number: int | None` through to `run_pipeline()` for PR linking and labeling.
-- [ ] 3.4 Update `run()` docstring and help text to document `--issue`: "Run the action-harness pipeline from an OpenSpec change, freeform prompt, or GitHub issue."
-- [ ] 3.5 Update the `--dry-run` block to handle `--issue` mode: print the issue number, resolved mode (change or prompt), and the computed change name or prompt preview.
-- [ ] 3.6 Add CLI tests: `--issue` alone works (mock read_issue), `--issue` with `--change` exits with error, `--issue` with `--prompt` exits with error, `--help` includes `--issue`, `--dry-run` with `--issue` shows issue number and resolved mode.
+- [x] 3.1 Add `--issue` option (`int | None`, default None) to the `run` command in `cli.py`. Update the existing two-way mutual exclusion (from `unspecced-tasks`) to three-way: if more than one of `--change`, `--prompt`, `--issue` is provided, exit with "Specify only one of --change, --prompt, or --issue". If none provided, exit with "Specify one of --change, --prompt, or --issue".
+- [x] 3.2 When `--issue` is used: call `read_issue(issue, resolved_repo)` to get `IssueData`. Call `detect_openspec_change(issue_data.body, resolved_repo)` to check for change reference. If change found, set `change = detected_name` and proceed as `--change` mode. If no change found, import `slugify_prompt` from the worker/utils module, compute `task_label = f"prompt-{slugify_prompt(issue_data.title)}"` as the change name, and set `prompt = build_issue_prompt(issue, issue_data.title, issue_data.body)`.
+- [x] 3.3 Pass `issue_number: int | None` through to `run_pipeline()` for PR linking and labeling.
+- [x] 3.4 Update `run()` docstring and help text to document `--issue`: "Run the action-harness pipeline from an OpenSpec change, freeform prompt, or GitHub issue."
+- [x] 3.5 Update the `--dry-run` block to handle `--issue` mode: print the issue number, resolved mode (change or prompt), and the computed change name or prompt preview.
+- [x] 3.6 Add CLI tests: `--issue` alone works (mock read_issue), `--issue` with `--change` exits with error, `--issue` with `--prompt` exits with error, `--help` includes `--issue`, `--dry-run` with `--issue` shows issue number and resolved mode.
 
 ## 4. PR Linking [depends: 3]
 

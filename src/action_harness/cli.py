@@ -109,7 +109,12 @@ def run(
     prompt: str | None = typer.Option(
         None,
         help="Freeform task description sent directly to the worker "
-        "(mutually exclusive with --change)",
+        "(mutually exclusive with --change and --issue)",
+    ),
+    issue: int | None = typer.Option(
+        None,
+        help="GitHub issue number to dispatch "
+        "(mutually exclusive with --change and --prompt)",
     ),
     repo: str = typer.Option(
         ...,
@@ -156,17 +161,20 @@ def run(
         False, "--dry-run", help="Validate and print plan without executing"
     ),
 ) -> None:
-    """Run the action-harness pipeline for an OpenSpec change or freeform task.
+    """Run the action-harness pipeline from an OpenSpec change, freeform prompt, or GitHub issue.
 
-    Provide exactly one of `--change` or `--prompt`:
+    Provide exactly one of `--change`, `--prompt`, or `--issue`:
 
     - `--change NAME` implements an OpenSpec change via opsx:apply. The change
       must exist at REPO/openspec/changes/NAME/.
     - `--prompt TEXT` sends a freeform task description directly to the worker.
       No OpenSpec artifacts are needed. The pipeline skips the OpenSpec review
       stage but still runs eval, retry, and review agents.
+    - `--issue NUMBER` reads a GitHub issue, detects OpenSpec change references
+      in the body, and dispatches as --change or --prompt accordingly. The PR
+      links back to the issue for automatic closure on merge.
 
-    In both modes, the pipeline creates an isolated worktree, dispatches a
+    In all modes, the pipeline creates an isolated worktree, dispatches a
     Claude Code worker, runs eval (pytest, ruff, mypy), retries with
     structured feedback on failure, and opens a PR for human review.
 
@@ -178,24 +186,59 @@ def run(
     GitHub shorthand (e.g., `owner/repo`), or a full URL
     (e.g., `https://github.com/owner/repo` or `git@github.com:owner/repo.git`).
     """
-    # Mutual exclusion validation
-    if change is not None and prompt is not None:
-        typer.echo("Error: Specify either --change or --prompt, not both", err=True)
+    # Mutual exclusion validation: exactly one of --change, --prompt, --issue
+    provided = sum(x is not None for x in (change, prompt, issue))
+    if provided > 1:
+        typer.echo(
+            "Error: Specify only one of --change, --prompt, or --issue", err=True
+        )
         raise typer.Exit(code=1)
 
-    if change is None and prompt is None:
-        typer.echo("Error: Specify either --change or --prompt", err=True)
+    if provided == 0:
+        typer.echo("Error: Specify one of --change, --prompt, or --issue", err=True)
         raise typer.Exit(code=1)
 
     if prompt is not None and not prompt.strip():
         typer.echo("Error: --prompt must not be empty", err=True)
         raise typer.Exit(code=1)
 
+    # Track issue number for PR linking and labeling
+    issue_number: int | None = issue
+
     if wait_for_ci and not auto_merge:
         typer.echo("Error: --wait-for-ci requires --auto-merge", err=True)
         raise typer.Exit(code=1)
 
     resolved_home = _resolve_harness_home(harness_home)
+
+    # Resolve repo: local path or remote reference
+    from action_harness.repo import resolve_repo
+
+    try:
+        resolved_repo, repo_name = resolve_repo(repo, resolved_home, verbose=verbose)
+    except ValidationError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=1) from None
+
+    # Resolve --issue into --change or --prompt mode
+    if issue is not None:
+        from action_harness.issue_intake import (
+            build_issue_prompt,
+            detect_openspec_change,
+            read_issue,
+        )
+
+        try:
+            issue_data = read_issue(issue, resolved_repo)
+        except ValidationError as e:
+            typer.echo(f"Error: {e}", err=True)
+            raise typer.Exit(code=1) from None
+
+        detected_change = detect_openspec_change(issue_data.body, resolved_repo)
+        if detected_change is not None:
+            change = detected_change
+        else:
+            prompt = build_issue_prompt(issue, issue_data.title, issue_data.body)
 
     # Compute task_label: either the change name or a prompt-derived slug
     if prompt is not None:
@@ -207,15 +250,6 @@ def run(
     else:
         assert change is not None  # validated above
         task_label = change
-
-    # Resolve repo: local path or remote reference
-    from action_harness.repo import resolve_repo
-
-    try:
-        resolved_repo, repo_name = resolve_repo(repo, resolved_home, verbose=verbose)
-    except ValidationError as e:
-        typer.echo(f"Error: {e}", err=True)
-        raise typer.Exit(code=1) from None
 
     # Validate inputs: prompt mode skips OpenSpec directory check
     try:
@@ -237,7 +271,15 @@ def run(
             workspace_path = str(resolved_home / "workspaces" / repo_name / task_label)
         else:
             workspace_path = f"/tmp/action-harness-*/{task_label}"
-        if prompt is not None:
+        if issue_number is not None:
+            resolved_mode = "change" if change is not None else "prompt"
+            typer.echo(f"Dry-run plan for issue #{issue_number} (resolved as {resolved_mode}):")
+            if resolved_mode == "prompt":
+                preview = (prompt or "")[:120]
+                typer.echo(f"  prompt preview: {preview}")
+            else:
+                typer.echo(f"  change: {task_label}")
+        elif prompt is not None:
             typer.echo(f"Dry-run plan for prompt: {prompt}")
         else:
             typer.echo(f"Dry-run plan for change '{task_label}':")
@@ -278,6 +320,7 @@ def run(
         auto_merge=auto_merge,
         wait_for_ci=wait_for_ci,
         prompt=prompt,
+        issue_number=issue_number,
     )
 
     if manifest.manifest_path:

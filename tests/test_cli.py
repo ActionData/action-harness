@@ -2,7 +2,7 @@
 
 import subprocess
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from typer.testing import CliRunner
@@ -329,12 +329,12 @@ class TestPromptModeCli:
             ["run", "--change", "x", "--prompt", "Fix bug", "--repo", "/some/path"],
         )
         assert result.exit_code == 1
-        assert "Specify either --change or --prompt, not both" in result.output
+        assert "Specify only one of --change, --prompt, or --issue" in result.output
 
     def test_neither_change_nor_prompt_fails(self) -> None:
         result = runner.invoke(app, ["run", "--repo", "/some/path"])
         assert result.exit_code == 1
-        assert "Specify either --change or --prompt" in result.output
+        assert "Specify one of --change, --prompt, or --issue" in result.output
 
     def test_prompt_only_works(self, fake_repo: Path) -> None:
         with (
@@ -405,6 +405,131 @@ class TestPromptModeCli:
             )
         assert result.exit_code == 1
         assert "alphanumeric" in result.output
+
+
+class TestIssueModeCli:
+    """Test --issue flag behavior in the CLI."""
+
+    def test_issue_with_change_fails(self) -> None:
+        result = runner.invoke(
+            app,
+            ["run", "--issue", "42", "--change", "x", "--repo", "/some/path"],
+        )
+        assert result.exit_code == 1
+        assert "Specify only one of --change, --prompt, or --issue" in result.output
+
+    def test_issue_with_prompt_fails(self) -> None:
+        result = runner.invoke(
+            app,
+            ["run", "--issue", "42", "--prompt", "Fix bug", "--repo", "/some/path"],
+        )
+        assert result.exit_code == 1
+        assert "Specify only one of --change, --prompt, or --issue" in result.output
+
+    def test_help_shows_issue_flag(self) -> None:
+        result = runner.invoke(app, ["run", "--help"])
+        assert result.exit_code == 0
+        assert "--issue" in result.output
+
+    def test_issue_alone_works(self, fake_repo: Path) -> None:
+        """--issue reads issue and dispatches as prompt mode."""
+        with (
+            patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"),
+            patch(
+                "action_harness.issue_intake.subprocess.run",
+                return_value=MagicMock(
+                    returncode=0,
+                    stdout='{"title": "Fix bug", "body": "Details here", "state": "OPEN"}',
+                    stderr="",
+                ),
+            ),
+            patch(
+                "action_harness.pipeline.run_pipeline",
+                return_value=_mock_pipeline_success(),
+            ),
+        ):
+            result = runner.invoke(
+                app,
+                ["run", "--issue", "42", "--repo", str(fake_repo)],
+            )
+        assert result.exit_code == 0
+
+    def test_issue_resolves_to_change_mode(self, fake_repo: Path) -> None:
+        """--issue with openspec reference in body dispatches as change mode."""
+        # Create the change directory
+        change_dir = fake_repo / "openspec" / "changes" / "add-logging"
+        change_dir.mkdir(parents=True)
+
+        with (
+            patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"),
+            patch(
+                "action_harness.issue_intake.subprocess.run",
+                return_value=MagicMock(
+                    returncode=0,
+                    stdout='{"title": "Implement logging", "body": "See openspec:add-logging for details", "state": "OPEN"}',
+                    stderr="",
+                ),
+            ),
+            patch(
+                "action_harness.pipeline.run_pipeline",
+                return_value=_mock_pipeline_success(),
+            ) as mock_pipeline,
+        ):
+            result = runner.invoke(
+                app,
+                ["run", "--issue", "42", "--repo", str(fake_repo)],
+            )
+        assert result.exit_code == 0
+        # Verify pipeline was called with the change name, not a prompt slug
+        call_kwargs = mock_pipeline.call_args[1]
+        assert call_kwargs["change_name"] == "add-logging"
+        assert call_kwargs["issue_number"] == 42
+
+    def test_dry_run_with_issue_prompt_mode(self, fake_repo: Path) -> None:
+        """--dry-run with --issue in prompt mode shows issue info."""
+        with (
+            patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"),
+            patch(
+                "action_harness.issue_intake.subprocess.run",
+                return_value=MagicMock(
+                    returncode=0,
+                    stdout='{"title": "Fix auth", "body": "Login broken", "state": "OPEN"}',
+                    stderr="",
+                ),
+            ),
+        ):
+            result = runner.invoke(
+                app,
+                ["run", "--issue", "42", "--repo", str(fake_repo), "--dry-run"],
+            )
+        assert result.exit_code == 0
+        assert "issue #42" in result.output
+        assert "prompt" in result.output
+
+    def test_dry_run_with_issue_change_mode(self, fake_repo: Path) -> None:
+        """--dry-run with --issue in change mode shows issue info."""
+        change_dir = fake_repo / "openspec" / "changes" / "fix-auth"
+        change_dir.mkdir(parents=True)
+
+        with (
+            patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"),
+            patch(
+                "action_harness.issue_intake.subprocess.run",
+                return_value=MagicMock(
+                    returncode=0,
+                    stdout='{"title": "Fix auth", "body": "change: fix-auth", "state": "OPEN"}',
+                    stderr="",
+                ),
+            ),
+        ):
+            result = runner.invoke(
+                app,
+                ["run", "--issue", "42", "--repo", str(fake_repo), "--dry-run"],
+            )
+        assert result.exit_code == 0
+        assert "issue #42" in result.output
+        assert "change" in result.output
+        assert "fix-auth" in result.output
 
 
 class TestCleanCommand:

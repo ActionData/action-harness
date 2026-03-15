@@ -18,6 +18,8 @@ if TYPE_CHECKING:
 
 __all__ = ["BOOTSTRAP_EVAL_COMMANDS", "run_eval", "format_feedback"]
 
+_STRIPPED_ENV_VARS = ("VIRTUAL_ENV", "VIRTUAL_ENV_PROMPT")
+
 
 def format_feedback(command: str, exit_code: int, output: str) -> str:
     """Format structured feedback for a failed eval command."""
@@ -45,9 +47,13 @@ def run_eval(
     commands = eval_commands or BOOTSTRAP_EVAL_COMMANDS
     typer.echo(f"[eval] running {len(commands)} eval command(s)", err=True)
 
-    clean_env = {
-        k: v for k, v in os.environ.items() if k not in ("VIRTUAL_ENV", "VIRTUAL_ENV_PROMPT")
-    }
+    venv_dir = os.environ.get("VIRTUAL_ENV")
+    clean_env = {k: v for k, v in os.environ.items() if k not in _STRIPPED_ENV_VARS}
+    if venv_dir and "PATH" in clean_env:
+        venv_bin = venv_dir + "/bin"
+        clean_env["PATH"] = os.pathsep.join(
+            seg for seg in clean_env["PATH"].split(os.pathsep) if seg != venv_bin
+        )
 
     commands_passed = 0
 

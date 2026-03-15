@@ -131,6 +131,7 @@ def post_merge_blocked_comment(
         "no_protected_files": "No protected files touched",
         "review_clean": "Review agents clean",
         "openspec_review_passed": "OpenSpec review passed",
+        "ci_passed": "CI checks passed",
     }
 
     lines = ["## Auto-merge blocked", ""]

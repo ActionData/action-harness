@@ -66,6 +66,28 @@ class TestMergePr:
         assert result.success is False
         assert result.merged is False
 
+    def test_os_error(self, tmp_path: Path) -> None:
+        with patch(
+            "action_harness.merge.subprocess.run",
+            side_effect=OSError("connection refused"),
+        ):
+            result = merge_pr("https://github.com/org/repo/pull/1", tmp_path)
+
+        assert result.success is False
+        assert result.merged is False
+        assert "connection refused" in (result.error or "")
+
+    def test_timeout(self, tmp_path: Path) -> None:
+        with patch(
+            "action_harness.merge.subprocess.run",
+            side_effect=subprocess.TimeoutExpired(cmd="gh", timeout=120),
+        ):
+            result = merge_pr("https://github.com/org/repo/pull/1", tmp_path)
+
+        assert result.success is False
+        assert result.merged is False
+        assert "timed out" in (result.error or "")
+
 
 class TestCheckMergeGates:
     def test_all_pass(self) -> None:
@@ -179,6 +201,17 @@ class TestWaitForCi:
             result = wait_for_ci("https://github.com/org/repo/pull/1", tmp_path)
 
         assert result is False
+
+    def test_command_includes_watch_and_fail_fast(self, tmp_path: Path) -> None:
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+
+        with patch("action_harness.merge.subprocess.run", return_value=mock_result) as mock_run:
+            wait_for_ci("https://github.com/org/repo/pull/1", tmp_path)
+
+        cmd = mock_run.call_args[0][0]
+        assert "--watch" in cmd
+        assert "--fail-fast" in cmd
 
     def test_custom_timeout_passed_to_subprocess(self, tmp_path: Path) -> None:
         mock_result = MagicMock()

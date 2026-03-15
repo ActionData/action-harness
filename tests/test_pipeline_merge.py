@@ -3,7 +3,7 @@
 import json
 import subprocess
 from collections.abc import Generator
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -117,7 +117,7 @@ def _make_claude_mock(commits: bool = True) -> MagicMock:
 
 def _standard_patches(
     mock: MagicMock, review: OpenSpecReviewResult | None = None
-) -> Generator[None]:
+) -> AbstractContextManager[None]:
     """Return a context manager of patches for the standard pipeline stages."""
 
     @contextmanager
@@ -269,7 +269,7 @@ class TestAutoMerge:
         assert len(merge_stages) == 0
 
     def test_wait_for_ci_pass_merged(self, test_repo: Path) -> None:
-        """auto-merge + wait_for_ci pass → merged."""
+        """auto-merge + wait_for_ci pass → merged with ci_passed=True from pipeline."""
         mock = _make_claude_mock()
 
         with (
@@ -277,7 +277,9 @@ class TestAutoMerge:
             patch("action_harness.pipeline.merge_pr") as mock_merge,
             patch("action_harness.pipeline.wait_for_ci_checks", return_value=True),
         ):
+            # Return MergeResult without ci_passed — pipeline's model_copy must set it
             mock_merge.return_value = MergeResult(success=True, merged=True)
+            assert mock_merge.return_value.ci_passed is None  # confirm mock doesn't pre-set
             pr_result, manifest = run_pipeline(
                 "test-change",
                 test_repo,
@@ -290,6 +292,7 @@ class TestAutoMerge:
         merge_stages = [s for s in manifest.stages if isinstance(s, MergeResult)]
         assert len(merge_stages) == 1
         assert merge_stages[0].merged is True
+        # ci_passed=True must come from pipeline's model_copy, not from mock
         assert merge_stages[0].ci_passed is True
 
     def test_wait_for_ci_fail_blocked(self, test_repo: Path) -> None:
@@ -316,6 +319,9 @@ class TestAutoMerge:
         assert merge_stages[0].ci_passed is False
         assert "CI" in (merge_stages[0].merge_blocked_reason or "")
         mock_comment.assert_called_once()
+        # Verify the gates dict passed to comment includes ci_passed=False
+        comment_gates = mock_comment.call_args[0][2]
+        assert comment_gates["ci_passed"] is False
 
     def test_skip_review_no_openspec_review_gates_pass(self, test_repo: Path) -> None:
         """auto-merge + skip_review + prompt mode (no openspec review) → gates pass."""
@@ -402,3 +408,44 @@ class TestAutoMerge:
         assert merge_stages[0].success is False
         assert merge_stages[0].merged is False
         assert merge_stages[0].error == "merge conflict"
+
+    def test_auto_merge_no_pr_url_appends_blocked_result(self, test_repo: Path) -> None:
+        """auto-merge enabled but pr_url is None → MergeResult(merged=False) appended."""
+        mock = _make_claude_mock()
+
+        from action_harness.models import PrResult
+
+        # PR creation "succeeds" but without a URL
+        no_url_pr = PrResult(success=True, stage="pr", branch="harness/test-change")
+        assert no_url_pr.pr_url is None
+
+        with (
+            patch("action_harness.worker.subprocess.run", mock),
+            patch("action_harness.pipeline.run_eval", return_value=_passing_eval()),
+            patch("action_harness.pipeline.create_pr", return_value=no_url_pr),
+            patch("action_harness.pr.subprocess.run", mock),
+            patch(
+                "action_harness.pipeline.dispatch_openspec_review",
+                return_value=('{"result": "{}"}', 1.0),
+            ),
+            patch(
+                "action_harness.pipeline.parse_review_result",
+                return_value=_approved_review_result(),
+            ),
+            patch(
+                "action_harness.pipeline.push_archive_if_needed",
+                return_value=(False, None),
+            ),
+        ):
+            pr_result, manifest = run_pipeline(
+                "test-change",
+                test_repo,
+                max_retries=1,
+                skip_review=True,
+                auto_merge=True,
+            )
+
+        merge_stages = [s for s in manifest.stages if isinstance(s, MergeResult)]
+        assert len(merge_stages) == 1
+        assert merge_stages[0].merged is False
+        assert merge_stages[0].merge_blocked_reason == "no PR URL"

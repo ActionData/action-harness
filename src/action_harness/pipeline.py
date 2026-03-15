@@ -693,7 +693,15 @@ def _run_pipeline_inner(
     # Stage 7: Auto-merge (optional)
     if auto_merge and not pr_result.pr_url:
         typer.echo("[pipeline] auto-merge: skipping, no PR URL available", err=True)
+        stages.append(MergeResult(success=True, merged=False, merge_blocked_reason="no PR URL"))
+        logger.emit(
+            "merge.completed",
+            stage="merge",
+            merged=False,
+            blocked_reason="no PR URL",
+        )
     elif auto_merge and pr_result.pr_url:
+        logger.emit("merge.started", stage="merge", wait_for_ci=wait_for_ci)
         openspec_review_passed = review_result is None or review_result.success
         gates, all_passed = check_merge_gates(
             protected_files, findings_remain, openspec_review_passed, skip_review
@@ -719,7 +727,10 @@ def _run_pipeline_inner(
                     merge_blocked_reason=reason,
                     ci_passed=ci_passed,
                 )
-                post_merge_blocked_comment(pr_result.pr_url, worktree_path, gates, verbose=verbose)
+                ci_gates = {**gates, "ci_passed": False}
+                post_merge_blocked_comment(
+                    pr_result.pr_url, worktree_path, ci_gates, verbose=verbose
+                )
         else:
             failed_gates = [name for name, passed in gates.items() if not passed]
             reason = f"Gates failed: {', '.join(failed_gates)}"

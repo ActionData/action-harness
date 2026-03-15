@@ -56,36 +56,70 @@ def dispatch_worker(
     max_budget_usd: float | None = None,
     permission_mode: str = "bypassPermissions",
     verbose: bool = False,
+    session_id: str | None = None,
 ) -> WorkerResult:
     """Dispatch a Claude Code worker to implement a change.
 
     Invokes the claude CLI as a subprocess in the worktree directory.
     Captures JSON output and verifies the worker produced commits.
 
+    When session_id is provided, resumes a prior session with --resume
+    instead of starting fresh. Requires feedback to be set (raises ValueError
+    if feedback is None). Omits --system-prompt on resume since the
+    session already has it.
+
     Note: claude CLI availability is validated by cli.validate_inputs before
     the pipeline starts. This function assumes claude is in PATH.
     """
-    typer.echo(f"[worker] dispatching for '{change_name}'", err=True)
+    if session_id is not None and feedback is None:
+        msg = "resume requires feedback"
+        raise ValueError(msg)
 
-    system_prompt = build_system_prompt(change_name)
-    # claude CLI: -p sends the user prompt, --system-prompt sets the system prompt.
-    # The system prompt provides role instructions; the user prompt is the task directive.
-    user_prompt = f"Implement the OpenSpec change '{change_name}' using the opsx:apply skill."
-    if feedback:
-        user_prompt = f"{user_prompt}\n\n{feedback}"
-    cmd = [
-        "claude",
-        "-p",
-        user_prompt,
-        "--system-prompt",
-        system_prompt,
-        "--output-format",
-        "json",
-        "--max-turns",
-        str(max_turns),
-        "--permission-mode",
-        permission_mode,
-    ]
+    resumed = session_id is not None
+    if resumed:
+        typer.echo(
+            f"[worker] resuming session {session_id} for '{change_name}'",
+            err=True,
+        )
+    else:
+        typer.echo(f"[worker] dispatching for '{change_name}'", err=True)
+
+    if session_id is not None:
+        # Resume mode: feedback is the user prompt, no system prompt
+        assert feedback is not None  # validated above, but help mypy
+        user_prompt: str = feedback
+        cmd = [
+            "claude",
+            "-p",
+            user_prompt,
+            "--resume",
+            session_id,
+            "--output-format",
+            "json",
+            "--max-turns",
+            str(max_turns),
+            "--permission-mode",
+            permission_mode,
+        ]
+    else:
+        # Fresh dispatch
+        system_prompt = build_system_prompt(change_name)
+        user_prompt = f"Implement the OpenSpec change '{change_name}' using the opsx:apply skill."
+        if feedback:
+            user_prompt = f"{user_prompt}\n\n{feedback}"
+        cmd = [
+            "claude",
+            "-p",
+            user_prompt,
+            "--system-prompt",
+            system_prompt,
+            "--output-format",
+            "json",
+            "--max-turns",
+            str(max_turns),
+            "--permission-mode",
+            permission_mode,
+        ]
     if model is not None:
         cmd.extend(["--model", model])
     if effort is not None:
@@ -111,11 +145,25 @@ def dispatch_worker(
     # Parse JSON output
     cost_usd = None
     worker_output = None
+    captured_session_id: str | None = None
+    context_usage_pct: float | None = None
     if result.stdout:
         try:
             output_data = json.loads(result.stdout)
             cost_usd = output_data.get("cost_usd")
             worker_output = output_data.get("result")
+            captured_session_id = output_data.get("session_id")
+
+            # Compute context usage percentage from token counts
+            usage = output_data.get("usage", {})
+            model_info: dict[str, int | float] = next(
+                iter(output_data.get("modelUsage", {}).values()), {}
+            )
+            context_window = model_info.get("contextWindow", 1_000_000)
+            input_tokens = usage.get("input_tokens", 0)
+            output_tokens = usage.get("output_tokens", 0)
+            if context_window > 0:
+                context_usage_pct = (input_tokens + output_tokens) / context_window
         except json.JSONDecodeError:
             worker_output = result.stdout[:500]
 
@@ -128,6 +176,8 @@ def dispatch_worker(
             duration_seconds=duration,
             cost_usd=cost_usd,
             worker_output=worker_output,
+            session_id=captured_session_id,
+            context_usage_pct=context_usage_pct,
         )
 
     # Check for commits against the base branch (provided by the pipeline from worktree creation)
@@ -144,6 +194,8 @@ def dispatch_worker(
             commits_ahead=0,
             cost_usd=cost_usd,
             worker_output=worker_output,
+            session_id=captured_session_id,
+            context_usage_pct=context_usage_pct,
         )
 
     typer.echo(
@@ -157,4 +209,6 @@ def dispatch_worker(
         commits_ahead=commits,
         cost_usd=cost_usd,
         worker_output=worker_output,
+        session_id=captured_session_id,
+        context_usage_pct=context_usage_pct,
     )

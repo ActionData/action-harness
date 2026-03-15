@@ -3,6 +3,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from action_harness.models import (
     EvalResult,
     PrResult,
@@ -61,6 +63,23 @@ class TestWorkerResult:
         assert result.success is False
         assert result.error == "no commits produced"
         assert result.commits_ahead == 0
+
+    def test_session_id_and_context_usage_roundtrip(self) -> None:
+        result = WorkerResult(
+            success=True,
+            stage="worker",
+            session_id="sess_abc123",
+            context_usage_pct=0.45,
+        )
+        raw = result.model_dump_json()
+        restored = WorkerResult.model_validate_json(raw)
+        assert restored.session_id == "sess_abc123"
+        assert restored.context_usage_pct == pytest.approx(0.45)
+
+    def test_session_fields_default_none(self) -> None:
+        result = WorkerResult(success=True, stage="worker")
+        assert result.session_id is None
+        assert result.context_usage_pct is None
 
 
 class TestEvalResult:
@@ -321,3 +340,32 @@ class TestRunManifest:
     def test_manifest_path_defaults_to_none(self) -> None:
         manifest = self._make_manifest()
         assert manifest.manifest_path is None
+
+    def test_worker_result_session_fields_survive_manifest_roundtrip(self) -> None:
+        stages = [
+            WorktreeResult(success=True, stage="worktree", branch="b"),
+            WorkerResult(
+                success=True,
+                stage="worker",
+                commits_ahead=1,
+                session_id="sess_abc123",
+                context_usage_pct=0.45,
+            ),
+            EvalResult(success=True, stage="eval", commands_run=1, commands_passed=1),
+            PrResult(success=True, stage="pr", branch="b"),
+        ]
+        manifest = RunManifest(
+            change_name="test",
+            repo_path="/tmp",
+            started_at="2026-01-01T00:00:00+00:00",
+            completed_at="2026-01-01T00:00:01+00:00",
+            success=True,
+            stages=stages,
+            total_duration_seconds=1.0,
+        )
+        raw = manifest.model_dump_json()
+        restored = RunManifest.model_validate_json(raw)
+        worker = restored.stages[1]
+        assert isinstance(worker, WorkerResult)
+        assert worker.session_id == "sess_abc123"
+        assert worker.context_usage_pct == pytest.approx(0.45)

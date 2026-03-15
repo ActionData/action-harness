@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from action_harness.models import WorkerResult
 from action_harness.worker import build_system_prompt, count_commits_ahead, dispatch_worker
 
@@ -249,3 +251,83 @@ class TestDispatchWorker:
         cmd = self._get_claude_cmd(mock)
         idx = cmd.index("--permission-mode")
         assert cmd[idx + 1] == "plan"
+
+    def test_session_id_and_context_usage_captured(self) -> None:
+        json_output = json.dumps(
+            {
+                "session_id": "sess_xyz",
+                "cost_usd": 0.1,
+                "result": "ok",
+                "usage": {"input_tokens": 50000, "output_tokens": 20000},
+                "modelUsage": {
+                    "claude-opus-4-6[1m]": {
+                        "contextWindow": 1000000,
+                        "inputTokens": 50000,
+                        "outputTokens": 20000,
+                        "costUSD": 0.1,
+                    }
+                },
+            }
+        )
+        mock = self._mock_subprocess(claude_stdout=json_output)
+        with patch("action_harness.worker.subprocess.run", mock):
+            result = dispatch_worker("t", Path("/fake"))
+        assert result.session_id == "sess_xyz"
+        assert result.context_usage_pct == pytest.approx(0.07)
+
+    def test_fresh_dispatch_includes_system_prompt_no_resume(self) -> None:
+        json_output = json.dumps({"cost_usd": 0.01, "result": "ok"})
+        mock = self._mock_subprocess(claude_stdout=json_output)
+        with patch("action_harness.worker.subprocess.run", mock):
+            dispatch_worker("t", Path("/fake"))
+        cmd = self._get_claude_cmd(mock)
+        assert "--system-prompt" in cmd
+        assert "--resume" not in cmd
+
+    def test_resume_dispatch_includes_resume_no_system_prompt(self) -> None:
+        json_output = json.dumps({"cost_usd": 0.01, "result": "ok"})
+        mock = self._mock_subprocess(claude_stdout=json_output)
+        with patch("action_harness.worker.subprocess.run", mock):
+            dispatch_worker("t", Path("/fake"), session_id="sess_abc", feedback="fix the tests")
+        cmd = self._get_claude_cmd(mock)
+        assert "--resume" in cmd
+        idx = cmd.index("--resume")
+        assert cmd[idx + 1] == "sess_abc"
+        assert "--system-prompt" not in cmd
+        # User prompt should be just the feedback
+        prompt_idx = cmd.index("-p")
+        assert cmd[prompt_idx + 1] == "fix the tests"
+
+    def test_resume_without_feedback_raises(self) -> None:
+        with pytest.raises(ValueError, match="resume requires feedback"):
+            dispatch_worker("t", Path("/fake"), session_id="sess_abc", feedback=None)
+
+    def test_session_id_captured_on_failure(self) -> None:
+        json_output = json.dumps(
+            {
+                "session_id": "sess_fail",
+                "cost_usd": 0.05,
+                "result": "error",
+            }
+        )
+        mock = self._mock_subprocess(
+            claude_returncode=1, claude_stdout=json_output, claude_stderr="oops"
+        )
+        with patch("action_harness.worker.subprocess.run", mock):
+            result = dispatch_worker("t", Path("/fake"))
+        assert result.success is False
+        assert result.session_id == "sess_fail"
+
+    def test_session_id_captured_on_no_commits(self) -> None:
+        json_output = json.dumps(
+            {
+                "session_id": "sess_nocommit",
+                "cost_usd": 0.05,
+                "result": "did nothing",
+            }
+        )
+        mock = self._mock_subprocess(claude_stdout=json_output, commits_ahead=0)
+        with patch("action_harness.worker.subprocess.run", mock):
+            result = dispatch_worker("t", Path("/fake"))
+        assert result.success is False
+        assert result.session_id == "sess_nocommit"

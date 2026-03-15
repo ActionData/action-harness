@@ -28,9 +28,7 @@ def read_harness_md(worktree_path: Path) -> str | None:
     return contents
 
 
-def build_system_prompt(
-    change_name: str, harness_md: str | None = None
-) -> str:
+def build_system_prompt(change_name: str, harness_md: str | None = None) -> str:
     """Build the system prompt for a Claude Code worker.
 
     When harness_md is provided (read from a HARNESS.md file in the target repo),

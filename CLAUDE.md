@@ -59,6 +59,28 @@ The CLI help text (`--help`) is the API documentation. When adding or changing c
 - **Self-validation is required.** Every proposal includes validation steps.
 - **Agent independence.** The implementing agent validates its own work. A separate agent reviews.
 
+## HARNESS.md convention
+
+`HARNESS.md` is a per-repo file that provides instructions to autonomous harness workers. It lives in the target repo root and is read at worker dispatch time, injected into the worker's system prompt under a `## Repo-Specific Instructions` header.
+
+**What belongs in HARNESS.md:**
+- Eval commands and test instructions for autonomous workers
+- Skill invocations the worker should use (e.g., `opsx:apply`)
+- Retry hints for flaky tests or known issues
+- Path restrictions or files to avoid
+- Migration context or temporary workarounds
+- Any guidance specific to autonomous (unattended) execution
+
+**What does NOT belong in HARNESS.md:**
+- General project context → put in `CLAUDE.md` (read by Claude Code natively for all sessions)
+- Agent capability descriptions → put in `AGENTS.md`
+- Build/test commands for interactive use → put in `CLAUDE.md`
+
+**Guidelines:**
+- Keep it under ~500 lines — it consumes context window for every worker dispatch
+- HARNESS.md is additive — CLAUDE.md still applies via Claude Code's native loading
+- Content is injected verbatim as freeform markdown, no special syntax required
+
 ## OpenSpec workflow
 
 All features follow the OpenSpec lifecycle:

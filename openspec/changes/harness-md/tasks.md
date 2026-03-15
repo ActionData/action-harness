@@ -11,8 +11,8 @@
 
 ## 3. Documentation
 
-- [ ] 3.1 Add a HARNESS.md section to the project CLAUDE.md explaining the convention: what it is, what belongs in it vs CLAUDE.md vs AGENTS.md, and recommended max length
-- [ ] 3.2 Create a `HARNESS.md` in the action-harness repo root with instructions specific to this project (e.g., always run `uv run pytest -v` after changes, use `typer.echo(..., err=True)` for logging, run opsx:apply for OpenSpec changes)
+- [x] 3.1 Add a HARNESS.md section to the project CLAUDE.md explaining the convention: what it is, what belongs in it vs CLAUDE.md vs AGENTS.md, and recommended max length
+- [x] 3.2 Create a `HARNESS.md` in the action-harness repo root with instructions specific to this project (e.g., always run `uv run pytest -v` after changes, use `typer.echo(..., err=True)` for logging, run opsx:apply for OpenSpec changes)
 
 ## 4. Validation
 

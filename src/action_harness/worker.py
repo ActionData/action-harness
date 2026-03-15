@@ -10,16 +10,42 @@ import typer
 from action_harness.models import WorkerResult
 from action_harness.progress import PROGRESS_FILENAME
 
+HARNESS_MD_FILENAME = "HARNESS.md"
 
-def build_system_prompt(change_name: str) -> str:
-    """Build the system prompt for a Claude Code worker."""
-    return (
+
+def read_harness_md(worktree_path: Path) -> str | None:
+    """Read HARNESS.md from the worktree root.
+
+    Returns the file contents as a string, or None if the file is absent,
+    empty, or contains only whitespace.
+    """
+    harness_md_path = worktree_path / HARNESS_MD_FILENAME
+    if not harness_md_path.exists():
+        return None
+    contents = harness_md_path.read_text()
+    if not contents.strip():
+        return None
+    return contents
+
+
+def build_system_prompt(
+    change_name: str, harness_md: str | None = None
+) -> str:
+    """Build the system prompt for a Claude Code worker.
+
+    When harness_md is provided (read from a HARNESS.md file in the target repo),
+    it is appended as a "Repo-Specific Instructions" section after the role instructions.
+    """
+    prompt = (
         f"You are implementing the OpenSpec change '{change_name}'. "
         f"Run the opsx:apply skill to implement all tasks for this change. "
         f"Commit your work incrementally as you complete each task. "
         f"After implementation, exercise the feature you built and report "
         f"what you tested and observed."
     )
+    if harness_md is not None:
+        prompt += f"\n\n## Repo-Specific Instructions\n\n{harness_md}"
+    return prompt
 
 
 def count_commits_ahead(worktree_path: Path, base_branch: str) -> int:
@@ -111,7 +137,8 @@ def dispatch_worker(
         ]
     else:
         # Fresh dispatch
-        system_prompt = build_system_prompt(change_name)
+        harness_md = read_harness_md(worktree_path)
+        system_prompt = build_system_prompt(change_name, harness_md=harness_md)
         user_prompt = f"Implement the OpenSpec change '{change_name}' using the opsx:apply skill."
         if feedback:
             user_prompt = f"{user_prompt}\n\n{feedback}"

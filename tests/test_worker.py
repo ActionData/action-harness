@@ -8,7 +8,45 @@ import pytest
 
 from action_harness.models import WorkerResult
 from action_harness.progress import PROGRESS_FILENAME
-from action_harness.worker import build_system_prompt, count_commits_ahead, dispatch_worker
+from action_harness.worker import (
+    build_system_prompt,
+    count_commits_ahead,
+    dispatch_worker,
+    read_harness_md,
+)
+
+
+class TestReadHarnessMd:
+    def test_returns_contents_when_file_exists(self, tmp_path: Path) -> None:
+        (tmp_path / "HARNESS.md").write_text("# Worker Instructions\n\nRun tests first.")
+        result = read_harness_md(tmp_path)
+        assert result == "# Worker Instructions\n\nRun tests first."
+
+    def test_returns_none_when_file_missing(self, tmp_path: Path) -> None:
+        result = read_harness_md(tmp_path)
+        assert result is None
+
+    def test_returns_none_when_file_empty(self, tmp_path: Path) -> None:
+        (tmp_path / "HARNESS.md").write_text("")
+        result = read_harness_md(tmp_path)
+        assert result is None
+
+    def test_returns_none_when_file_whitespace_only(self, tmp_path: Path) -> None:
+        (tmp_path / "HARNESS.md").write_text("   \n\n  \t  \n")
+        result = read_harness_md(tmp_path)
+        assert result is None
+
+    def test_preserves_special_characters(self, tmp_path: Path) -> None:
+        content = "Use {curly braces} and `backticks` and {{template}} syntax"
+        (tmp_path / "HARNESS.md").write_text(content)
+        result = read_harness_md(tmp_path)
+        assert result == content
+
+    def test_preserves_unicode(self, tmp_path: Path) -> None:
+        content = "Instructions: émojis 🚀 and ñ and 日本語"
+        (tmp_path / "HARNESS.md").write_text(content)
+        result = read_harness_md(tmp_path)
+        assert result == content
 
 
 class TestBuildSystemPrompt:
@@ -23,6 +61,26 @@ class TestBuildSystemPrompt:
     def test_includes_commit_instruction(self) -> None:
         prompt = build_system_prompt("test-change")
         assert "commit" in prompt.lower()
+
+    def test_without_harness_md(self) -> None:
+        prompt = build_system_prompt("test-change")
+        assert "Repo-Specific Instructions" not in prompt
+
+    def test_with_harness_md(self) -> None:
+        harness_content = "Always run pytest before committing."
+        prompt = build_system_prompt("test-change", harness_md=harness_content)
+        assert "## Repo-Specific Instructions" in prompt
+        assert harness_content in prompt
+
+    def test_harness_md_appended_verbatim(self) -> None:
+        harness_content = "Use {curly braces} and $dollar signs"
+        prompt = build_system_prompt("test-change", harness_md=harness_content)
+        assert harness_content in prompt
+
+    def test_harness_md_none_unchanged(self) -> None:
+        prompt_without = build_system_prompt("test-change")
+        prompt_with_none = build_system_prompt("test-change", harness_md=None)
+        assert prompt_without == prompt_with_none
 
 
 class TestCountCommitsAhead:
@@ -451,3 +509,71 @@ class TestProgressFileInjection:
         progress_pos = prompt.index("Harness Progress")
         feedback_pos = prompt.index("fix the tests")
         assert progress_pos < feedback_pos
+
+
+class TestHarnessMdInjection:
+    """dispatch_worker reads HARNESS.md and injects it into the system prompt."""
+
+    def _mock_subprocess(
+        self,
+        commits_ahead: int = 1,
+    ) -> MagicMock:
+        mock = MagicMock()
+
+        def side_effect(cmd: list[str], **kwargs: object) -> MagicMock:
+            result = MagicMock()
+            if cmd[0] == "claude":
+                result.returncode = 0
+                result.stdout = json.dumps({"cost_usd": 0.01, "result": "ok"})
+                result.stderr = ""
+            elif "rev-list" in cmd:
+                result.returncode = 0
+                result.stdout = f"{commits_ahead}\n"
+                result.stderr = ""
+            else:
+                result.returncode = 0
+                result.stdout = ""
+                result.stderr = ""
+            return result
+
+        mock.side_effect = side_effect
+        return mock
+
+    def _get_claude_system_prompt(self, mock: MagicMock) -> str:
+        for call in mock.call_args_list:
+            cmd = call[0][0]
+            if cmd[0] == "claude" and "--system-prompt" in cmd:
+                idx = cmd.index("--system-prompt")
+                return cmd[idx + 1]
+        raise AssertionError("claude CLI was never called with --system-prompt")
+
+    def test_harness_md_injected_into_system_prompt(self, tmp_path: Path) -> None:
+        harness_content = "Always run pytest before committing.\nUse typer.echo for logging."
+        (tmp_path / "HARNESS.md").write_text(harness_content)
+
+        mock = self._mock_subprocess()
+        with patch("action_harness.worker.subprocess.run", mock):
+            dispatch_worker("t", tmp_path)
+
+        system_prompt = self._get_claude_system_prompt(mock)
+        assert "## Repo-Specific Instructions" in system_prompt
+        assert harness_content in system_prompt
+
+    def test_no_harness_md_no_repo_specific_section(self, tmp_path: Path) -> None:
+        mock = self._mock_subprocess()
+        with patch("action_harness.worker.subprocess.run", mock):
+            dispatch_worker("t", tmp_path)
+
+        system_prompt = self._get_claude_system_prompt(mock)
+        assert "Repo-Specific Instructions" not in system_prompt
+
+    def test_harness_md_content_verbatim(self, tmp_path: Path) -> None:
+        harness_content = "Use {curly_braces} and $variables and {{templates}}"
+        (tmp_path / "HARNESS.md").write_text(harness_content)
+
+        mock = self._mock_subprocess()
+        with patch("action_harness.worker.subprocess.run", mock):
+            dispatch_worker("t", tmp_path)
+
+        system_prompt = self._get_claude_system_prompt(mock)
+        assert harness_content in system_prompt

@@ -103,7 +103,13 @@ class ReviewResult(StageResult):
 # Discriminated union so Pydantic preserves subtypes through serialization.
 # Only includes concrete stage types used in the pipeline (not the base StageResult).
 StageResultUnion = Annotated[
-    WorktreeResult | WorkerResult | EvalResult | PrResult | OpenSpecReviewResult | ReviewResult | MergeResult,
+    WorktreeResult
+    | WorkerResult
+    | EvalResult
+    | PrResult
+    | OpenSpecReviewResult
+    | ReviewResult
+    | MergeResult,
     Field(discriminator="stage"),
 ]
 

@@ -32,6 +32,6 @@
 
 ## 6. Validation [depends: all]
 
-- [ ] 6.1 Run full test suite (`uv run pytest -v`) and verify no regressions
-- [ ] 6.2 Run lint and type checks (`uv run ruff check .` and `uv run mypy src/`)
-- [ ] 6.3 Run `harness run --change <change> --repo . --auto-merge --dry-run` and verify output shows `auto-merge: enabled`
+- [x] 6.1 Run full test suite (`uv run pytest -v`) and verify no regressions
+- [x] 6.2 Run lint and type checks (`uv run ruff check .` and `uv run mypy src/`)
+- [x] 6.3 Run `harness run --change <change> --repo . --auto-merge --dry-run` and verify output shows `auto-merge: enabled`

@@ -4,8 +4,6 @@ import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from action_harness.merge import (
     check_merge_gates,
     merge_pr,
@@ -195,9 +193,7 @@ class TestPostMergeBlockedComment:
         }
 
         with patch("action_harness.merge.subprocess.run", return_value=mock_result) as mock_run:
-            post_merge_blocked_comment(
-                "https://github.com/org/repo/pull/1", tmp_path, gates
-            )
+            post_merge_blocked_comment("https://github.com/org/repo/pull/1", tmp_path, gates)
 
         # Verify the body content
         call_args = mock_run.call_args

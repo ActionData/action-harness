@@ -8,12 +8,8 @@ import typer
 
 from action_harness.evaluator import run_eval
 from action_harness.event_log import EventLogger
-from action_harness.merge import (
-    check_merge_gates,
-    merge_pr,
-    post_merge_blocked_comment,
-    wait_for_ci as wait_for_ci_checks,
-)
+from action_harness.merge import check_merge_gates, merge_pr, post_merge_blocked_comment
+from action_harness.merge import wait_for_ci as wait_for_ci_checks
 from action_harness.models import (
     EvalResult,
     MergeResult,
@@ -712,9 +708,7 @@ def _run_pipeline_inner(
 
             if not wait_for_ci or ci_passed:
                 typer.echo("[pipeline] auto-merge: all gates passed, merging PR", err=True)
-                merge_result = merge_pr(
-                    pr_result.pr_url or "", worktree_path, verbose=verbose
-                )
+                merge_result = merge_pr(pr_result.pr_url or "", worktree_path, verbose=verbose)
                 merge_result = merge_result.model_copy(update={"ci_passed": ci_passed})
             else:
                 reason = "CI checks failed"
@@ -729,13 +723,9 @@ def _run_pipeline_inner(
             failed_gates = [name for name, passed in gates.items() if not passed]
             reason = f"Gates failed: {', '.join(failed_gates)}"
             typer.echo(f"[pipeline] auto-merge blocked: {reason}", err=True)
-            merge_result = MergeResult(
-                success=True, merged=False, merge_blocked_reason=reason
-            )
+            merge_result = MergeResult(success=True, merged=False, merge_blocked_reason=reason)
             if pr_result.pr_url:
-                post_merge_blocked_comment(
-                    pr_result.pr_url, worktree_path, gates, verbose=verbose
-                )
+                post_merge_blocked_comment(pr_result.pr_url, worktree_path, gates, verbose=verbose)
 
         stages.append(merge_result)
 

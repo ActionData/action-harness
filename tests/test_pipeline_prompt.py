@@ -6,7 +6,6 @@ from unittest.mock import MagicMock, patch
 
 from action_harness.models import (
     OpenSpecReviewResult,
-    StageResultUnion,
 )
 from action_harness.pipeline import run_pipeline
 
@@ -80,9 +79,7 @@ class TestPipelinePromptMode:
             )
 
         # No OpenSpecReviewResult in stages
-        openspec_stages = [
-            s for s in manifest.stages if isinstance(s, OpenSpecReviewResult)
-        ]
+        openspec_stages = [s for s in manifest.stages if isinstance(s, OpenSpecReviewResult)]
         assert len(openspec_stages) == 0
 
     def test_openspec_review_runs_without_prompt(self, tmp_path: Path) -> None:
@@ -111,7 +108,5 @@ class TestPipelinePromptMode:
             )
 
         # Should have an OpenSpecReviewResult in stages
-        openspec_stages = [
-            s for s in manifest.stages if isinstance(s, OpenSpecReviewResult)
-        ]
+        openspec_stages = [s for s in manifest.stages if isinstance(s, OpenSpecReviewResult)]
         assert len(openspec_stages) > 0

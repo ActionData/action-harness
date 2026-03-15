@@ -41,9 +41,7 @@ def read_harness_md(worktree_path: Path) -> str | None:
     return contents
 
 
-def build_system_prompt(
-    change_name: str | None = None, harness_md: str | None = None
-) -> str:
+def build_system_prompt(change_name: str | None = None, harness_md: str | None = None) -> str:
     """Build the system prompt for a Claude Code worker.
 
     When change_name is provided, returns the OpenSpec-specific opsx:apply prompt.

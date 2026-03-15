@@ -8,7 +8,9 @@ import pytest
 
 from action_harness.issue_intake import (
     build_issue_prompt,
+    comment_on_issue,
     detect_openspec_change,
+    label_issue,
     read_issue,
 )
 from action_harness.models import ValidationError
@@ -90,6 +92,62 @@ class TestDetectOpenspecChange:
         body = "See openspec:first and also openspec:second"
         result = detect_openspec_change(body, tmp_path)
         assert result == "first"
+
+
+class TestLabelIssue:
+    """Tests for label_issue function."""
+
+    def _mock_gh(self, returncode: int = 0, stderr: str = "") -> MagicMock:
+        mock = MagicMock()
+        result = MagicMock()
+        result.returncode = returncode
+        result.stderr = stderr
+        mock.return_value = result
+        return mock
+
+    def test_label_success(self, tmp_path: Path) -> None:
+        mock = self._mock_gh()
+        with patch("action_harness.issue_intake.subprocess.run", mock):
+            label_issue(42, "harness:in-progress", tmp_path)
+        mock.assert_called_once()
+        cmd = mock.call_args[0][0]
+        assert cmd == ["gh", "issue", "edit", "42", "--add-label", "harness:in-progress"]
+
+    def test_label_failure_is_non_fatal(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        mock = self._mock_gh(returncode=1, stderr="label not found")
+        with patch("action_harness.issue_intake.subprocess.run", mock):
+            # Should NOT raise
+            label_issue(42, "harness:in-progress", tmp_path)
+        captured = capsys.readouterr()
+        assert "warning" in captured.err
+
+
+class TestCommentOnIssue:
+    """Tests for comment_on_issue function."""
+
+    def _mock_gh(self, returncode: int = 0, stderr: str = "") -> MagicMock:
+        mock = MagicMock()
+        result = MagicMock()
+        result.returncode = returncode
+        result.stderr = stderr
+        mock.return_value = result
+        return mock
+
+    def test_comment_success(self, tmp_path: Path) -> None:
+        mock = self._mock_gh()
+        with patch("action_harness.issue_intake.subprocess.run", mock):
+            comment_on_issue(42, "PR created: https://...", tmp_path)
+        mock.assert_called_once()
+        cmd = mock.call_args[0][0]
+        assert cmd == ["gh", "issue", "comment", "42", "--body", "PR created: https://..."]
+
+    def test_comment_failure_is_non_fatal(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        mock = self._mock_gh(returncode=1, stderr="permission denied")
+        with patch("action_harness.issue_intake.subprocess.run", mock):
+            # Should NOT raise
+            comment_on_issue(42, "PR created", tmp_path)
+        captured = capsys.readouterr()
+        assert "warning" in captured.err
 
 
 class TestBuildIssuePrompt:

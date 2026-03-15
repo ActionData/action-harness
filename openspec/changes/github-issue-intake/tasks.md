@@ -7,9 +7,9 @@
 
 ## 2. Issue Status Labels [depends: 1]
 
-- [ ] 2.1 Add `label_issue(issue_number: int, label: str, repo_path: Path, verbose: bool = False) -> None` that runs `gh issue edit <number> --add-label <label>` via subprocess. Log warning on failure via `typer.echo(..., err=True)`, never raise.
-- [ ] 2.2 Add `comment_on_issue(issue_number: int, body: str, repo_path: Path, verbose: bool = False) -> None` that runs `gh issue comment <number> --body <body>` via subprocess. Log warning on failure, never raise.
-- [ ] 2.3 Add tests: label success (mock gh exit 0), label failure is non-fatal (mock gh exit 1, verify no exception raised, verify warning logged). Comment success/failure similarly.
+- [x] 2.1 Add `label_issue(issue_number: int, label: str, repo_path: Path, verbose: bool = False) -> None` that runs `gh issue edit <number> --add-label <label>` via subprocess. Log warning on failure via `typer.echo(..., err=True)`, never raise.
+- [x] 2.2 Add `comment_on_issue(issue_number: int, body: str, repo_path: Path, verbose: bool = False) -> None` that runs `gh issue comment <number> --body <body>` via subprocess. Log warning on failure, never raise.
+- [x] 2.3 Add tests: label success (mock gh exit 0), label failure is non-fatal (mock gh exit 1, verify no exception raised, verify warning logged). Comment success/failure similarly.
 
 ## 3. CLI Integration [depends: 1]
 

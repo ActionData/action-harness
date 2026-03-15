@@ -92,6 +92,52 @@ def detect_openspec_change(body: str, repo_path: Path) -> str | None:
     return None
 
 
+def label_issue(
+    issue_number: int, label: str, repo_path: Path, verbose: bool = False
+) -> None:
+    """Add a label to a GitHub issue. Best-effort — never raises."""
+    typer.echo(f"[issue-intake] labeling issue #{issue_number} with '{label}'", err=True)
+
+    result = subprocess.run(
+        ["gh", "issue", "edit", str(issue_number), "--add-label", label],
+        cwd=repo_path,
+        capture_output=True,
+        text=True,
+    )
+
+    if result.returncode != 0:
+        typer.echo(
+            f"[issue-intake] warning: failed to label issue #{issue_number}: "
+            f"{result.stderr.strip()}",
+            err=True,
+        )
+    elif verbose:
+        typer.echo(f"[issue-intake] labeled issue #{issue_number} with '{label}'", err=True)
+
+
+def comment_on_issue(
+    issue_number: int, body: str, repo_path: Path, verbose: bool = False
+) -> None:
+    """Post a comment on a GitHub issue. Best-effort — never raises."""
+    typer.echo(f"[issue-intake] commenting on issue #{issue_number}", err=True)
+
+    result = subprocess.run(
+        ["gh", "issue", "comment", str(issue_number), "--body", body],
+        cwd=repo_path,
+        capture_output=True,
+        text=True,
+    )
+
+    if result.returncode != 0:
+        typer.echo(
+            f"[issue-intake] warning: failed to comment on issue #{issue_number}: "
+            f"{result.stderr.strip()}",
+            err=True,
+        )
+    elif verbose:
+        typer.echo(f"[issue-intake] commented on issue #{issue_number}", err=True)
+
+
 def build_issue_prompt(issue_number: int, title: str, body: str) -> str:
     """Build a freeform prompt from issue metadata."""
     return f"# GitHub Issue #{issue_number}: {title}\n\n{body}"

@@ -8,6 +8,7 @@ from pathlib import Path
 import typer
 
 from action_harness.models import WorkerResult
+from action_harness.progress import PROGRESS_FILENAME
 
 
 def build_system_prompt(change_name: str) -> str:
@@ -84,9 +85,17 @@ def dispatch_worker(
     else:
         typer.echo(f"[worker] dispatching for '{change_name}'", err=True)
 
+    # Read progress file if it exists (provides retry context to the worker)
+    progress_contents: str | None = None
+    progress_file = worktree_path / PROGRESS_FILENAME
+    if progress_file.exists():
+        progress_contents = progress_file.read_text()
+
     if session_id is not None and feedback is not None:
         # Resume mode: feedback is the user prompt, no system prompt
         user_prompt: str = feedback
+        if progress_contents:
+            user_prompt = f"{progress_contents}\n\n{user_prompt}"
         cmd = [
             "claude",
             "-p",
@@ -106,6 +115,8 @@ def dispatch_worker(
         user_prompt = f"Implement the OpenSpec change '{change_name}' using the opsx:apply skill."
         if feedback:
             user_prompt = f"{user_prompt}\n\n{feedback}"
+        if progress_contents:
+            user_prompt = f"{progress_contents}\n\n{user_prompt}"
         cmd = [
             "claude",
             "-p",

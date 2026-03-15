@@ -6,8 +6,8 @@
 
 ## 2. Progress File Reading in Worker Prompt [depends: 1]
 
-- [ ] 2.1 In `dispatch_worker()` in `worker.py`, before building the CLI command: check if `.harness-progress.md` exists in `worktree_path`. If it does, read its contents. Prepend progress contents to the user prompt: `user_prompt = f"{progress_contents}\n\n{user_prompt}"`. The base task prompt (opsx:apply instruction or freeform prompt) and any feedback follow after the progress contents. Do NOT restructure the existing prompt — just prepend progress when available.
-- [ ] 2.2 Add tests: when `.harness-progress.md` exists in worktree, assert user prompt starts with the progress file contents. When file does not exist, assert user prompt is unchanged. Assert progress contents appear before the task prompt text.
+- [x] 2.1 In `dispatch_worker()` in `worker.py`, before building the CLI command: check if `.harness-progress.md` exists in `worktree_path`. If it does, read its contents. Prepend progress contents to the user prompt: `user_prompt = f"{progress_contents}\n\n{user_prompt}"`. The base task prompt (opsx:apply instruction or freeform prompt) and any feedback follow after the progress contents. Do NOT restructure the existing prompt — just prepend progress when available.
+- [x] 2.2 Add tests: when `.harness-progress.md` exists in worktree, assert user prompt starts with the progress file contents. When file does not exist, assert user prompt is unchanged. Assert progress contents appear before the task prompt text.
 
 ## 3. Pre-work Eval on Retries [no dependencies]
 

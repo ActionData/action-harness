@@ -132,6 +132,7 @@ def run_pipeline(
     skip_review: bool = False,
     auto_merge: bool = False,
     wait_for_ci: bool = False,
+    prompt: str | None = None,
 ) -> tuple[PrResult, RunManifest]:
     """Run the full pipeline: worktree -> worker -> eval -> retry -> PR.
 
@@ -208,6 +209,7 @@ def run_pipeline(
             protected_files_out=protected_files,
             auto_merge=auto_merge,
             wait_for_ci=wait_for_ci,
+            prompt=prompt,
         )
     except Exception as e:
         typer.echo(f"[pipeline] unexpected error: {e}", err=True)
@@ -264,6 +266,7 @@ def _run_pipeline_inner(
     protected_files_out: list[str] | None = None,
     auto_merge: bool = False,
     wait_for_ci: bool = False,
+    prompt: str | None = None,
 ) -> PrResult:
     """Inner pipeline logic. Appends to stages list as side effect.
 
@@ -361,6 +364,7 @@ def _run_pipeline_inner(
             permission_mode=permission_mode,
             verbose=verbose,
             session_id=resume_session_id,
+            prompt=prompt,
         )
         stages.append(worker_result)
 
@@ -390,6 +394,7 @@ def _run_pipeline_inner(
                     permission_mode=permission_mode,
                     verbose=verbose,
                     session_id=None,
+                    prompt=prompt,
                 )
                 stages.append(worker_result)
 
@@ -522,6 +527,7 @@ def _run_pipeline_inner(
         worker_result=worker_result,
         base_branch=base_branch,
         verbose=verbose,
+        prompt=prompt,
     )
     stages.append(pr_result)
 
@@ -614,6 +620,7 @@ def _run_pipeline_inner(
                 eval_commands=eval_commands,
                 logger=logger,
                 review_results=latest_review_results,
+                prompt=prompt,
             )
             if not last_fix_succeeded:
                 typer.echo("[pipeline] review fix-retry failed", err=True)
@@ -651,21 +658,25 @@ def _run_pipeline_inner(
     else:
         typer.echo("[pipeline] skipping review agents (--skip-review)", err=True)
 
-    # Stage 6: OpenSpec review
-    review_result = _run_openspec_review(
-        change_name,
-        worktree_path,
-        _get_worktree_base(repo),
-        max_turns,
-        model,
-        effort,
-        max_budget_usd,
-        permission_mode,
-        verbose,
-        pr_result,
-        stages,
-        logger,
-    )
+    # Stage 6: OpenSpec review (skipped in prompt mode — no OpenSpec artifacts)
+    if prompt is not None:
+        typer.echo("[pipeline] skipping openspec review (prompt mode)", err=True)
+        review_result = None
+    else:
+        review_result = _run_openspec_review(
+            change_name,
+            worktree_path,
+            _get_worktree_base(repo),
+            max_turns,
+            model,
+            effort,
+            max_budget_usd,
+            permission_mode,
+            verbose,
+            pr_result,
+            stages,
+            logger,
+        )
 
     if review_result is not None:
         logger.emit(
@@ -856,6 +867,7 @@ def _run_review_fix_retry(
     eval_commands: list[str] | None = None,
     logger: EventLogger | None = None,
     review_results: list[ReviewResult] | None = None,
+    prompt: str | None = None,
 ) -> bool:
     """Re-dispatch worker with review feedback, re-run eval, push if passing.
 
@@ -904,6 +916,7 @@ def _run_review_fix_retry(
         permission_mode=permission_mode,
         verbose=verbose,
         session_id=fix_session_id,
+        prompt=prompt,
     )
     stages.append(worker_result)
 
@@ -926,6 +939,7 @@ def _run_review_fix_retry(
                 permission_mode=permission_mode,
                 verbose=verbose,
                 session_id=None,
+                prompt=prompt,
             )
             stages.append(worker_result)
 

@@ -96,11 +96,15 @@ def create_pr(
     worker_result: WorkerResult | None = None,
     base_branch: str = "main",
     verbose: bool = False,
+    prompt: str | None = None,
 ) -> PrResult:
     """Push branch and open a PR via gh CLI.
 
     Pushes the worktree branch to origin, then creates a PR with a structured
     title and body. Returns the PR URL.
+
+    When prompt is provided, the PR title uses the first line of the prompt
+    instead of the change name, and the full prompt is included in the body.
 
     Note: git and gh CLI availability is validated by cli.validate_inputs before
     the pipeline starts. This function assumes both are in PATH.
@@ -136,9 +140,17 @@ def create_pr(
     if verbose:
         typer.echo(f"  pushed to origin/{branch}", err=True)
 
-    # Build PR body
-    title = f"[harness] {change_name}"
-    body = _build_pr_body(change_name, eval_result, worktree_path, base_branch, worker_result)
+    # Build PR title and body
+    if prompt is not None:
+        first_line = prompt.split("\n", maxsplit=1)[0]
+        prefix = "[harness] "
+        max_title_content = 72 - len(prefix)
+        title = f"{prefix}{first_line[:max_title_content]}"
+    else:
+        title = f"[harness] {change_name}"
+    body = _build_pr_body(
+        change_name, eval_result, worktree_path, base_branch, worker_result, prompt=prompt
+    )
 
     if verbose:
         typer.echo(f"  title: {title}", err=True)
@@ -197,14 +209,19 @@ def _build_pr_body(
     worktree_path: Path,
     base_branch: str,
     worker_result: WorkerResult | None = None,
+    prompt: str | None = None,
 ) -> str:
     """Build structured PR body with enriched context."""
-    sections: list[str] = [f"## Change: {change_name}\n"]
+    if prompt is not None:
+        sections: list[str] = [f"## Task\n{prompt}\n"]
+    else:
+        sections = [f"## Change: {change_name}\n"]
 
-    # Background — from proposal Why section
-    why = _read_proposal_why(worktree_path, change_name)
-    if why:
-        sections.append(f"### Background\n{why}\n")
+    # Background — from proposal Why section (only for change mode)
+    if prompt is None:
+        why = _read_proposal_why(worktree_path, change_name)
+        if why:
+            sections.append(f"### Background\n{why}\n")
 
     # Changes — diff stat
     diff_stat = _get_diff_stat(worktree_path, base_branch)

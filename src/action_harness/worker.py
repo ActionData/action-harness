@@ -41,19 +41,28 @@ def read_harness_md(worktree_path: Path) -> str | None:
     return contents
 
 
-def build_system_prompt(change_name: str, harness_md: str | None = None) -> str:
+def build_system_prompt(change_name: str | None = None, harness_md: str | None = None) -> str:
     """Build the system prompt for a Claude Code worker.
+
+    When change_name is provided, returns the OpenSpec-specific opsx:apply prompt.
+    When change_name is None, returns a generic implementation prompt for freeform tasks.
 
     When harness_md is provided (read from a HARNESS.md file in the target repo),
     it is appended as a "Repo-Specific Instructions" section after the role instructions.
     """
-    prompt = (
-        f"You are implementing the OpenSpec change '{change_name}'. "
-        f"Run the opsx:apply skill to implement all tasks for this change. "
-        f"Commit your work incrementally as you complete each task. "
-        f"After implementation, exercise the feature you built and report "
-        f"what you tested and observed."
-    )
+    if change_name is None:
+        prompt = (
+            "You are implementing a task in this repository. "
+            "Make the requested changes, commit your work, and verify it works."
+        )
+    else:
+        prompt = (
+            f"You are implementing the OpenSpec change '{change_name}'. "
+            f"Run the opsx:apply skill to implement all tasks for this change. "
+            f"Commit your work incrementally as you complete each task. "
+            f"After implementation, exercise the feature you built and report "
+            f"what you tested and observed."
+        )
     if harness_md is not None:
         prompt += f"\n\n## Repo-Specific Instructions\n\n{harness_md}"
     return prompt
@@ -95,6 +104,7 @@ def dispatch_worker(
     permission_mode: str = "bypassPermissions",
     verbose: bool = False,
     session_id: str | None = None,
+    prompt: str | None = None,
 ) -> WorkerResult:
     """Dispatch a Claude Code worker to implement a change.
 
@@ -149,8 +159,16 @@ def dispatch_worker(
     else:
         # Fresh dispatch
         harness_md = read_harness_md(worktree_path)
-        system_prompt = build_system_prompt(change_name, harness_md=harness_md)
-        user_prompt = f"Implement the OpenSpec change '{change_name}' using the opsx:apply skill."
+        if prompt is not None:
+            # Freeform prompt mode: generic system prompt, user's prompt as user prompt
+            system_prompt = build_system_prompt(change_name=None, harness_md=harness_md)
+            user_prompt = prompt
+        else:
+            # OpenSpec change mode: opsx:apply system prompt
+            system_prompt = build_system_prompt(change_name, harness_md=harness_md)
+            user_prompt = (
+                f"Implement the OpenSpec change '{change_name}' using the opsx:apply skill."
+            )
         if feedback:
             user_prompt = f"{user_prompt}\n\n{feedback}"
         if progress_contents:

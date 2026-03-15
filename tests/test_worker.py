@@ -157,6 +157,24 @@ class TestBuildSystemPrompt:
         prompt_with_none = build_system_prompt("test-change", harness_md=None)
         assert prompt_without == prompt_with_none
 
+    def test_none_change_name_no_opsx_apply(self) -> None:
+        prompt = build_system_prompt(None)
+        assert "opsx:apply" not in prompt
+
+    def test_none_change_name_generic_prompt(self) -> None:
+        prompt = build_system_prompt(None)
+        assert "implementing a task" in prompt
+
+    def test_change_name_still_has_opsx_apply(self) -> None:
+        prompt = build_system_prompt("my-change")
+        assert "opsx:apply" in prompt
+
+    def test_none_change_name_with_harness_md(self) -> None:
+        prompt = build_system_prompt(None, harness_md="Run tests first.")
+        assert "implementing a task" in prompt
+        assert "## Repo-Specific Instructions" in prompt
+        assert "Run tests first." in prompt
+
 
 class TestCountCommitsAhead:
     def test_counts_commits(self) -> None:
@@ -447,6 +465,81 @@ class TestDispatchWorker:
             result = dispatch_worker("t", Path("/fake"))
         # 0 / 500000 = 0.0
         assert result.context_usage_pct == pytest.approx(0.0)
+
+
+class TestDispatchWorkerPromptMode:
+    """Tests for dispatch_worker with freeform prompt parameter."""
+
+    def test_prompt_used_as_user_prompt(self, tmp_path: Path) -> None:
+        mock = make_mock_subprocess(claude_stdout=_OK_JSON)
+        with patch("action_harness.worker.subprocess.run", mock):
+            dispatch_worker("prompt-fix-bug", tmp_path, prompt="Fix bug")
+
+        user_prompt = get_claude_prompt(mock)
+        assert user_prompt == "Fix bug"
+
+    def test_prompt_mode_uses_generic_system_prompt(self, tmp_path: Path) -> None:
+        mock = make_mock_subprocess(claude_stdout=_OK_JSON)
+        with patch("action_harness.worker.subprocess.run", mock):
+            dispatch_worker("prompt-fix-bug", tmp_path, prompt="Fix bug")
+
+        system_prompt = get_claude_system_prompt(mock)
+        assert "opsx:apply" not in system_prompt
+        assert "implementing a task" in system_prompt
+
+    def test_no_prompt_uses_opsx_apply(self, tmp_path: Path) -> None:
+        mock = make_mock_subprocess(claude_stdout=_OK_JSON)
+        with patch("action_harness.worker.subprocess.run", mock):
+            dispatch_worker("my-change", tmp_path)
+
+        user_prompt = get_claude_prompt(mock)
+        assert "opsx:apply" in user_prompt
+
+    def test_prompt_with_feedback_appends(self, tmp_path: Path) -> None:
+        """In prompt mode with feedback (retry), feedback is appended to prompt."""
+        mock = make_mock_subprocess(claude_stdout=_OK_JSON)
+        with patch("action_harness.worker.subprocess.run", mock):
+            dispatch_worker(
+                "prompt-fix-bug", tmp_path, prompt="Fix bug", feedback="Tests still fail"
+            )
+
+        user_prompt = get_claude_prompt(mock)
+        assert "Fix bug" in user_prompt
+        assert "Tests still fail" in user_prompt
+        # Prompt comes before feedback
+        assert user_prompt.index("Fix bug") < user_prompt.index("Tests still fail")
+
+    def test_prompt_ignored_in_resume_mode(self, tmp_path: Path) -> None:
+        """On resume, prompt is ignored — feedback is the user prompt."""
+        mock = make_mock_subprocess(claude_stdout=_OK_JSON)
+        with patch("action_harness.worker.subprocess.run", mock):
+            dispatch_worker(
+                "prompt-fix-bug",
+                tmp_path,
+                prompt="Fix bug",
+                session_id="sess_abc",
+                feedback="retry this",
+            )
+
+        cmd = get_claude_cmd(mock)
+        assert "--resume" in cmd
+        user_prompt = get_claude_prompt(mock)
+        assert user_prompt == "retry this"
+        assert "Fix bug" not in user_prompt
+
+    def test_prompt_with_progress_file(self, tmp_path: Path) -> None:
+        """In prompt mode with progress file, progress is prepended to prompt."""
+        progress_content = "# Harness Progress\n\n## Attempt 1\n"
+        (tmp_path / PROGRESS_FILENAME).write_text(progress_content)
+
+        mock = make_mock_subprocess(claude_stdout=_OK_JSON)
+        with patch("action_harness.worker.subprocess.run", mock):
+            dispatch_worker("prompt-fix-bug", tmp_path, prompt="Fix bug")
+
+        user_prompt = get_claude_prompt(mock)
+        assert progress_content in user_prompt
+        assert "Fix bug" in user_prompt
+        assert user_prompt.index("Harness Progress") < user_prompt.index("Fix bug")
 
 
 class TestProgressFileInjection:

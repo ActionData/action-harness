@@ -401,3 +401,176 @@ class TestCreatePr:
             )
 
         assert result.success is True
+
+
+class TestCreatePrPromptMode:
+    """Tests for PR creation with freeform prompt."""
+
+    def _mock_subprocess(
+        self,
+        push_rc: int = 0,
+        gh_rc: int = 0,
+        gh_stdout: str = "https://github.com/org/repo/pull/42",
+    ) -> MagicMock:
+        mock = MagicMock()
+
+        def side_effect(cmd: list[str], **kwargs: object) -> MagicMock:
+            result = MagicMock()
+            if cmd[0] == "git" and "push" in cmd:
+                result.returncode = push_rc
+                result.stdout = ""
+                result.stderr = ""
+            elif cmd[0] == "gh":
+                result.returncode = gh_rc
+                result.stdout = gh_stdout
+                result.stderr = ""
+            else:
+                result.returncode = 0
+                result.stdout = ""
+                result.stderr = ""
+            return result
+
+        mock.side_effect = side_effect
+        return mock
+
+    def test_pr_title_from_short_prompt(self) -> None:
+        mock = self._mock_subprocess()
+        with patch("action_harness.pr.subprocess.run", mock):
+            create_pr(
+                "prompt-fix-auth-bug",
+                Path("/wt"),
+                "harness/prompt-fix-auth-bug",
+                _success_eval(),
+                prompt="Fix the auth bug",
+            )
+        gh_calls = [c for c in mock.call_args_list if c[0][0][0] == "gh"]
+        cmd = gh_calls[0][0][0]
+        title_idx = cmd.index("--title")
+        assert cmd[title_idx + 1] == "[harness] Fix the auth bug"
+
+    def test_pr_title_from_long_prompt(self) -> None:
+        long_prompt = "A" * 100
+        mock = self._mock_subprocess()
+        with patch("action_harness.pr.subprocess.run", mock):
+            create_pr(
+                "prompt-long",
+                Path("/wt"),
+                "harness/prompt-long",
+                _success_eval(),
+                prompt=long_prompt,
+            )
+        gh_calls = [c for c in mock.call_args_list if c[0][0][0] == "gh"]
+        cmd = gh_calls[0][0][0]
+        title_idx = cmd.index("--title")
+        title = cmd[title_idx + 1]
+        assert len(title) <= 72
+
+    def test_pr_title_exactly_62_chars_no_truncation(self) -> None:
+        """A 62-char first line fits exactly (62 + 10 prefix = 72)."""
+        prompt = "A" * 62
+        mock = self._mock_subprocess()
+        with patch("action_harness.pr.subprocess.run", mock):
+            create_pr("prompt-t", Path("/wt"), "harness/prompt-t", _success_eval(), prompt=prompt)
+        gh_calls = [c for c in mock.call_args_list if c[0][0][0] == "gh"]
+        cmd = gh_calls[0][0][0]
+        title_idx = cmd.index("--title")
+        title = cmd[title_idx + 1]
+        assert title == f"[harness] {'A' * 62}"
+        assert len(title) == 72
+
+    def test_pr_title_63_chars_truncated_by_one(self) -> None:
+        """A 63-char first line gets truncated to 62 chars."""
+        prompt = "A" * 63
+        mock = self._mock_subprocess()
+        with patch("action_harness.pr.subprocess.run", mock):
+            create_pr("prompt-t", Path("/wt"), "harness/prompt-t", _success_eval(), prompt=prompt)
+        gh_calls = [c for c in mock.call_args_list if c[0][0][0] == "gh"]
+        cmd = gh_calls[0][0][0]
+        title_idx = cmd.index("--title")
+        title = cmd[title_idx + 1]
+        assert len(title) == 72
+        assert title == f"[harness] {'A' * 62}"
+
+    def test_pr_body_contains_full_prompt(self) -> None:
+        full_prompt = "Fix the auth bug and also update the tests"
+        mock = self._mock_subprocess()
+        with patch("action_harness.pr.subprocess.run", mock):
+            create_pr(
+                "prompt-fix",
+                Path("/wt"),
+                "harness/prompt-fix",
+                _success_eval(),
+                prompt=full_prompt,
+            )
+        gh_calls = [c for c in mock.call_args_list if c[0][0][0] == "gh"]
+        cmd = gh_calls[0][0][0]
+        body_idx = cmd.index("--body")
+        body = cmd[body_idx + 1]
+        assert full_prompt in body
+
+    def test_multiline_prompt_uses_first_line_for_title(self) -> None:
+        multi_prompt = "Fix the auth bug\nAlso update tests"
+        mock = self._mock_subprocess()
+        with patch("action_harness.pr.subprocess.run", mock):
+            create_pr(
+                "prompt-fix",
+                Path("/wt"),
+                "harness/prompt-fix",
+                _success_eval(),
+                prompt=multi_prompt,
+            )
+        gh_calls = [c for c in mock.call_args_list if c[0][0][0] == "gh"]
+        cmd = gh_calls[0][0][0]
+        title_idx = cmd.index("--title")
+        title = cmd[title_idx + 1]
+        assert title == "[harness] Fix the auth bug"
+        # Full prompt in body
+        body_idx = cmd.index("--body")
+        body = cmd[body_idx + 1]
+        assert multi_prompt in body
+
+
+class TestBuildPrBodyPromptMode:
+    """Tests for _build_pr_body with prompt parameter."""
+
+    def _mock_git_calls(self) -> MagicMock:
+        mock = MagicMock()
+
+        def side_effect(cmd: list[str], **kwargs: object) -> MagicMock:
+            result = MagicMock()
+            result.returncode = 0
+            result.stdout = ""
+            result.stderr = ""
+            return result
+
+        mock.side_effect = side_effect
+        return mock
+
+    def test_prompt_mode_uses_task_header(self, tmp_path: Path) -> None:
+        mock = self._mock_git_calls()
+        with patch("action_harness.pr.subprocess.run", mock):
+            body = _build_pr_body(
+                "prompt-fix", _success_eval(), tmp_path, "main", prompt="Fix the bug"
+            )
+        assert "## Task" in body
+        assert "## Change" not in body
+
+    def test_prompt_mode_skips_background(self, tmp_path: Path) -> None:
+        # Create a proposal that would normally produce a Background section
+        change_dir = tmp_path / "openspec" / "changes" / "prompt-fix"
+        change_dir.mkdir(parents=True)
+        (change_dir / "proposal.md").write_text("## Why\n\nBecause reasons.\n")
+        mock = self._mock_git_calls()
+        with patch("action_harness.pr.subprocess.run", mock):
+            body = _build_pr_body(
+                "prompt-fix", _success_eval(), tmp_path, "main", prompt="Fix the bug"
+            )
+        assert "### Background" not in body
+        assert "Because reasons" not in body
+
+    def test_change_mode_uses_change_header(self, tmp_path: Path) -> None:
+        mock = self._mock_git_calls()
+        with patch("action_harness.pr.subprocess.run", mock):
+            body = _build_pr_body("my-change", _success_eval(), tmp_path, "main")
+        assert "## Change: my-change" in body
+        assert "## Task" not in body

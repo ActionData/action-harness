@@ -11,6 +11,7 @@ import typer
 from action_harness import __version__
 from action_harness.models import ValidationError
 from action_harness.profiler import profile_repo
+from action_harness.slugify import slugify_prompt
 
 app = typer.Typer(
     name="action-harness",
@@ -45,6 +46,21 @@ def main(
     """
 
 
+def _validate_common(repo: Path) -> None:
+    """Shared validation: repo exists, is git repo, required CLIs in PATH."""
+    if not repo.exists():
+        raise ValidationError(f"Repository path does not exist: {repo}")
+
+    if not (repo / ".git").exists():
+        raise ValidationError(f"Not a git repository: {repo}")
+
+    if shutil.which("claude") is None:
+        raise ValidationError("claude CLI not found in PATH")
+
+    if shutil.which("gh") is None:
+        raise ValidationError("gh CLI not found in PATH")
+
+
 def validate_inputs(change: str, repo: Path) -> None:
     """Validate CLI inputs before starting the pipeline.
 
@@ -54,11 +70,7 @@ def validate_inputs(change: str, repo: Path) -> None:
     - claude CLI is in PATH
     - gh CLI is in PATH
     """
-    if not repo.exists():
-        raise ValidationError(f"Repository path does not exist: {repo}")
-
-    if not (repo / ".git").exists():
-        raise ValidationError(f"Not a git repository: {repo}")
+    _validate_common(repo)
 
     changes_root = repo / "openspec" / "changes"
     change_dir = (changes_root / change).resolve()
@@ -67,11 +79,16 @@ def validate_inputs(change: str, repo: Path) -> None:
     if not change_dir.exists():
         raise ValidationError(f"Change directory not found: {change_dir}")
 
-    if shutil.which("claude") is None:
-        raise ValidationError("claude CLI not found in PATH")
 
-    if shutil.which("gh") is None:
-        raise ValidationError("gh CLI not found in PATH")
+def validate_inputs_prompt(repo: Path) -> None:
+    """Validate CLI inputs for prompt mode (no OpenSpec change directory needed).
+
+    Checks:
+    - repo path exists and is a git repo
+    - claude CLI is in PATH
+    - gh CLI is in PATH
+    """
+    _validate_common(repo)
 
 
 def _resolve_harness_home(harness_home: Path | None) -> Path:
@@ -86,7 +103,14 @@ def _resolve_harness_home(harness_home: Path | None) -> Path:
 
 @app.command()
 def run(
-    change: str = typer.Option(..., help="OpenSpec change name to implement"),
+    change: str | None = typer.Option(
+        None, help="OpenSpec change name to implement (mutually exclusive with --prompt)"
+    ),
+    prompt: str | None = typer.Option(
+        None,
+        help="Freeform task description sent directly to the worker "
+        "(mutually exclusive with --change)",
+    ),
     repo: str = typer.Option(
         ...,
         help="Target repository: local path, owner/repo shorthand, or full GitHub URL",
@@ -132,10 +156,18 @@ def run(
         False, "--dry-run", help="Validate and print plan without executing"
     ),
 ) -> None:
-    """Run the action-harness pipeline for an OpenSpec change.
+    """Run the action-harness pipeline for an OpenSpec change or freeform task.
 
-    Validates inputs, creates an isolated worktree, dispatches a Claude Code
-    worker via opsx:apply, runs eval (pytest, ruff, mypy), retries with
+    Provide exactly one of `--change` or `--prompt`:
+
+    - `--change NAME` implements an OpenSpec change via opsx:apply. The change
+      must exist at REPO/openspec/changes/NAME/.
+    - `--prompt TEXT` sends a freeform task description directly to the worker.
+      No OpenSpec artifacts are needed. The pipeline skips the OpenSpec review
+      stage but still runs eval, retry, and review agents.
+
+    In both modes, the pipeline creates an isolated worktree, dispatches a
+    Claude Code worker, runs eval (pytest, ruff, mypy), retries with
     structured feedback on failure, and opens a PR for human review.
 
     With `--auto-merge`, the pipeline merges the PR when all quality gates
@@ -145,14 +177,36 @@ def run(
     The `--repo` flag accepts a local path (e.g., `.` or `/abs/path`),
     GitHub shorthand (e.g., `owner/repo`), or a full URL
     (e.g., `https://github.com/owner/repo` or `git@github.com:owner/repo.git`).
-
-    The change must exist at REPO/openspec/changes/NAME/.
     """
+    # Mutual exclusion validation
+    if change is not None and prompt is not None:
+        typer.echo("Error: Specify either --change or --prompt, not both", err=True)
+        raise typer.Exit(code=1)
+
+    if change is None and prompt is None:
+        typer.echo("Error: Specify either --change or --prompt", err=True)
+        raise typer.Exit(code=1)
+
+    if prompt is not None and not prompt.strip():
+        typer.echo("Error: --prompt must not be empty", err=True)
+        raise typer.Exit(code=1)
+
     if wait_for_ci and not auto_merge:
         typer.echo("Error: --wait-for-ci requires --auto-merge", err=True)
         raise typer.Exit(code=1)
 
     resolved_home = _resolve_harness_home(harness_home)
+
+    # Compute task_label: either the change name or a prompt-derived slug
+    if prompt is not None:
+        slug = slugify_prompt(prompt)
+        if not slug:
+            typer.echo("Error: --prompt must contain at least one alphanumeric character", err=True)
+            raise typer.Exit(code=1)
+        task_label = f"prompt-{slug}"
+    else:
+        assert change is not None  # validated above
+        task_label = change
 
     # Resolve repo: local path or remote reference
     from action_harness.repo import resolve_repo
@@ -163,8 +217,13 @@ def run(
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(code=1) from None
 
+    # Validate inputs: prompt mode skips OpenSpec directory check
     try:
-        validate_inputs(change, resolved_repo)
+        if prompt is not None:
+            validate_inputs_prompt(resolved_repo)
+        else:
+            assert change is not None
+            validate_inputs(change, resolved_repo)
     except ValidationError as e:
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(code=1) from None
@@ -175,13 +234,16 @@ def run(
     if dry_run:
         profile = profile_repo(resolved_repo)
         if is_managed:
-            workspace_path = str(resolved_home / "workspaces" / repo_name / change)
+            workspace_path = str(resolved_home / "workspaces" / repo_name / task_label)
         else:
-            workspace_path = f"/tmp/action-harness-*/{change}"
-        typer.echo(f"Dry-run plan for change '{change}':")
+            workspace_path = f"/tmp/action-harness-*/{task_label}"
+        if prompt is not None:
+            typer.echo(f"Dry-run plan for prompt: {prompt}")
+        else:
+            typer.echo(f"Dry-run plan for change '{task_label}':")
         typer.echo(f"  repo: {resolved_repo}")
         typer.echo(f"  worktree: {workspace_path}")
-        typer.echo(f"  branch: harness/{change}")
+        typer.echo(f"  branch: harness/{task_label}")
         typer.echo(f"  worker: claude --output-format json --max-turns {max_turns}")
         typer.echo(f"  model: {model or 'default'}")
         typer.echo(f"  effort: {effort or 'default'}")
@@ -192,7 +254,7 @@ def run(
         typer.echo("  eval commands:")
         for cmd in profile.eval_commands:
             typer.echo(f"    - {cmd}")
-        typer.echo(f"  pr title: [harness] {change}")
+        typer.echo(f"  pr title: [harness] {task_label}")
         typer.echo(f"  auto-merge: {'enabled' if auto_merge else 'disabled'}")
         typer.echo(f"  wait-for-ci: {'enabled' if wait_for_ci else 'disabled'}")
         typer.echo(f"  max retries: {max_retries}")
@@ -201,7 +263,7 @@ def run(
     from action_harness.pipeline import run_pipeline
 
     pr_result, manifest = run_pipeline(
-        change_name=change,
+        change_name=task_label,
         repo=resolved_repo,
         max_retries=max_retries,
         max_turns=max_turns,
@@ -215,6 +277,7 @@ def run(
         skip_review=skip_review,
         auto_merge=auto_merge,
         wait_for_ci=wait_for_ci,
+        prompt=prompt,
     )
 
     if manifest.manifest_path:

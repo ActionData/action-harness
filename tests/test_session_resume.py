@@ -76,6 +76,7 @@ def _run_inner_with_mocks(
     stages: list[StageResultUnion],
     dummy_logger: EventLogger,
     max_retries: int = 3,
+    mock_create_pr: MagicMock | None = None,
 ) -> PrResult:
     """Helper to call _run_pipeline_inner with all required mocks."""
     wt_result = WorktreeResult(success=True, worktree_path=Path("/fake/wt"), branch="harness/test")
@@ -93,8 +94,12 @@ def _run_inner_with_mocks(
             "action_harness.pipeline._run_openspec_review",
             return_value=_approved_review(),
         ),
+        patch("action_harness.pipeline.write_progress"),
     ):
-        mock_pr.return_value = MagicMock(success=True, pr_url="http://pr/1", branch="b")
+        if mock_create_pr is not None:
+            mock_pr.side_effect = mock_create_pr
+        else:
+            mock_pr.return_value = MagicMock(success=True, pr_url="http://pr/1", branch="b")
         return _run_pipeline_inner(
             "test-change",
             Path("/fake/repo"),
@@ -128,7 +133,8 @@ class TestEvalRetryWithResume:
                 return _make_worker_result(session_id="sess_a", context_usage_pct=0.05)
             return _make_worker_result(session_id="sess_b", context_usage_pct=0.10)
 
-        eval_results = [_failing_eval(), _passing_eval()]
+        # Eval sequence: initial eval fails, pre-work eval fails (triggers dispatch), retry eval passes
+        eval_results = [_failing_eval(), _failing_eval(), _passing_eval()]
         eval_idx = {"i": 0}
 
         def mock_eval(*args: object, **kwargs: object) -> EvalResult:
@@ -157,7 +163,8 @@ class TestEvalRetryWithResume:
                 return _make_worker_result(session_id="sess_a", context_usage_pct=0.75)
             return _make_worker_result(session_id="sess_b", context_usage_pct=0.10)
 
-        eval_results = [_failing_eval(), _passing_eval()]
+        # Eval sequence: initial eval fails, pre-work eval fails (triggers dispatch), retry eval passes
+        eval_results = [_failing_eval(), _failing_eval(), _passing_eval()]
         eval_idx = {"i": 0}
 
         def mock_eval(*args: object, **kwargs: object) -> EvalResult:
@@ -188,7 +195,8 @@ class TestEvalRetryWithResume:
             else:
                 return _make_worker_result(session_id="sess_c", context_usage_pct=0.10)
 
-        eval_results = [_failing_eval(), _passing_eval()]
+        # Eval sequence: initial eval fails, pre-work eval fails, retry eval passes
+        eval_results = [_failing_eval(), _failing_eval(), _passing_eval()]
         eval_idx = {"i": 0}
 
         def mock_eval(*args: object, **kwargs: object) -> EvalResult:
@@ -217,7 +225,8 @@ class TestEvalRetryWithResume:
             else:
                 return _make_worker_result(session_id="sess_c", context_usage_pct=0.15)
 
-        eval_results = [_failing_eval(), _failing_eval(), _passing_eval()]
+        # Eval sequence: initial fails, pre-work fails, retry 1 fails, pre-work fails, retry 2 passes
+        eval_results = [_failing_eval(), _failing_eval(), _failing_eval(), _failing_eval(), _passing_eval()]
         eval_idx = {"i": 0}
 
         def mock_eval(*args: object, **kwargs: object) -> EvalResult:
@@ -411,3 +420,100 @@ class TestReviewFixRetryWithResume:
         assert len(dispatch_calls) == 2
         assert dispatch_calls[0]["session_id"] == "sess_abc"
         assert dispatch_calls[1]["session_id"] is None
+
+
+class TestPreWorkEval:
+    """Pre-work eval runs before retry when prior worker produced commits."""
+
+    def test_pre_work_eval_passes_skips_retry(self, dummy_logger: EventLogger) -> None:
+        """When pre-work eval passes, worker is NOT dispatched for the retry."""
+        dispatch_calls: list[dict[str, str | None]] = []
+
+        def mock_dispatch(*args: object, **kwargs: object) -> WorkerResult:
+            dispatch_calls.append({"session_id": kwargs.get("session_id")})  # type: ignore[dict-item]
+            return _make_worker_result(session_id="sess_a", context_usage_pct=0.05, commits_ahead=3)
+
+        # Eval sequence: first eval fails (triggers retry), pre-work eval passes
+        eval_results = [_failing_eval(), _passing_eval()]
+        eval_idx = {"i": 0}
+
+        def mock_eval(*args: object, **kwargs: object) -> EvalResult:
+            result = eval_results[eval_idx["i"]]
+            eval_idx["i"] += 1
+            return result
+
+        create_pr_calls: list[dict[str, object]] = []
+
+        def mock_create_pr(*args: object, **kwargs: object) -> MagicMock:
+            create_pr_calls.append({"kwargs": kwargs})
+            return MagicMock(success=True, pr_url="http://pr/1", branch="b")
+
+        stages: list[StageResultUnion] = []
+        _run_inner_with_mocks(
+            mock_dispatch, mock_eval, stages, dummy_logger, mock_create_pr=mock_create_pr
+        )
+
+        # Only 1 worker dispatch (no retry worker)
+        assert len(dispatch_calls) == 1
+        # 2 eval calls: initial eval (fail) + pre-work eval (pass)
+        assert eval_idx["i"] == 2
+
+    def test_pre_work_eval_fails_dispatches_with_fresh_feedback(
+        self, dummy_logger: EventLogger
+    ) -> None:
+        """When pre-work eval fails, worker IS dispatched with fresh feedback."""
+        dispatch_calls: list[dict[str, object]] = []
+
+        def mock_dispatch(*args: object, **kwargs: object) -> WorkerResult:
+            dispatch_calls.append({"feedback": kwargs.get("feedback")})
+            return _make_worker_result(session_id="sess_a", context_usage_pct=0.05, commits_ahead=2)
+
+        # Eval sequence: first eval fails, pre-work eval fails with fresh error, second eval passes
+        fresh_eval_failure = _failing_eval(feedback="mypy error")
+        eval_results = [_failing_eval(feedback="stale error"), fresh_eval_failure, _passing_eval()]
+        eval_idx = {"i": 0}
+
+        def mock_eval(*args: object, **kwargs: object) -> EvalResult:
+            result = eval_results[eval_idx["i"]]
+            eval_idx["i"] += 1
+            return result
+
+        stages: list[StageResultUnion] = []
+        _run_inner_with_mocks(mock_dispatch, mock_eval, stages, dummy_logger)
+
+        assert len(dispatch_calls) == 2
+        # Second dispatch should have the fresh feedback from pre-work eval, not stale
+        assert dispatch_calls[1]["feedback"] == "mypy error"
+
+    def test_pre_work_eval_not_run_after_zero_commits(
+        self, dummy_logger: EventLogger
+    ) -> None:
+        """When prior worker produced zero commits, pre-work eval is NOT run."""
+        dispatch_calls: list[dict[str, object]] = []
+
+        def mock_dispatch(*args: object, **kwargs: object) -> WorkerResult:
+            dispatch_calls.append({"feedback": kwargs.get("feedback")})
+            if len(dispatch_calls) == 1:
+                # First dispatch fails with zero commits
+                return _make_worker_result(
+                    success=False, commits_ahead=0, error="No commits", session_id=None
+                )
+            # Second dispatch succeeds
+            return _make_worker_result(session_id="sess_b", commits_ahead=1)
+
+        # Only one eval call needed (after the second successful dispatch)
+        eval_results = [_passing_eval()]
+        eval_idx = {"i": 0}
+
+        def mock_eval(*args: object, **kwargs: object) -> EvalResult:
+            result = eval_results[eval_idx["i"]]
+            eval_idx["i"] += 1
+            return result
+
+        stages: list[StageResultUnion] = []
+        _run_inner_with_mocks(mock_dispatch, mock_eval, stages, dummy_logger)
+
+        # 2 worker dispatches (initial fail + retry)
+        assert len(dispatch_calls) == 2
+        # Only 1 eval call — no pre-work eval was run
+        assert eval_idx["i"] == 1

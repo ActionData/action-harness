@@ -9,6 +9,7 @@ import typer
 from action_harness.evaluator import run_eval
 from action_harness.event_log import EventLogger
 from action_harness.models import (
+    EvalResult,
     OpenSpecReviewResult,
     PrResult,
     ReviewResult,
@@ -16,6 +17,7 @@ from action_harness.models import (
     StageResultUnion,
     WorkerResult,
 )
+from action_harness.progress import write_progress
 from action_harness.openspec_reviewer import (
     dispatch_openspec_review,
     parse_review_result,
@@ -288,8 +290,32 @@ def _run_pipeline_inner(
     attempt = 0
     feedback: str | None = None
     resume_session_id: str | None = None
+    prior_worker_result: WorkerResult | None = None
+    eval_result: EvalResult | None = None
 
     while attempt <= max_retries:
+        # Pre-work eval on retries: if the prior worker produced commits,
+        # run eval first — the commits may have already fixed the issue.
+        if attempt > 0 and prior_worker_result is not None and prior_worker_result.commits_ahead > 0:
+            typer.echo("[pipeline] running pre-work eval before retry", err=True)
+            pre_work_eval = run_eval(
+                worktree_path, eval_commands=eval_commands, verbose=verbose, logger=logger
+            )
+            logger.emit(
+                "eval.pre_work",
+                stage="eval",
+                success=pre_work_eval.success,
+                commands_passed=pre_work_eval.commands_passed,
+                commands_run=pre_work_eval.commands_run,
+            )
+            if pre_work_eval.success:
+                typer.echo("[pipeline] pre-work eval passed, skipping retry", err=True)
+                eval_result = pre_work_eval
+                worker_result = prior_worker_result
+                break
+            # Pre-work eval failed — use its feedback (fresher than stale feedback)
+            feedback = pre_work_eval.feedback_prompt
+
         # Dispatch worker
         if feedback:
             typer.echo(f"[pipeline] retry {attempt}/{max_retries} with feedback", err=True)
@@ -373,6 +399,7 @@ def _run_pipeline_inner(
                     reason="worker_failed",
                     max_retries=max_retries,
                 )
+                prior_worker_result = worker_result
                 attempt += 1
                 feedback = worker_result.error
                 resume_session_id = None
@@ -441,6 +468,9 @@ def _run_pipeline_inner(
                     err=True,
                 )
 
+        # Write progress file for retry context (eval failed, retry will follow)
+        write_progress(worktree_path, attempt + 1, worker_result, eval_result)
+
         logger.emit(
             "retry.scheduled",
             attempt=attempt + 1,
@@ -448,6 +478,7 @@ def _run_pipeline_inner(
             max_retries=max_retries,
             resume_session_id=resume_session_id,
         )
+        prior_worker_result = worker_result
         attempt += 1
         feedback = eval_result.feedback_prompt
     else:

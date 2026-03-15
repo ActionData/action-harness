@@ -10,10 +10,10 @@
 
 ## 3. Tests
 
-- [ ] 3.1 In `tests/test_repo.py`: test `_detect_gh_protocol` — mock subprocess for `gh auth token`: exit 0 returns "https", exit 1 returns "ssh", FileNotFoundError returns "https".
-- [ ] 3.2 In `tests/test_repo.py`: test `resolve_repo` with shorthand — mock `_detect_gh_protocol` to return "ssh", verify clone URL is SSH. Mock to return "https", verify HTTPS. Assert `_parse_repo_ref` is NOT mocked (still returns HTTPS — swap happens in `resolve_repo`).
-- [ ] 3.3 In `tests/test_repo.py`: test clone fallback — HTTPS fails, SSH succeeds (mock subprocess). Assert `git remote set-url origin` was called with SSH URL. Both fail, raises ValidationError with both errors.
-- [ ] 3.4 In `tests/test_repo.py`: test explicit SSH URL — assert `_detect_gh_protocol` is NOT called (use mock `assert_not_called`). Explicit HTTPS — assert detection not called but fallback still applies on failure.
+- [x] 3.1 In `tests/test_repo.py`: test `_detect_gh_protocol` — mock subprocess for `gh auth token`: exit 0 returns "https", exit 1 returns "ssh", FileNotFoundError returns "https".
+- [x] 3.2 In `tests/test_repo.py`: test `resolve_repo` with shorthand — mock `_detect_gh_protocol` to return "ssh", verify clone URL is SSH. Mock to return "https", verify HTTPS. Assert `_parse_repo_ref` is NOT mocked (still returns HTTPS — swap happens in `resolve_repo`).
+- [x] 3.3 In `tests/test_repo.py`: test clone fallback — HTTPS fails, SSH succeeds (mock subprocess). Assert `git remote set-url origin` was called with SSH URL. Both fail, raises ValidationError with both errors.
+- [x] 3.4 In `tests/test_repo.py`: test explicit SSH URL — assert `_detect_gh_protocol` is NOT called (use mock `assert_not_called`). Explicit HTTPS — assert detection not called but fallback still applies on failure.
 
 ## 4. Validation
 

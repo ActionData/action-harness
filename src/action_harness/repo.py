@@ -149,9 +149,7 @@ def _clone_or_fetch(clone_url: str, repo_dir: Path, verbose: bool) -> None:
                 if verbose:
                     typer.echo("  clone complete (SSH fallback)", err=True)
             else:
-                raise ValidationError(
-                    f"Failed to clone {clone_url}: {result.stderr.strip()}"
-                )
+                raise ValidationError(f"Failed to clone {clone_url}: {result.stderr.strip()}")
         elif verbose:
             typer.echo("  clone complete", err=True)
     else:

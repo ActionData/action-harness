@@ -26,7 +26,10 @@ Output ONLY a JSON object with this exact schema:
     "ci_guardrails": {
       "score_adjustment": <int between -20 and +20>,
       "rationale": "<string explaining the adjustment>",
-      "gaps": [{"severity": "high"|"medium"|"low", "finding": "<description>", "proposal_name": "<kebab-case>"|null}]
+      "gaps": [
+        {"severity": "high"|"medium"|"low",
+         "finding": "<str>", "proposal_name": "<kebab-case>"|null}
+      ]
     },
     "testability": { ... same structure ... },
     "context": { ... same structure ... },
@@ -147,7 +150,9 @@ def dispatch_readonly_worker(
             json_start = worker_result.find("{")
             json_end = worker_result.rfind("}") + 1
             if json_start >= 0 and json_end > json_start:
-                assessment_json = json.loads(worker_result[json_start:json_end])
+                assessment_json: dict[str, object] = json.loads(
+                    worker_result[json_start:json_end]
+                )
                 return assessment_json
 
         typer.echo("[assess_agent] could not parse agent output as JSON", err=True)

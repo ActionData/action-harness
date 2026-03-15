@@ -502,7 +502,7 @@ def assess(
 
         action-harness assess --repo . --deep --propose
     """
-    from datetime import datetime, timezone
+    from datetime import UTC, datetime
 
     from action_harness.assessment import AssessmentReport
     from action_harness.branch_protection import check_branch_protection
@@ -579,7 +579,7 @@ def assess(
             categories=categories,
             proposals=[],
             repo_path=str(repo),
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
             mode=mode,  # type: ignore[arg-type]
         )
     )
@@ -589,7 +589,7 @@ def assess(
         categories=categories,
         proposals=proposals,
         repo_path=str(repo),
-        timestamp=datetime.now(timezone.utc).isoformat(),
+        timestamp=datetime.now(UTC).isoformat(),
         mode=mode,  # type: ignore[arg-type]
     )
 

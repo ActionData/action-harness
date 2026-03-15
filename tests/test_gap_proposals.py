@@ -17,7 +17,9 @@ def _make_profile() -> RepoProfile:
     )
 
 
-def _make_completed(returncode: int, stdout: str = "", stderr: str = "") -> subprocess.CompletedProcess[str]:
+def _make_completed(
+    returncode: int, stdout: str = "", stderr: str = ""
+) -> subprocess.CompletedProcess[str]:
     return subprocess.CompletedProcess(args=[], returncode=returncode, stdout=stdout, stderr=stderr)
 
 
@@ -44,17 +46,11 @@ def test_scaffold_and_dispatch(tmp_path: Path) -> None:
 
     assert len(results) == 2
     # openspec new change called for each proposal
-    scaffold_calls = [
-        c for c in mock_run.call_args_list
-        if c[0][0][0] == "openspec"
-    ]
+    scaffold_calls = [c for c in mock_run.call_args_list if c[0][0][0] == "openspec"]
     assert len(scaffold_calls) == 2
 
     # claude dispatch called for each proposal
-    claude_calls = [
-        c for c in mock_run.call_args_list
-        if c[0][0][0] == "claude"
-    ]
+    claude_calls = [c for c in mock_run.call_args_list if c[0][0][0] == "claude"]
     assert len(claude_calls) == 2
 
 

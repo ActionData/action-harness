@@ -12,7 +12,6 @@ from action_harness.scanner import (
     detect_tooling_signals,
 )
 
-
 # === Lockfile Detection ===
 
 
@@ -55,7 +54,9 @@ def test_python_test_structure(tmp_path: Path) -> None:
     (tmp_path / "pyproject.toml").write_text('[tool.pytest.ini_options]\ntestpaths = ["tests"]')
     tests_dir = tmp_path / "tests"
     tests_dir.mkdir()
-    (tests_dir / "test_foo.py").write_text("def test_one():\n    pass\n\ndef test_two():\n    pass\n")
+    (tests_dir / "test_foo.py").write_text(
+        "def test_one():\n    pass\n\ndef test_two():\n    pass\n"
+    )
     (tests_dir / "test_bar.py").write_text("def test_three():\n    pass\n")
 
     result = analyze_test_structure(tmp_path, "python")

@@ -156,9 +156,7 @@ def generate_proposals(
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {
-            executor.submit(
-                _dispatch_spec_writer, gap, repo_path, profile, claude_md
-            ): gap
+            executor.submit(_dispatch_spec_writer, gap, repo_path, profile, claude_md): gap
             for gap in named_proposals
         }
 

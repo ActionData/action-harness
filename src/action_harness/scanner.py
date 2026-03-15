@@ -1,4 +1,4 @@
-"""Mechanical scanners — lockfile detection, test structure, context, tooling, observability, isolation."""
+"""Mechanical scanners for codebase assessment."""
 
 import glob as glob_mod
 import re
@@ -182,7 +182,11 @@ def detect_context_signals(repo_path: Path) -> ContextMechanicalSignals:
         try:
             content = Path(sf).read_text()
             # Check for type annotations (Python: -> or : type, TS: : type, Rust: -> type)
-            if re.search(r"def \w+\([^)]*:.*\)|def \w+\(.*\) ->|:\s*(str|int|bool|float|list|dict|Path|None)\b", content):
+            type_pattern = (
+                r"def \w+\([^)]*:.*\)|def \w+\(.*\) ->"
+                r"|:\s*(str|int|bool|float|list|dict|Path|None)\b"
+            )
+            if re.search(type_pattern, content):
                 type_annotations_present = True
             if re.search(r'""".*?"""', content, re.DOTALL) or re.search(r"///", content):
                 docstrings_present = True
@@ -343,9 +347,9 @@ def detect_isolation_signals(repo_path: Path) -> IsolationMechanicalSignals:
 
     git_repo = (repo_path / ".git").exists()
     lockfile_present, _ = detect_lockfiles(repo_path)
-    env_example_present = (
-        (repo_path / ".env.example").exists() or (repo_path / ".env.sample").exists()
-    )
+    env_example_present = (repo_path / ".env.example").exists() or (
+        repo_path / ".env.sample"
+    ).exists()
 
     # Check for committed secrets (conservative scan)
     no_committed_secrets = True

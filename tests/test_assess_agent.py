@@ -156,9 +156,7 @@ def test_merge_preserves_mechanical_gaps() -> None:
             "ci_guardrails": {
                 "score_adjustment": 0,
                 "rationale": "OK",
-                "gaps": [
-                    {"severity": "low", "finding": "Agent gap", "proposal_name": None}
-                ],
+                "gaps": [{"severity": "low", "finding": "Agent gap", "proposal_name": None}],
             }
         }
     }

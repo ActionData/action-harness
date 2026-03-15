@@ -90,7 +90,11 @@ def _extract_run_commands(workflow_data: dict[str, object]) -> list[str]:
 
 def _check_pr_trigger(workflow_data: dict[str, object]) -> bool:
     """Check if the workflow triggers on pull requests."""
-    on_value = workflow_data.get("on") or workflow_data.get(True)
+    # YAML parses bare `on:` as boolean True key, so check both
+    on_value = workflow_data.get("on")
+    if on_value is None:
+        # pyyaml may parse `on:` as True (boolean key)
+        on_value = workflow_data.get(True)  # type: ignore[call-overload]
     if on_value is None:
         return False
 

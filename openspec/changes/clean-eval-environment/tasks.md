@@ -4,7 +4,7 @@
 
 ## 2. Tests
 
-- [ ] 2.1 In `tests/test_evaluator.py`: patch `os.environ` as a dict containing `{"VIRTUAL_ENV": "/fake/path", "VIRTUAL_ENV_PROMPT": "fake", "PATH": "/usr/bin", "HOME": "/home/user"}`. Call `run_eval` with mocked `subprocess.run`. Assert every `subprocess.run` call received an `env` kwarg that does NOT contain `VIRTUAL_ENV` or `VIRTUAL_ENV_PROMPT` but DOES contain `PATH` and `HOME`.
+- [x] 2.1 In `tests/test_evaluator.py`: patch `os.environ` as a dict containing `{"VIRTUAL_ENV": "/fake/path", "VIRTUAL_ENV_PROMPT": "fake", "PATH": "/usr/bin", "HOME": "/home/user"}`. Call `run_eval` with mocked `subprocess.run`. Assert every `subprocess.run` call received an `env` kwarg that does NOT contain `VIRTUAL_ENV` or `VIRTUAL_ENV_PROMPT` but DOES contain `PATH` and `HOME`.
 
 ## 3. Validation
 

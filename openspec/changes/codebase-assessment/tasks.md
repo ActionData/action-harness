@@ -65,6 +65,6 @@
 
 ## 11. Validation [depends: all]
 
-- [ ] 11.1 Run `harness assess --repo .` on the action-harness repo itself. Verify: exit code 0, output contains all six category names, overall score is an integer between 0 and 100, ci_guardrails reports `runs_tests: true`
-- [ ] 11.2 Run full test suite (`uv run pytest -v`) and verify no regressions
-- [ ] 11.3 Run lint and type checks (`uv run ruff check .` and `uv run mypy src/`)
+- [x] 11.1 Run `harness assess --repo .` on the action-harness repo itself. Verify: exit code 0, output contains all six category names, overall score is an integer between 0 and 100, ci_guardrails reports `runs_tests: true`
+- [x] 11.2 Run full test suite (`uv run pytest -v`) and verify no regressions
+- [x] 11.3 Run lint and type checks (`uv run ruff check .` and `uv run mypy src/`)

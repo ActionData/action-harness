@@ -239,6 +239,47 @@ class TestCliRunner:
         assert result.exit_code == 0
         assert "owner/repo" in result.output
 
+    def test_help_shows_auto_merge_and_wait_for_ci(self) -> None:
+        result = runner.invoke(app, ["run", "--help"])
+        assert result.exit_code == 0
+        assert "--auto-merge" in result.output
+        assert "--wait-for-ci" in result.output
+
+    def test_dry_run_with_auto_merge(self, fake_repo: Path) -> None:
+        with patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"):
+            result = runner.invoke(
+                app,
+                [
+                    "run",
+                    "--change",
+                    "test-change",
+                    "--repo",
+                    str(fake_repo),
+                    "--dry-run",
+                    "--auto-merge",
+                ],
+            )
+        assert result.exit_code == 0
+        assert "auto-merge: enabled" in result.output
+        assert "wait-for-ci: disabled" in result.output
+
+    def test_dry_run_without_auto_merge(self, fake_repo: Path) -> None:
+        with patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"):
+            result = runner.invoke(
+                app,
+                ["run", "--change", "test-change", "--repo", str(fake_repo), "--dry-run"],
+            )
+        assert result.exit_code == 0
+        assert "auto-merge: disabled" in result.output
+
+    def test_wait_for_ci_without_auto_merge_errors(self) -> None:
+        result = runner.invoke(
+            app,
+            ["run", "--change", "x", "--repo", "/nonexistent", "--wait-for-ci"],
+        )
+        assert result.exit_code == 1
+        assert "--wait-for-ci requires --auto-merge" in result.output
+
 
 class TestCleanCommand:
     """Test the clean subcommand."""

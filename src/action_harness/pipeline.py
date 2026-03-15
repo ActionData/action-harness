@@ -8,8 +8,11 @@ import typer
 
 from action_harness.evaluator import run_eval
 from action_harness.event_log import EventLogger
+from action_harness.merge import check_merge_gates, merge_pr, post_merge_blocked_comment
+from action_harness.merge import wait_for_ci as wait_for_ci_checks
 from action_harness.models import (
     EvalResult,
+    MergeResult,
     OpenSpecReviewResult,
     PrResult,
     ReviewResult,
@@ -127,6 +130,8 @@ def run_pipeline(
     harness_home: Path | None = None,
     repo_name: str | None = None,
     skip_review: bool = False,
+    auto_merge: bool = False,
+    wait_for_ci: bool = False,
 ) -> tuple[PrResult, RunManifest]:
     """Run the full pipeline: worktree -> worker -> eval -> retry -> PR.
 
@@ -201,6 +206,8 @@ def run_pipeline(
             workspace_dir=workspace_dir,
             skip_review=skip_review,
             protected_files_out=protected_files,
+            auto_merge=auto_merge,
+            wait_for_ci=wait_for_ci,
         )
     except Exception as e:
         typer.echo(f"[pipeline] unexpected error: {e}", err=True)
@@ -255,6 +262,8 @@ def _run_pipeline_inner(
     workspace_dir: Path | None = None,
     skip_review: bool = False,
     protected_files_out: list[str] | None = None,
+    auto_merge: bool = False,
+    wait_for_ci: bool = False,
 ) -> PrResult:
     """Inner pipeline logic. Appends to stages list as side effect.
 
@@ -552,9 +561,9 @@ def _run_pipeline_inner(
     )
 
     # Stage 5: Review agents (parallel code review) with fix-retry loop
+    findings_remain = False
     if not skip_review:
         latest_review_results: list[ReviewResult] = []
-        findings_remain = False
         last_fix_succeeded = False
 
         for review_round in range(2):
@@ -679,6 +688,65 @@ def _run_pipeline_inner(
             error="OpenSpec review returned findings",
             branch=branch,
             pr_url=pr_result.pr_url,
+        )
+
+    # Stage 7: Auto-merge (optional)
+    if auto_merge and not pr_result.pr_url:
+        typer.echo("[pipeline] auto-merge: skipping, no PR URL available", err=True)
+        stages.append(MergeResult(success=True, merged=False, merge_blocked_reason="no PR URL"))
+        logger.emit(
+            "merge.completed",
+            stage="merge",
+            merged=False,
+            blocked_reason="no PR URL",
+        )
+    elif auto_merge and pr_result.pr_url:
+        logger.emit("merge.started", stage="merge", wait_for_ci=wait_for_ci)
+        openspec_review_passed = review_result is None or review_result.success
+        gates, all_passed = check_merge_gates(
+            protected_files, findings_remain, openspec_review_passed, skip_review
+        )
+
+        merge_result: MergeResult
+        if all_passed:
+            ci_passed: bool | None = None
+            if wait_for_ci:
+                typer.echo("[pipeline] auto-merge: waiting for CI", err=True)
+                ci_passed = wait_for_ci_checks(pr_result.pr_url, worktree_path, verbose=verbose)
+
+            if not wait_for_ci or ci_passed:
+                typer.echo("[pipeline] auto-merge: all gates passed, merging PR", err=True)
+                merge_result = merge_pr(pr_result.pr_url, worktree_path, verbose=verbose)
+                merge_result = merge_result.model_copy(update={"ci_passed": ci_passed})
+            else:
+                reason = "CI checks failed"
+                typer.echo(f"[pipeline] auto-merge blocked: {reason}", err=True)
+                merge_result = MergeResult(
+                    success=True,
+                    merged=False,
+                    merge_blocked_reason=reason,
+                    ci_passed=ci_passed,
+                )
+                ci_gates = {**gates, "ci_passed": False}
+                post_merge_blocked_comment(
+                    pr_result.pr_url, worktree_path, ci_gates, verbose=verbose
+                )
+        else:
+            failed_gates = [name for name, passed in gates.items() if not passed]
+            reason = f"Gates failed: {', '.join(failed_gates)}"
+            typer.echo(f"[pipeline] auto-merge blocked: {reason}", err=True)
+            merge_result = MergeResult(success=True, merged=False, merge_blocked_reason=reason)
+            post_merge_blocked_comment(pr_result.pr_url, worktree_path, gates, verbose=verbose)
+
+        stages.append(merge_result)
+
+        logger.emit(
+            "merge.completed",
+            stage="merge",
+            gates=gates,
+            merged=merge_result.merged,
+            blocked_reason=merge_result.merge_blocked_reason,
+            ci_passed=merge_result.ci_passed,
         )
 
     typer.echo("[pipeline] complete (success)", err=True)

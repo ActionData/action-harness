@@ -118,6 +118,16 @@ def run(
         "--skip-review",
         help="Skip the review-agents stage (bug-hunter, test-reviewer, quality-reviewer)",
     ),
+    auto_merge: bool = typer.Option(
+        False,
+        "--auto-merge",
+        help="Automatically merge the PR when all quality gates pass",
+    ),
+    wait_for_ci: bool = typer.Option(
+        False,
+        "--wait-for-ci",
+        help="Wait for CI status checks before merging (requires --auto-merge)",
+    ),
     dry_run: bool = typer.Option(
         False, "--dry-run", help="Validate and print plan without executing"
     ),
@@ -128,12 +138,20 @@ def run(
     worker via opsx:apply, runs eval (pytest, ruff, mypy), retries with
     structured feedback on failure, and opens a PR for human review.
 
+    With `--auto-merge`, the pipeline merges the PR when all quality gates
+    pass (eval clean, no protected files, review agents clean, OpenSpec
+    review passed). Add `--wait-for-ci` to also wait for CI checks.
+
     The `--repo` flag accepts a local path (e.g., `.` or `/abs/path`),
     GitHub shorthand (e.g., `owner/repo`), or a full URL
     (e.g., `https://github.com/owner/repo` or `git@github.com:owner/repo.git`).
 
     The change must exist at REPO/openspec/changes/NAME/.
     """
+    if wait_for_ci and not auto_merge:
+        typer.echo("Error: --wait-for-ci requires --auto-merge", err=True)
+        raise typer.Exit(code=1)
+
     resolved_home = _resolve_harness_home(harness_home)
 
     # Resolve repo: local path or remote reference
@@ -175,6 +193,8 @@ def run(
         for cmd in profile.eval_commands:
             typer.echo(f"    - {cmd}")
         typer.echo(f"  pr title: [harness] {change}")
+        typer.echo(f"  auto-merge: {'enabled' if auto_merge else 'disabled'}")
+        typer.echo(f"  wait-for-ci: {'enabled' if wait_for_ci else 'disabled'}")
         typer.echo(f"  max retries: {max_retries}")
         raise typer.Exit(code=0)
 
@@ -193,6 +213,8 @@ def run(
         harness_home=resolved_home if is_managed else None,
         repo_name=repo_name if is_managed else None,
         skip_review=skip_review,
+        auto_merge=auto_merge,
+        wait_for_ci=wait_for_ci,
     )
 
     if manifest.manifest_path:

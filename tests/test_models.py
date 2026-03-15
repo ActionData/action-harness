@@ -7,6 +7,7 @@ import pytest
 
 from action_harness.models import (
     EvalResult,
+    MergeResult,
     PrResult,
     ReviewFinding,
     ReviewResult,
@@ -369,3 +370,54 @@ class TestRunManifest:
         assert isinstance(worker, WorkerResult)
         assert worker.session_id == "sess_abc123"
         assert worker.context_usage_pct == pytest.approx(0.45)
+
+
+class TestMergeResult:
+    def test_success_merged(self) -> None:
+        result = MergeResult(success=True, merged=True)
+        assert result.stage == "merge"
+        assert result.success is True
+        assert result.merged is True
+        assert result.merge_blocked_reason is None
+        assert result.ci_passed is None
+        assert isinstance(result, StageResult)
+
+    def test_blocked(self) -> None:
+        result = MergeResult(
+            success=True,
+            merged=False,
+            merge_blocked_reason="Protected files touched: CLAUDE.md",
+        )
+        assert result.success is True
+        assert result.merged is False
+        assert result.merge_blocked_reason == "Protected files touched: CLAUDE.md"
+
+    def test_failed(self) -> None:
+        result = MergeResult(success=False, merged=False, error="gh pr merge failed")
+        assert result.success is False
+        assert result.merged is False
+        assert result.error == "gh pr merge failed"
+
+    def test_roundtrip_through_run_manifest(self) -> None:
+        merge = MergeResult(success=True, merged=True)
+        stages = [
+            WorktreeResult(success=True, stage="worktree", branch="b"),
+            WorkerResult(success=True, stage="worker", commits_ahead=1),
+            EvalResult(success=True, stage="eval", commands_run=1, commands_passed=1),
+            PrResult(success=True, stage="pr", branch="b"),
+            merge,
+        ]
+        manifest = RunManifest(
+            change_name="test",
+            repo_path=".",
+            started_at="2026-01-01T00:00:00+00:00",
+            completed_at="2026-01-01T00:00:01+00:00",
+            success=True,
+            stages=stages,
+            total_duration_seconds=1.0,
+        )
+        raw = manifest.model_dump_json()
+        restored = RunManifest.model_validate_json(raw)
+        assert type(restored.stages[-1]) is MergeResult
+        assert restored.stages[-1].merged is True
+        assert restored.stages[-1].merge_blocked_reason is None

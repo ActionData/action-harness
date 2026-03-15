@@ -750,7 +750,13 @@ def _run_openspec_review(
         )
         if push_error:
             typer.echo(f"[pipeline] failed to push archive: {push_error}", err=True)
-            review_result = review_result.model_copy(update={"success": False, "error": push_error})
+            review_result = review_result.model_copy(
+                update={
+                    "success": False,
+                    "error": push_error,
+                    "human_tasks_remaining": review_result.human_tasks_remaining,
+                }
+            )
         elif pushed and pr_result.pr_url:
             # Add a comment on the PR noting the archive was completed
             _comment_archive_complete(worktree_path, pr_result.pr_url, verbose)
@@ -765,11 +771,12 @@ def _flag_pr_needs_human(
     verbose: bool,
 ) -> None:
     """Post a PR comment listing remaining human tasks and add a needs-human label."""
-    # Build comment body
+    # Build comment body — only include findings that describe human tasks
+    human_findings = [f for f in findings if "human" in f.lower()]
     lines = ["## Human Tasks Remaining", ""]
-    for finding in findings:
+    for finding in human_findings:
         lines.append(f"- {finding}")
-    if not findings:
+    if not human_findings:
         lines.append("Human tasks remain incomplete. Check tasks.md for details.")
     body = "\n".join(lines)
 

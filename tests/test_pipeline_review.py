@@ -411,3 +411,99 @@ class TestPipelineWithReviewAgents:
         # Verify needs-human label was added
         label_calls = [c for c in gh_calls if "--add-label" in c and "needs-human" in c]
         assert len(label_calls) >= 1
+
+
+class TestFlagPrNeedsHuman:
+    """Unit tests for _flag_pr_needs_human."""
+
+    def test_posts_comment_and_adds_label(self, tmp_path: Path) -> None:
+        """Verify gh pr comment and gh pr edit --add-label are called correctly."""
+        from action_harness.pipeline import _flag_pr_needs_human
+
+        calls: list[list[str]] = []
+
+        def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+            calls.append(cmd)
+            return subprocess.CompletedProcess(cmd, 0, "", "")
+
+        with patch("action_harness.pipeline.subprocess.run", side_effect=fake_run):
+            _flag_pr_needs_human(
+                tmp_path,
+                "https://github.com/test/repo/pull/1",
+                ["3 human tasks remaining: verify tokens, watch CI, merge"],
+                verbose=False,
+            )
+
+        # Should have exactly 2 calls: comment + label
+        assert len(calls) == 2
+
+        # First call: gh pr comment
+        comment_cmd = calls[0]
+        assert comment_cmd[0] == "gh"
+        assert comment_cmd[1] == "pr"
+        assert comment_cmd[2] == "comment"
+        assert "https://github.com/test/repo/pull/1" in comment_cmd
+        body_idx = comment_cmd.index("--body") + 1
+        body = comment_cmd[body_idx]
+        assert "Human Tasks Remaining" in body
+        assert "human tasks remaining" in body
+
+        # Second call: gh pr edit --add-label
+        label_cmd = calls[1]
+        assert label_cmd[0] == "gh"
+        assert label_cmd[1] == "pr"
+        assert label_cmd[2] == "edit"
+        assert "--add-label" in label_cmd
+        assert "needs-human" in label_cmd
+
+    def test_filters_non_human_findings(self, tmp_path: Path) -> None:
+        """Only findings containing 'human' are included in the PR comment."""
+        from action_harness.pipeline import _flag_pr_needs_human
+
+        calls: list[list[str]] = []
+
+        def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+            calls.append(cmd)
+            return subprocess.CompletedProcess(cmd, 0, "", "")
+
+        findings = [
+            "2 human tasks remaining: verify tokens, watch CI",
+            "Minor style issue in foo.py",
+        ]
+
+        with patch("action_harness.pipeline.subprocess.run", side_effect=fake_run):
+            _flag_pr_needs_human(
+                tmp_path,
+                "https://github.com/test/repo/pull/1",
+                findings,
+                verbose=False,
+            )
+
+        comment_cmd = calls[0]
+        body_idx = comment_cmd.index("--body") + 1
+        body = comment_cmd[body_idx]
+        assert "human tasks remaining" in body
+        assert "style issue" not in body
+
+    def test_fallback_message_when_no_human_findings(self, tmp_path: Path) -> None:
+        """When no findings contain 'human', a fallback message is shown."""
+        from action_harness.pipeline import _flag_pr_needs_human
+
+        calls: list[list[str]] = []
+
+        def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+            calls.append(cmd)
+            return subprocess.CompletedProcess(cmd, 0, "", "")
+
+        with patch("action_harness.pipeline.subprocess.run", side_effect=fake_run):
+            _flag_pr_needs_human(
+                tmp_path,
+                "https://github.com/test/repo/pull/1",
+                ["Some unrelated finding"],
+                verbose=False,
+            )
+
+        comment_cmd = calls[0]
+        body_idx = comment_cmd.index("--body") + 1
+        body = comment_cmd[body_idx]
+        assert "Check tasks.md for details" in body

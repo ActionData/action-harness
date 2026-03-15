@@ -5,7 +5,11 @@ The pipeline SHALL run eval commands in the worktree before the worker is dispat
 
 #### Scenario: Baseline recorded
 - **WHEN** the worktree is created and before the worker runs
-- **THEN** all eval commands are run and their pass/fail status is recorded
+- **THEN** ALL eval commands are run (even if some fail) and their pass/fail status is recorded
+
+#### Scenario: Baseline command fails to execute
+- **WHEN** an eval command cannot be executed at baseline (e.g., binary not found)
+- **THEN** the pipeline treats that command as failed at baseline
 
 ### Requirement: Post-worker eval compares against baseline
 After the worker completes, eval SHALL compare each command's result against the baseline. Only regressions (passing → failing) SHALL cause eval failure.

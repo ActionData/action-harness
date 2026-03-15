@@ -1,10 +1,10 @@
 ## 1. Implementation
 
-- [ ] 1.1 In `evaluator.py:run_eval`: before the command loop, create a clean env: `clean_env = {k: v for k, v in os.environ.items() if k not in ("VIRTUAL_ENV", "VIRTUAL_ENV_PROMPT")}`. Pass `env=clean_env` to the `subprocess.run` call.
+- [ ] 1.1 In `evaluator.py`: add `import os` to the imports section. Before the `for` loop in `run_eval` (after line 44), create `clean_env = {k: v for k, v in os.environ.items() if k not in ("VIRTUAL_ENV", "VIRTUAL_ENV_PROMPT")}`. Pass `env=clean_env` to the single `subprocess.run` call on line 54.
 
 ## 2. Tests
 
-- [ ] 2.1 In `tests/test_evaluator.py`: add test that verifies `subprocess.run` is called with an `env` kwarg that does NOT contain `VIRTUAL_ENV`. Mock `os.environ` to include `VIRTUAL_ENV=/fake/path` and verify it's stripped.
+- [ ] 2.1 In `tests/test_evaluator.py`: patch `os.environ` as a dict containing `{"VIRTUAL_ENV": "/fake/path", "VIRTUAL_ENV_PROMPT": "fake", "PATH": "/usr/bin", "HOME": "/home/user"}`. Call `run_eval` with mocked `subprocess.run`. Assert every `subprocess.run` call received an `env` kwarg that does NOT contain `VIRTUAL_ENV` or `VIRTUAL_ENV_PROMPT` but DOES contain `PATH` and `HOME`.
 
 ## 3. Validation
 

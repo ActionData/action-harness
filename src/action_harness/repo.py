@@ -1,6 +1,7 @@
 """Repository management — clone, fetch, and resolve repo references."""
 
 import re
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -155,6 +156,9 @@ def _clone_or_fetch(clone_url: str, repo_dir: Path, verbose: bool) -> None:
                     f"[repo] HTTPS clone failed, falling back to SSH: {ssh_url}",
                     err=True,
                 )
+                # Clean up partial clone directory before retrying
+                if repo_dir.exists():
+                    shutil.rmtree(repo_dir)
                 ssh_result = subprocess.run(
                     ["git", "clone", ssh_url, str(repo_dir)],
                     capture_output=True,
@@ -166,11 +170,17 @@ def _clone_or_fetch(clone_url: str, repo_dir: Path, verbose: bool) -> None:
                         f"and {ssh_url} (SSH: {ssh_result.stderr.strip()})"
                     )
                 # Update remote URL to SSH so collision detection works next run
-                subprocess.run(
+                set_url_result = subprocess.run(
                     ["git", "-C", str(repo_dir), "remote", "set-url", "origin", ssh_url],
                     capture_output=True,
                     text=True,
                 )
+                if set_url_result.returncode != 0:
+                    typer.echo(
+                        f"[repo] warning: failed to update remote URL: "
+                        f"{set_url_result.stderr.strip()}",
+                        err=True,
+                    )
                 if verbose:
                     typer.echo("  clone complete (SSH fallback)", err=True)
             else:

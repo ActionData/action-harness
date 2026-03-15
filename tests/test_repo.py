@@ -11,6 +11,9 @@ from action_harness.repo import (
     _clone_or_fetch,
     _detect_gh_protocol,
     _get_repo_dir,
+    _https_to_ssh,
+    _is_https_github_url,
+    _is_shorthand,
     _normalize_github_identity,
     _parse_repo_ref,
     resolve_repo,
@@ -417,3 +420,146 @@ class TestExplicitUrlBypassDetection:
         # But SSH fallback was attempted
         ssh_clone_call = mock_run.call_args_list[1]
         assert "git@github.com:user/repo.git" in ssh_clone_call.args[0]
+
+
+class TestHttpsToSsh:
+    """Test _https_to_ssh — convert GitHub HTTPS URLs to SSH."""
+
+    def test_standard_https_url(self) -> None:
+        assert _https_to_ssh("https://github.com/owner/repo.git") == "git@github.com:owner/repo.git"
+
+    def test_https_without_git_suffix(self) -> None:
+        assert _https_to_ssh("https://github.com/owner/repo") == "git@github.com:owner/repo.git"
+
+    def test_https_with_trailing_slash(self) -> None:
+        assert _https_to_ssh("https://github.com/owner/repo/") == "git@github.com:owner/repo.git"
+
+    def test_http_url(self) -> None:
+        assert _https_to_ssh("http://github.com/owner/repo.git") == "git@github.com:owner/repo.git"
+
+    def test_non_github_url_returned_unchanged(self) -> None:
+        url = "https://gitlab.com/owner/repo.git"
+        assert _https_to_ssh(url) == url
+
+    def test_invalid_url_returned_unchanged(self) -> None:
+        url = "not-a-url"
+        assert _https_to_ssh(url) == url
+
+
+class TestIsShorthand:
+    """Test _is_shorthand — detect GitHub owner/repo shorthand."""
+
+    def test_simple_shorthand(self) -> None:
+        assert _is_shorthand("owner/repo") is True
+
+    def test_shorthand_with_dots_and_dashes(self) -> None:
+        assert _is_shorthand("my-org/my.repo") is True
+
+    def test_https_url_not_shorthand(self) -> None:
+        assert _is_shorthand("https://github.com/owner/repo") is False
+
+    def test_ssh_url_not_shorthand(self) -> None:
+        assert _is_shorthand("git@github.com:owner/repo.git") is False
+
+    def test_single_word_not_shorthand(self) -> None:
+        assert _is_shorthand("repo") is False
+
+    def test_three_segments_not_shorthand(self) -> None:
+        assert _is_shorthand("a/b/c") is False
+
+
+class TestIsHttpsGithubUrl:
+    """Test _is_https_github_url — detect HTTPS GitHub URLs."""
+
+    def test_https_github_url(self) -> None:
+        assert _is_https_github_url("https://github.com/owner/repo.git") is True
+
+    def test_http_github_url(self) -> None:
+        assert _is_https_github_url("http://github.com/owner/repo") is True
+
+    def test_ssh_url(self) -> None:
+        assert _is_https_github_url("git@github.com:owner/repo.git") is False
+
+    def test_non_github_https_url(self) -> None:
+        assert _is_https_github_url("https://gitlab.com/owner/repo") is False
+
+    def test_plain_string(self) -> None:
+        assert _is_https_github_url("owner/repo") is False
+
+
+class TestNonGithubCloneFailure:
+    """Test that non-GitHub HTTPS URLs don't trigger SSH fallback."""
+
+    def test_non_github_https_clone_failure_no_fallback(self, tmp_path: Path) -> None:
+        repo_dir = tmp_path / "repo"
+
+        with patch("action_harness.repo.subprocess.run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess(
+                args=[], returncode=128, stdout="", stderr="clone failed"
+            )
+            with pytest.raises(ValidationError, match="Failed to clone"):
+                _clone_or_fetch("https://gitlab.com/user/repo.git", repo_dir, verbose=False)
+
+        # Only one call — no SSH fallback attempted
+        assert mock_run.call_count == 1
+
+
+class TestPartialCloneCleanup:
+    """Test that partial clone directory is cleaned up before SSH retry."""
+
+    def test_partial_dir_removed_before_ssh_retry(self, tmp_path: Path) -> None:
+        repo_dir = tmp_path / "repo"
+
+        def clone_side_effect(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+            """Simulate HTTPS clone creating a partial directory, then failing."""
+            if "clone" in cmd and "github.com/user/repo.git" in cmd[-2]:
+                # HTTPS clone creates partial dir then fails
+                repo_dir.mkdir(exist_ok=True)
+                (repo_dir / "partial-file").touch()
+                return subprocess.CompletedProcess(
+                    args=cmd, returncode=128, stdout="", stderr="auth failed"
+                )
+            if "clone" in cmd and "git@github.com" in cmd[-2]:
+                # SSH clone succeeds
+                return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="", stderr="")
+            # git remote set-url
+            return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="", stderr="")
+
+        with (
+            patch("action_harness.repo.subprocess.run", side_effect=clone_side_effect) as mock_run,
+            patch("action_harness.repo.shutil.rmtree") as mock_rmtree,
+        ):
+            _clone_or_fetch("https://github.com/user/repo.git", repo_dir, verbose=False)
+
+        # Verify rmtree was called to clean up the partial clone
+        mock_rmtree.assert_called_once_with(repo_dir)
+        # Verify SSH clone was attempted
+        ssh_clone_call = mock_run.call_args_list[1]
+        assert "git@github.com:user/repo.git" in ssh_clone_call.args[0]
+
+
+class TestSetUrlWarning:
+    """Test that git remote set-url failure logs a warning."""
+
+    def test_set_url_failure_logs_warning(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        repo_dir = tmp_path / "repo"
+
+        with patch("action_harness.repo.subprocess.run") as mock_run:
+            mock_run.side_effect = [
+                # HTTPS clone fails
+                subprocess.CompletedProcess(
+                    args=[], returncode=128, stdout="", stderr="auth failed"
+                ),
+                # SSH clone succeeds
+                subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""),
+                # git remote set-url fails
+                subprocess.CompletedProcess(
+                    args=[], returncode=1, stdout="", stderr="set-url error"
+                ),
+            ]
+            _clone_or_fetch("https://github.com/user/repo.git", repo_dir, verbose=False)
+
+        captured = capsys.readouterr()
+        assert "warning: failed to update remote URL" in captured.err

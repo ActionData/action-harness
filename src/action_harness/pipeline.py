@@ -65,6 +65,12 @@ def _build_manifest(
                 total_cost = 0.0
             total_cost += cost
 
+    # Check if any OpenSpecReviewResult has human tasks remaining
+    needs_human = any(
+        isinstance(stage, OpenSpecReviewResult) and stage.human_tasks_remaining > 0
+        for stage in stages
+    )
+
     return RunManifest(
         change_name=change_name,
         repo_path=str(repo),
@@ -77,6 +83,7 @@ def _build_manifest(
         retries=retries,
         pr_url=pr_result.pr_url if pr_result.success else None,
         error=pr_result.error if not pr_result.success else None,
+        needs_human=needs_human,
         protected_files=protected_files or [],
         profile=profile,
     )
@@ -733,6 +740,12 @@ def _run_openspec_review(
     review_result = parse_review_result(raw_output, duration)
     stages.append(review_result)
 
+    # Handle needs-human: post PR comment and add label
+    if review_result.success and review_result.human_tasks_remaining > 0 and pr_result.pr_url:
+        _flag_pr_needs_human(
+            worktree_path, pr_result.pr_url, review_result.findings, verbose
+        )
+
     if review_result.success and review_result.archived:
         pushed, push_error = push_archive_if_needed(
             worktree_path, base_branch, commits_before, verbose=verbose
@@ -755,6 +768,58 @@ def _run_openspec_review(
             _comment_archive_complete(worktree_path, pr_result.pr_url, verbose)
 
     return review_result
+
+
+def _flag_pr_needs_human(
+    worktree_path: Path,
+    pr_url: str,
+    findings: list[str],
+    verbose: bool,
+) -> None:
+    """Post a PR comment listing remaining human tasks and add a needs-human label."""
+    # Build comment body
+    lines = ["## Human Tasks Remaining", ""]
+    for finding in findings:
+        lines.append(f"- {finding}")
+    if not findings:
+        lines.append("Human tasks remain incomplete. Check tasks.md for details.")
+    body = "\n".join(lines)
+
+    # Post comment
+    try:
+        result = subprocess.run(
+            ["gh", "pr", "comment", pr_url, "--body", body],
+            cwd=worktree_path,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            typer.echo(
+                f"[pipeline] warning: gh pr comment failed: {result.stderr.strip()}",
+                err=True,
+            )
+        elif verbose:
+            typer.echo("[pipeline] posted needs-human comment on PR", err=True)
+    except (FileNotFoundError, OSError) as e:
+        typer.echo(f"[pipeline] warning: gh pr comment failed: {e}", err=True)
+
+    # Add label
+    try:
+        result = subprocess.run(
+            ["gh", "pr", "edit", pr_url, "--add-label", "needs-human"],
+            cwd=worktree_path,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            typer.echo(
+                f"[pipeline] warning: gh pr edit --add-label failed: {result.stderr.strip()}",
+                err=True,
+            )
+        elif verbose:
+            typer.echo("[pipeline] added needs-human label to PR", err=True)
+    except (FileNotFoundError, OSError) as e:
+        typer.echo(f"[pipeline] warning: gh pr edit --add-label failed: {e}", err=True)
 
 
 def _comment_archive_complete(worktree_path: Path, pr_url: str, verbose: bool) -> None:

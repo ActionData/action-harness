@@ -9,9 +9,9 @@
 
 ## 3. Pipeline Integration
 
-- [ ] 3.1 In `models.py:RunManifest`: add `needs_human: bool = False` field.
-- [ ] 3.2 In `pipeline.py:_run_openspec_review` (around line 736): after `parse_review_result`, check `review_result.human_tasks_remaining > 0`. If so: (a) post a PR comment via `gh pr comment` listing the remaining human tasks from `review_result.findings`, (b) add a `needs-human` label via `gh pr edit --add-label needs-human`. Both use `pr_result.pr_url` which is available as a parameter.
-- [ ] 3.3 In `pipeline.py:_build_manifest`: add `needs_human: bool = False` parameter. Set from stages: check if any `OpenSpecReviewResult` in stages has `human_tasks_remaining > 0`. Set on the manifest. This follows the same pattern as cost_usd summing from stages.
+- [x] 3.1 In `models.py:RunManifest`: add `needs_human: bool = False` field.
+- [x] 3.2 In `pipeline.py:_run_openspec_review` (around line 736): after `parse_review_result`, check `review_result.human_tasks_remaining > 0`. If so: (a) post a PR comment via `gh pr comment` listing the remaining human tasks from `review_result.findings`, (b) add a `needs-human` label via `gh pr edit --add-label needs-human`. Both use `pr_result.pr_url` which is available as a parameter.
+- [x] 3.3 In `pipeline.py:_build_manifest`: add `needs_human: bool = False` parameter. Set from stages: check if any `OpenSpecReviewResult` in stages has `human_tasks_remaining > 0`. Set on the manifest. This follows the same pattern as cost_usd summing from stages.
 
 ## 4. Tests
 

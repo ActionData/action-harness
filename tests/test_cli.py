@@ -7,7 +7,7 @@ from unittest.mock import patch
 import pytest
 from typer.testing import CliRunner
 
-from action_harness.cli import ValidationError, app, validate_inputs
+from action_harness.cli import ValidationError, app, validate_inputs, validate_inputs_prompt
 from action_harness.models import PrResult, RunManifest
 
 runner = CliRunner()
@@ -279,6 +279,116 @@ class TestCliRunner:
         )
         assert result.exit_code == 1
         assert "--wait-for-ci requires --auto-merge" in result.output
+
+
+class TestValidateInputsPrompt:
+    """Tests for validate_inputs_prompt (prompt mode)."""
+
+    def test_valid_prompt_inputs(self, fake_repo: Path) -> None:
+        with patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"):
+            validate_inputs_prompt(fake_repo)
+
+    def test_missing_repo_prompt_mode(self) -> None:
+        with pytest.raises(ValidationError, match="Repository path does not exist"):
+            validate_inputs_prompt(Path("/nonexistent/repo"))
+
+    def test_not_git_repo_prompt_mode(self, tmp_path: Path) -> None:
+        with pytest.raises(ValidationError, match="Not a git repository"):
+            validate_inputs_prompt(tmp_path)
+
+    def test_does_not_check_openspec_dir(self, tmp_path: Path) -> None:
+        """Prompt mode should NOT check for openspec directory."""
+        (tmp_path / ".git").mkdir()
+        # No openspec dir — should still pass
+        with patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"):
+            validate_inputs_prompt(tmp_path)
+
+
+class TestPromptModeCli:
+    """Test --prompt flag behavior in the CLI."""
+
+    def _mock_pipeline_success(self) -> tuple[PrResult, RunManifest]:
+        pr_result = PrResult(
+            success=True,
+            stage="pipeline",
+            pr_url="https://github.com/test/repo/pull/1",
+            branch="harness/test",
+        )
+        manifest = RunManifest(
+            change_name="prompt-fix-bug",
+            repo_path="/tmp/repo",
+            started_at="2026-01-01T00:00:00+00:00",
+            completed_at="2026-01-01T00:01:00+00:00",
+            success=True,
+            stages=[],
+            total_duration_seconds=60.0,
+            pr_url="https://github.com/test/repo/pull/1",
+            manifest_path="/tmp/repo/.action-harness/runs/test.json",
+        )
+        return pr_result, manifest
+
+    def test_both_change_and_prompt_fails(self) -> None:
+        result = runner.invoke(
+            app,
+            ["run", "--change", "x", "--prompt", "Fix bug", "--repo", "/some/path"],
+        )
+        assert result.exit_code == 1
+        assert "Specify either --change or --prompt, not both" in result.output
+
+    def test_neither_change_nor_prompt_fails(self) -> None:
+        result = runner.invoke(app, ["run", "--repo", "/some/path"])
+        assert result.exit_code == 1
+        assert "Specify either --change or --prompt" in result.output
+
+    def test_prompt_only_works(self, fake_repo: Path) -> None:
+        with (
+            patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"),
+            patch(
+                "action_harness.pipeline.run_pipeline",
+                return_value=self._mock_pipeline_success(),
+            ),
+        ):
+            result = runner.invoke(
+                app,
+                ["run", "--prompt", "Fix bug in auth", "--repo", str(fake_repo)],
+            )
+        assert result.exit_code == 0
+
+    def test_change_only_still_works(self, fake_repo: Path) -> None:
+        with (
+            patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"),
+            patch(
+                "action_harness.pipeline.run_pipeline",
+                return_value=self._mock_pipeline_success(),
+            ),
+        ):
+            result = runner.invoke(
+                app,
+                ["run", "--change", "test-change", "--repo", str(fake_repo)],
+            )
+        assert result.exit_code == 0
+
+    def test_dry_run_with_prompt(self, fake_repo: Path) -> None:
+        with patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"):
+            result = runner.invoke(
+                app,
+                [
+                    "run",
+                    "--prompt",
+                    "Add a hello world test",
+                    "--repo",
+                    str(fake_repo),
+                    "--dry-run",
+                ],
+            )
+        assert result.exit_code == 0
+        assert "Add a hello world test" in result.output
+        assert "harness/prompt-add-a-hello-world-test" in result.output
+
+    def test_help_shows_prompt_flag(self) -> None:
+        result = runner.invoke(app, ["run", "--help"])
+        assert result.exit_code == 0
+        assert "--prompt" in result.output
 
 
 class TestCleanCommand:

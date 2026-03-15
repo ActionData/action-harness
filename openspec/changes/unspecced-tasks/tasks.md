@@ -11,11 +11,11 @@
 
 ## 3. CLI Changes [depends: 1]
 
-- [ ] 3.1 Make `--change` optional (default None). Add `--prompt` option (default None, type str). Add validation at the start of `run()`: if both are provided, exit with "Specify either --change or --prompt, not both". If neither is provided, exit with "Specify either --change or --prompt".
-- [ ] 3.2 When `--prompt` is used, compute `task_label = f"prompt-{slugify_prompt(prompt)}"` and pass it as the `change` parameter to the rest of the pipeline. This means `create_worktree` receives `task_label` as `change_name` and produces branch `harness/prompt-{slug}` — no changes to `create_worktree` or `RunManifest` signatures needed. Skip `validate_inputs()` change directory check — call a separate `validate_inputs_prompt(repo)` that checks git repo, claude CLI, and gh CLI but not the openspec directory.
-- [ ] 3.3 Update the `run()` command docstring at `cli.py:125` and option help strings to document both `--prompt` and `--change` modes. The docstring is the API documentation per CLAUDE.md rules.
-- [ ] 3.4 Update `--dry-run` output to show prompt text and derived branch name when `--prompt` is used
-- [ ] 3.5 Add CLI tests: `--prompt` only works, `--change` only works, both fails, neither fails, `--dry-run` with `--prompt` shows correct output
+- [x] 3.1 Make `--change` optional (default None). Add `--prompt` option (default None, type str). Add validation at the start of `run()`: if both are provided, exit with "Specify either --change or --prompt, not both". If neither is provided, exit with "Specify either --change or --prompt".
+- [x] 3.2 When `--prompt` is used, compute `task_label = f"prompt-{slugify_prompt(prompt)}"` and pass it as the `change` parameter to the rest of the pipeline. This means `create_worktree` receives `task_label` as `change_name` and produces branch `harness/prompt-{slug}` — no changes to `create_worktree` or `RunManifest` signatures needed. Skip `validate_inputs()` change directory check — call a separate `validate_inputs_prompt(repo)` that checks git repo, claude CLI, and gh CLI but not the openspec directory.
+- [x] 3.3 Update the `run()` command docstring at `cli.py:125` and option help strings to document both `--prompt` and `--change` modes. The docstring is the API documentation per CLAUDE.md rules.
+- [x] 3.4 Update `--dry-run` output to show prompt text and derived branch name when `--prompt` is used
+- [x] 3.5 Add CLI tests: `--prompt` only works, `--change` only works, both fails, neither fails, `--dry-run` with `--prompt` shows correct output
 
 ## 4. Pipeline Changes [depends: 2, 3]
 

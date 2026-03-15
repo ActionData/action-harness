@@ -435,3 +435,15 @@ class TestProgressFileInjection:
         progress_pos = prompt.index("Harness Progress")
         task_pos = prompt.index("opsx:apply")
         assert progress_pos < task_pos
+
+    def test_progress_prepended_in_resume_mode(self, tmp_path: Path) -> None:
+        progress_content = "# Harness Progress\n\n## Attempt 1\n"
+        (tmp_path / PROGRESS_FILENAME).write_text(progress_content)
+
+        mock = self._mock_subprocess()
+        with patch("action_harness.worker.subprocess.run", mock):
+            dispatch_worker("t", tmp_path, session_id="sess_abc", feedback="fix the tests")
+
+        prompt = self._get_claude_prompt(mock)
+        assert prompt.startswith(progress_content)
+        assert "fix the tests" in prompt

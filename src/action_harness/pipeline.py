@@ -317,8 +317,8 @@ def _run_pipeline_inner(
                 eval_result = pre_work_eval
                 worker_result = prior_worker_result
                 break
-            # Pre-work eval failed — use its feedback (fresher than stale feedback)
-            feedback = pre_work_eval.feedback_prompt
+            # Pre-work eval failed — use its feedback if available (fresher than stale)
+            feedback = pre_work_eval.feedback_prompt or feedback
 
         # Dispatch worker
         if feedback:

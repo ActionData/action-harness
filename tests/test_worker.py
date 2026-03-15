@@ -157,6 +157,24 @@ class TestBuildSystemPrompt:
         prompt_with_none = build_system_prompt("test-change", harness_md=None)
         assert prompt_without == prompt_with_none
 
+    def test_none_change_name_no_opsx_apply(self) -> None:
+        prompt = build_system_prompt(None)
+        assert "opsx:apply" not in prompt
+
+    def test_none_change_name_generic_prompt(self) -> None:
+        prompt = build_system_prompt(None)
+        assert "implementing a task" in prompt
+
+    def test_change_name_still_has_opsx_apply(self) -> None:
+        prompt = build_system_prompt("my-change")
+        assert "opsx:apply" in prompt
+
+    def test_none_change_name_with_harness_md(self) -> None:
+        prompt = build_system_prompt(None, harness_md="Run tests first.")
+        assert "implementing a task" in prompt
+        assert "## Repo-Specific Instructions" in prompt
+        assert "Run tests first." in prompt
+
 
 class TestCountCommitsAhead:
     def test_counts_commits(self) -> None:
@@ -447,6 +465,35 @@ class TestDispatchWorker:
             result = dispatch_worker("t", Path("/fake"))
         # 0 / 500000 = 0.0
         assert result.context_usage_pct == pytest.approx(0.0)
+
+
+class TestDispatchWorkerPromptMode:
+    """Tests for dispatch_worker with freeform prompt parameter."""
+
+    def test_prompt_used_as_user_prompt(self, tmp_path: Path) -> None:
+        mock = make_mock_subprocess(claude_stdout=_OK_JSON)
+        with patch("action_harness.worker.subprocess.run", mock):
+            dispatch_worker("prompt-fix-bug", tmp_path, prompt="Fix bug")
+
+        user_prompt = get_claude_prompt(mock)
+        assert user_prompt == "Fix bug"
+
+    def test_prompt_mode_uses_generic_system_prompt(self, tmp_path: Path) -> None:
+        mock = make_mock_subprocess(claude_stdout=_OK_JSON)
+        with patch("action_harness.worker.subprocess.run", mock):
+            dispatch_worker("prompt-fix-bug", tmp_path, prompt="Fix bug")
+
+        system_prompt = get_claude_system_prompt(mock)
+        assert "opsx:apply" not in system_prompt
+        assert "implementing a task" in system_prompt
+
+    def test_no_prompt_uses_opsx_apply(self, tmp_path: Path) -> None:
+        mock = make_mock_subprocess(claude_stdout=_OK_JSON)
+        with patch("action_harness.worker.subprocess.run", mock):
+            dispatch_worker("my-change", tmp_path)
+
+        user_prompt = get_claude_prompt(mock)
+        assert "opsx:apply" in user_prompt
 
 
 class TestProgressFileInjection:

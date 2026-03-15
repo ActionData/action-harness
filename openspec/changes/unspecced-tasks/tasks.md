@@ -5,9 +5,9 @@
 
 ## 2. Worker Prompt Construction [no dependencies]
 
-- [ ] 2.1 In `worker.py:13`, change `build_system_prompt(change_name: str)` to `build_system_prompt(change_name: str | None = None)`. When `change_name` is None, return a generic implementation system prompt: "You are implementing a task in this repository. Make the requested changes, commit your work, and verify it works." When `change_name` is provided, return the existing opsx:apply prompt unchanged.
-- [ ] 2.2 In `worker.py:48`, add an optional `prompt: str | None = None` parameter to `dispatch_worker()`. When `prompt` is provided, set `user_prompt = prompt` (replacing the opsx:apply instruction at line 73) and call `build_system_prompt(change_name=None)`. When `prompt` is None, keep the existing opsx:apply user prompt and system prompt unchanged.
-- [ ] 2.3 Add tests: assert `"opsx:apply" not in build_system_prompt(None)` and `"implementing a task" in build_system_prompt(None)`. Assert `build_system_prompt("my-change")` still contains `"opsx:apply"`. Assert `dispatch_worker` with `prompt="Fix bug"` uses "Fix bug" as user prompt (mock subprocess).
+- [x] 2.1 In `worker.py:13`, change `build_system_prompt(change_name: str)` to `build_system_prompt(change_name: str | None = None)`. When `change_name` is None, return a generic implementation system prompt: "You are implementing a task in this repository. Make the requested changes, commit your work, and verify it works." When `change_name` is provided, return the existing opsx:apply prompt unchanged.
+- [x] 2.2 In `worker.py:48`, add an optional `prompt: str | None = None` parameter to `dispatch_worker()`. When `prompt` is provided, set `user_prompt = prompt` (replacing the opsx:apply instruction at line 73) and call `build_system_prompt(change_name=None)`. When `prompt` is None, keep the existing opsx:apply user prompt and system prompt unchanged.
+- [x] 2.3 Add tests: assert `"opsx:apply" not in build_system_prompt(None)` and `"implementing a task" in build_system_prompt(None)`. Assert `build_system_prompt("my-change")` still contains `"opsx:apply"`. Assert `dispatch_worker` with `prompt="Fix bug"` uses "Fix bug" as user prompt (mock subprocess).
 
 ## 3. CLI Changes [depends: 1]
 

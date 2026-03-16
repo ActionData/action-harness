@@ -97,6 +97,13 @@ class ReviewFinding(BaseModel):
     agent: str
 
 
+class AcknowledgedFinding(BaseModel):
+    """A finding that was flagged but not fixed in a prior review round."""
+
+    finding: ReviewFinding
+    acknowledged_in_round: int
+
+
 class ReviewResult(StageResult):
     """Result from a code review agent dispatch."""
 
@@ -104,6 +111,7 @@ class ReviewResult(StageResult):
     agent_name: str
     findings: list[ReviewFinding] = []
     cost_usd: float | None = None
+    tolerance: str | None = None
 
 
 # Discriminated union so Pydantic preserves subtypes through serialization.

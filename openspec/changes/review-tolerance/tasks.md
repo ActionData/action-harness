@@ -1,15 +1,15 @@
 ## 1. Models and Constants
 
-- [ ] 1.1 Add `SEVERITY_RANK` and `TOLERANCE_THRESHOLD` constants to `review_agents.py`: `SEVERITY_RANK = {"low": 0, "medium": 1, "high": 2, "critical": 3}`, `TOLERANCE_THRESHOLD = {"low": 0, "med": 1, "high": 2}`
-- [ ] 1.2 Add `AcknowledgedFinding` model to `models.py` with fields: `finding: ReviewFinding` (the original finding), `acknowledged_in_round: int` (the round number where it was first flagged but not fixed)
-- [ ] 1.3 Add `tolerance: str | None` field to `ReviewResult` model to record the tolerance level used for triage in that round. Default `None` for backward compatibility.
+- [x] 1.1 Add `SEVERITY_RANK` and `TOLERANCE_THRESHOLD` constants to `review_agents.py`: `SEVERITY_RANK = {"low": 0, "medium": 1, "high": 2, "critical": 3}`, `TOLERANCE_THRESHOLD = {"low": 0, "med": 1, "high": 2}`
+- [x] 1.2 Add `AcknowledgedFinding` model to `models.py` with fields: `finding: ReviewFinding` (the original finding), `acknowledged_in_round: int` (the round number where it was first flagged but not fixed)
+- [x] 1.3 Add `tolerance: str | None` field to `ReviewResult` model to record the tolerance level used for triage in that round. Default `None` for backward compatibility.
 
 ## 2. Tolerance-Based Triage
 
-- [ ] 2.1 Add `filter_actionable_findings(results: list[ReviewResult], tolerance: str) -> list[ReviewFinding]` to `review_agents.py` — returns findings where `SEVERITY_RANK[finding.severity] >= TOLERANCE_THRESHOLD[tolerance]`
-- [ ] 2.2 Update `triage_findings(results: list[ReviewResult], tolerance: str) -> bool` to accept tolerance parameter and return `True` only when actionable findings exist at or above the tolerance threshold
-- [ ] 2.3 Update `format_review_feedback(results: list[ReviewResult], tolerance: str, prior_acknowledged: list[AcknowledgedFinding] | None = None) -> str` to include only actionable findings in the main section and append a "Prior Acknowledged Findings" section listing any prior acknowledged findings
-- [ ] 2.4 Add acknowledgment protocol instructions to the feedback prompt text: "For each finding, you MUST either fix it in code or post a PR comment explaining why no change is needed. If a finding appears under Prior Acknowledged Findings, add a code comment at the relevant location — two reviewers flagging the same concern means future readers will too."
+- [x] 2.1 Add `filter_actionable_findings(results: list[ReviewResult], tolerance: str) -> list[ReviewFinding]` to `review_agents.py` — returns findings where `SEVERITY_RANK[finding.severity] >= TOLERANCE_THRESHOLD[tolerance]`
+- [x] 2.2 Update `triage_findings(results: list[ReviewResult], tolerance: str) -> bool` to accept tolerance parameter and return `True` only when actionable findings exist at or above the tolerance threshold
+- [x] 2.3 Update `format_review_feedback(results: list[ReviewResult], tolerance: str, prior_acknowledged: list[AcknowledgedFinding] | None = None) -> str` to include only actionable findings in the main section and append a "Prior Acknowledged Findings" section listing any prior acknowledged findings
+- [x] 2.4 Add acknowledgment protocol instructions to the feedback prompt text: "For each finding, you MUST either fix it in code or post a PR comment explaining why no change is needed. If a finding appears under Prior Acknowledged Findings, add a code comment at the relevant location — two reviewers flagging the same concern means future readers will too."
 
 ## 3. CLI Flag
 

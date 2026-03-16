@@ -8,11 +8,15 @@ from pathlib import Path
 
 import typer
 
-from action_harness.models import ReviewFinding, ReviewResult
+from action_harness.models import AcknowledgedFinding, ReviewFinding, ReviewResult
 from action_harness.parsing import extract_json_block
 
 # Agent names dispatched in parallel
 REVIEW_AGENT_NAMES = ["bug-hunter", "test-reviewer", "quality-reviewer"]
+
+# Severity ranking for tolerance-based filtering
+SEVERITY_RANK: dict[str, int] = {"low": 0, "medium": 1, "high": 2, "critical": 3}
+TOLERANCE_THRESHOLD: dict[str, int] = {"low": 0, "med": 1, "high": 2}
 
 # --- Agent prompts (hardcoded, point-in-time copies) ---
 
@@ -320,30 +324,87 @@ def dispatch_review_agents(
     return results
 
 
-def triage_findings(results: list[ReviewResult]) -> bool:
+def filter_actionable_findings(
+    results: list[ReviewResult], tolerance: str
+) -> list[ReviewFinding]:
+    """Return findings at or above the tolerance threshold.
+
+    A finding is actionable when ``SEVERITY_RANK[finding.severity] >=
+    TOLERANCE_THRESHOLD[tolerance]``.
+    """
+    threshold = TOLERANCE_THRESHOLD[tolerance]
+    actionable: list[ReviewFinding] = []
+    for result in results:
+        for finding in result.findings:
+            if SEVERITY_RANK.get(finding.severity, 0) >= threshold:
+                actionable.append(finding)
+    return actionable
+
+
+def triage_findings(results: list[ReviewResult], tolerance: str = "low") -> bool:
     """Determine if review findings require a fix retry.
 
-    Returns True if any findings exist, regardless of severity.
-    Returns False otherwise (including when all results failed).
+    Returns True when actionable findings exist at or above the tolerance
+    threshold. Returns False otherwise (including when all results failed).
     """
-    return any(r.findings for r in results)
+    return len(filter_actionable_findings(results, tolerance)) > 0
 
 
-def format_review_feedback(results: list[ReviewResult]) -> str:
-    """Format all review findings as structured markdown feedback.
+def match_findings(
+    prior: list[ReviewFinding], current: list[ReviewFinding]
+) -> list[ReviewFinding]:
+    """Match current findings against prior findings.
 
+    Two findings match if they share the same ``file`` field AND either:
+    (a) the same ``agent`` field, or
+    (b) one finding's ``title`` is a case-insensitive substring of the other's.
+
+    Returns the subset of *current* findings that match any prior finding.
+    """
+    matched: list[ReviewFinding] = []
+    for cur in current:
+        for pri in prior:
+            if cur.file != pri.file:
+                continue
+            # Same agent on same file → match
+            if cur.agent == pri.agent:
+                matched.append(cur)
+                break
+            # Title substring match (case-insensitive)
+            cur_title_lower = cur.title.lower()
+            pri_title_lower = pri.title.lower()
+            if cur_title_lower in pri_title_lower or pri_title_lower in cur_title_lower:
+                matched.append(cur)
+                break
+    return matched
+
+
+def format_review_feedback(
+    results: list[ReviewResult],
+    tolerance: str = "low",
+    prior_acknowledged: list[AcknowledgedFinding] | None = None,
+) -> str:
+    """Format actionable review findings as structured markdown feedback.
+
+    Only includes findings at or above the tolerance threshold.
+    Appends a "Prior Acknowledged Findings" section if any exist.
     Used as the feedback string when re-dispatching the code worker.
-    Groups findings by agent with severity/file/line/description for each.
     """
+    actionable = filter_actionable_findings(results, tolerance)
+
     lines = ["## Review Agent Findings", ""]
 
-    has_findings = False
-    for result in results:
-        if not result.findings:
-            continue
-        has_findings = True
-        lines.append(f"### {result.agent_name}")
-        for finding in result.findings:
+    if not actionable:
+        return "## Review Agent Findings\n\nNo findings."
+
+    # Group by agent
+    by_agent: dict[str, list[ReviewFinding]] = {}
+    for finding in actionable:
+        by_agent.setdefault(finding.agent, []).append(finding)
+
+    for agent_name, findings in by_agent.items():
+        lines.append(f"### {agent_name}")
+        for finding in findings:
             location = finding.file
             if finding.line is not None:
                 location += f":{finding.line}"
@@ -352,8 +413,27 @@ def format_review_feedback(results: list[ReviewResult]) -> str:
             lines.append(f"- **Description:** {finding.description}")
             lines.append("")
 
-    if not has_findings:
-        return "## Review Agent Findings\n\nNo findings."
+    lines.append(
+        "For each finding, you MUST either fix it in code or post a PR comment "
+        "explaining why no change is needed. If a finding appears under Prior "
+        "Acknowledged Findings, add a code comment at the relevant location — "
+        "two reviewers flagging the same concern means future readers will too."
+    )
+    lines.append("")
+
+    if prior_acknowledged:
+        lines.append("## Prior Acknowledged Findings")
+        lines.append("")
+        for ack in prior_acknowledged:
+            f = ack.finding
+            location = f.file
+            if f.line is not None:
+                location += f":{f.line}"
+            lines.append(
+                f"- **[{f.severity.upper()}]** {f.title} (`{location}`) "
+                f"— first flagged in round {ack.acknowledged_in_round}"
+            )
+        lines.append("")
 
     lines.append("Fix the issues above and re-run eval to verify.")
     return "\n".join(lines)

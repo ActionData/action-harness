@@ -8,6 +8,9 @@ import pytest
 
 from action_harness.models import AcknowledgedFinding, ReviewFinding, ReviewResult
 from action_harness.review_agents import (
+    _AGENT_PROMPTS,
+    _AGENTS_WITH_CUSTOM_SEVERITY,
+    _GENERIC_SEVERITY_SUFFIX,
     REVIEW_AGENT_NAMES,
     _titles_overlap,
     build_review_prompt,
@@ -70,6 +73,25 @@ class TestBuildReviewPrompt:
     def test_spec_compliance_reviewer_prompt_contains_pr_number(self) -> None:
         prompt = build_review_prompt("spec-compliance-reviewer", 99)
         assert "99" in prompt
+
+    def test_spec_compliance_reviewer_excludes_generic_severity(self) -> None:
+        """The spec-compliance-reviewer defines its own severity scale and must
+        NOT receive the generic severity definitions from _GENERIC_SEVERITY_SUFFIX."""
+        prompt = build_review_prompt("spec-compliance-reviewer", 42)
+        assert _GENERIC_SEVERITY_SUFFIX.strip() not in prompt
+
+    def test_base_agents_include_generic_severity(self) -> None:
+        for name in REVIEW_AGENT_NAMES:
+            prompt = build_review_prompt(name, 1)
+            assert "data loss" in prompt, f"{name} prompt missing generic severity"
+
+    def test_review_agent_names_subset_of_agent_prompts(self) -> None:
+        """REVIEW_AGENT_NAMES must be a subset of _AGENT_PROMPTS keys."""
+        assert set(REVIEW_AGENT_NAMES) <= set(_AGENT_PROMPTS)
+
+    def test_custom_severity_agents_are_in_agent_prompts(self) -> None:
+        """Every agent in _AGENTS_WITH_CUSTOM_SEVERITY must have a prompt."""
+        assert _AGENTS_WITH_CUSTOM_SEVERITY <= set(_AGENT_PROMPTS)
 
 
 class TestParseReviewFindings:
@@ -608,6 +630,31 @@ class TestDispatchReviewAgents:
                 pr_number=42,
                 worktree_path=tmp_path,
                 change_name="nonexistent",
+            )
+
+        assert len(results) == 3
+        assert mock_dispatch.call_count == 3
+
+    def test_tasks_md_read_failure_falls_back_to_three_agents(self, tmp_path: Path) -> None:
+        """tasks.md exists but read raises OSError → graceful fallback to 3 agents."""
+        tasks_dir = tmp_path / "openspec" / "changes" / "broken-change"
+        tasks_dir.mkdir(parents=True)
+        tasks_file = tasks_dir / "tasks.md"
+        tasks_file.write_text("- [x] task")
+
+        mock_result = ReviewResult(success=True, agent_name="mock", findings=[])
+
+        with (
+            patch(
+                "action_harness.review_agents.dispatch_single_review",
+                return_value=mock_result,
+            ) as mock_dispatch,
+            patch("pathlib.Path.read_text", side_effect=OSError("permission denied")),
+        ):
+            results = dispatch_review_agents(
+                pr_number=42,
+                worktree_path=tmp_path,
+                change_name="broken-change",
             )
 
         assert len(results) == 3

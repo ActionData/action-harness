@@ -79,7 +79,7 @@ You are a spec compliance reviewer. Your job is to verify that completed tasks
 in the task list were actually implemented as described in the diff.
 
 Instructions:
-1. Parse the tasks provided below and identify all tasks marked `[x]` (complete).
+1. Parse the tasks provided in the user message and identify all tasks marked `[x]` (complete).
 2. For each completed task, read the description carefully.
 3. Fetch the PR diff by running `gh pr diff {pr_number}`. Read full files for
    context as needed.
@@ -107,7 +107,7 @@ Do NOT modify any files. You are a read-only reviewer.
 """,
 }
 
-_JSON_OUTPUT_SUFFIX = """
+_JSON_OUTPUT_FORMAT = """
 
 After your review, output a single JSON block with your findings:
 
@@ -132,12 +132,19 @@ If you find no issues, output:
 ```
 
 The `line` field can be null if the issue is not tied to a specific line.
+"""
+
+_GENERIC_SEVERITY_SUFFIX = """\
 Severity levels:
 - critical: Will cause data loss, security breach, or crash in production
 - high: Will cause incorrect behavior that users will notice
 - medium: Code smell or maintainability issue that should be addressed
 - low: Minor style or convention issue
 """
+
+# Agents that define their own severity scale in _AGENT_PROMPTS get only the
+# JSON format instructions; all others also get the generic severity definitions.
+_AGENTS_WITH_CUSTOM_SEVERITY = {"spec-compliance-reviewer"}
 
 
 def build_review_prompt(agent_name: str, pr_number: int) -> str:
@@ -150,7 +157,10 @@ def build_review_prompt(agent_name: str, pr_number: int) -> str:
         raise ValueError(
             f"Unknown review agent: {agent_name!r}. Expected one of: {', '.join(_AGENT_PROMPTS)}"
         )
-    return base.format(pr_number=pr_number) + _JSON_OUTPUT_SUFFIX
+    suffix = _JSON_OUTPUT_FORMAT
+    if agent_name not in _AGENTS_WITH_CUSTOM_SEVERITY:
+        suffix += _GENERIC_SEVERITY_SUFFIX
+    return base.format(pr_number=pr_number) + suffix
 
 
 def dispatch_single_review(

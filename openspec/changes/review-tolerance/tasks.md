@@ -13,23 +13,23 @@
 
 ## 3. CLI Flag
 
-- [ ] 3.1 Add `--review-cycle` option to `cli.py` `run` command — comma-separated string, default `low,med,high`
-- [ ] 3.2 Add validation: split on comma, each element must be one of `low`, `med`, `high`; exit with error on invalid input showing valid values
-- [ ] 3.3 Thread `review_cycle: list[str]` parameter through to `_run_pipeline_inner`
+- [x] 3.1 Add `--review-cycle` option to `cli.py` `run` command — comma-separated string, default `low,med,high`
+- [x] 3.2 Add validation: split on comma, each element must be one of `low`, `med`, `high`; exit with error on invalid input showing valid values
+- [x] 3.3 Thread `review_cycle: list[str]` parameter through to `_run_pipeline_inner`
 
 ## 4. Pipeline Review Loop
 
-- [ ] 4.1 Refactor the review stage in `pipeline.py` to iterate over `review_cycle` list instead of `range(2)`. Each iteration passes the current round's tolerance to triage and feedback formatting.
-- [ ] 4.2 Implement short-circuit: break out of review cycle when a round produces zero actionable findings after tolerance filtering
-- [ ] 4.3 Implement `match_findings(prior: list[ReviewFinding], current: list[ReviewFinding]) -> list[ReviewFinding]` in `review_agents.py`. Two findings match if they share the same `file` field AND either (a) the same `agent` field, or (b) one finding's `title` is a case-insensitive substring of the other's. Returns the subset of current findings that match any prior finding.
-- [ ] 4.4 Integrate acknowledged finding tracking into the pipeline loop: after each fix-retry, call `match_findings` with the round's pre-fix actionable findings and the post-fix review findings. Wrap matched findings as `AcknowledgedFinding` and accumulate across rounds.
-- [ ] 4.5 Pass accumulated `prior_acknowledged` list to `format_review_feedback` in subsequent rounds
-- [ ] 4.6 Update verification review to filter at the last round's tolerance level
+- [x] 4.1 Refactor the review stage in `pipeline.py` to iterate over `review_cycle` list instead of `range(2)`. Each iteration passes the current round's tolerance to triage and feedback formatting.
+- [x] 4.2 Implement short-circuit: break out of review cycle when a round produces zero actionable findings after tolerance filtering
+- [x] 4.3 Implement `match_findings(prior: list[ReviewFinding], current: list[ReviewFinding]) -> list[ReviewFinding]` in `review_agents.py`. Two findings match if they share the same `file` field AND either (a) the same `agent` field, or (b) one finding's `title` is a case-insensitive substring of the other's. Returns the subset of current findings that match any prior finding.
+- [x] 4.4 Integrate acknowledged finding tracking into the pipeline loop: after each fix-retry, call `match_findings` with the round's pre-fix actionable findings and the post-fix review findings. Wrap matched findings as `AcknowledgedFinding` and accumulate across rounds.
+- [x] 4.5 Pass accumulated `prior_acknowledged` list to `format_review_feedback` in subsequent rounds
+- [x] 4.6 Update verification review to filter at the last round's tolerance level
 
 ## 5. PR Comment Updates
 
-- [ ] 5.1 Ensure `_post_review_comment` receives the full unfiltered `review_results` (all findings at all severities) while `_run_review_fix_retry` receives only the actionable subset. Add severity label tags (e.g., `[LOW]`, `[HIGH]`) to each finding in the PR comment.
-- [ ] 5.2 Add tolerance level and round number to review comment headers (e.g., "Review round 1/3 (tolerance: low)")
+- [x] 5.1 Ensure `_post_review_comment` receives the full unfiltered `review_results` (all findings at all severities) while `_run_review_fix_retry` receives only the actionable subset. Add severity label tags (e.g., `[LOW]`, `[HIGH]`) to each finding in the PR comment.
+- [x] 5.2 Add tolerance level and round number to review comment headers (e.g., "Review round 1/3 (tolerance: low)")
 
 ## 6. Tests
 

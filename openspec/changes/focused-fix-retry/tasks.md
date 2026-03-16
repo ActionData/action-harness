@@ -11,10 +11,10 @@
 
 ## 3. CLI Flag [depends: 1]
 
-- [ ] 3.1 Add `--max-findings-per-retry` option (int, default 5) to `cli.py` `run` command. Thread through to `run_pipeline()`.
-- [ ] 3.2 Update dry-run output to show `max-findings-per-retry: N`.
-- [ ] 3.3 Update `run()` docstring.
-- [ ] 3.4 Add tests: `--help` shows the flag, dry-run with custom value shows it, default value is 5.
+- [x] 3.1 Add `--max-findings-per-retry` option (int, default 5) to `cli.py` `run` command. Thread through to `run_pipeline()`.
+- [x] 3.2 Update dry-run output to show `max-findings-per-retry: N`.
+- [x] 3.3 Update `run()` docstring.
+- [x] 3.4 Add tests: `--help` shows the flag, dry-run with custom value shows it, default value is 5.
 
 ## 4. Pipeline Threading [depends: 2, 3]
 

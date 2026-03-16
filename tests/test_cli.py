@@ -730,6 +730,73 @@ class TestCleanCommand:
         assert not (harness_home / "workspaces" / "app2" / "change2").exists()
 
 
+class TestMaxFindingsPerRetryCli:
+    """Test --max-findings-per-retry CLI flag."""
+
+    def test_help_shows_flag(self) -> None:
+        result = runner.invoke(app, ["run", "--help"])
+        assert result.exit_code == 0
+        assert "--max-findings-per-retry" in _strip_ansi(result.output)
+
+    def test_dry_run_shows_custom_value(self, fake_repo: Path) -> None:
+        with patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"):
+            result = runner.invoke(
+                app,
+                [
+                    "run",
+                    "--change",
+                    "test-change",
+                    "--repo",
+                    str(fake_repo),
+                    "--dry-run",
+                    "--max-findings-per-retry",
+                    "3",
+                ],
+            )
+        assert result.exit_code == 0
+        assert "max-findings-per-retry: 3" in result.output
+
+    def test_default_value_is_5(self, fake_repo: Path) -> None:
+        with patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"):
+            result = runner.invoke(
+                app,
+                [
+                    "run",
+                    "--change",
+                    "test-change",
+                    "--repo",
+                    str(fake_repo),
+                    "--dry-run",
+                ],
+            )
+        assert result.exit_code == 0
+        assert "max-findings-per-retry: 5" in result.output
+
+    def test_threaded_to_pipeline(self, fake_repo: Path) -> None:
+        with (
+            patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"),
+            patch(
+                "action_harness.pipeline.run_pipeline",
+                return_value=_mock_pipeline_success(),
+            ) as mock_pipeline,
+        ):
+            result = runner.invoke(
+                app,
+                [
+                    "run",
+                    "--change",
+                    "test-change",
+                    "--repo",
+                    str(fake_repo),
+                    "--max-findings-per-retry",
+                    "7",
+                ],
+            )
+        assert result.exit_code == 0
+        call_kwargs = mock_pipeline.call_args[1]
+        assert call_kwargs["max_findings_per_retry"] == 7
+
+
 class TestReviewCycleCli:
     """Task 6.4: test --review-cycle CLI validation."""
 

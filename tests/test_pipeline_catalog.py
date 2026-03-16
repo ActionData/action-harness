@@ -1,7 +1,6 @@
 """Tests for catalog integration into the pipeline."""
 
 from pathlib import Path
-from unittest.mock import MagicMock, call, patch
 
 from action_harness.models import ReviewFinding, ReviewResult
 
@@ -11,10 +10,10 @@ class TestPipelineEcosystemThreading:
 
     def test_dispatch_worker_receives_ecosystem(self) -> None:
         """Verify dispatch_worker is called with ecosystem from the profiler."""
-        from action_harness.worker import dispatch_worker
-
         # Ensure ecosystem parameter is accepted
         import inspect
+
+        from action_harness.worker import dispatch_worker
 
         sig = inspect.signature(dispatch_worker)
         assert "ecosystem" in sig.parameters
@@ -22,9 +21,9 @@ class TestPipelineEcosystemThreading:
 
     def test_dispatch_review_agents_receives_ecosystem(self) -> None:
         """Verify dispatch_review_agents accepts ecosystem parameter."""
-        from action_harness.review_agents import dispatch_review_agents
-
         import inspect
+
+        from action_harness.review_agents import dispatch_review_agents
 
         sig = inspect.signature(dispatch_review_agents)
         assert "ecosystem" in sig.parameters
@@ -32,9 +31,9 @@ class TestPipelineEcosystemThreading:
 
     def test_run_pipeline_inner_receives_ecosystem(self) -> None:
         """Verify _run_pipeline_inner accepts ecosystem parameter."""
-        from action_harness.pipeline import _run_pipeline_inner
-
         import inspect
+
+        from action_harness.pipeline import _run_pipeline_inner
 
         sig = inspect.signature(_run_pipeline_inner)
         assert "ecosystem" in sig.parameters
@@ -42,9 +41,9 @@ class TestPipelineEcosystemThreading:
 
     def test_run_review_fix_retry_receives_ecosystem(self) -> None:
         """Verify _run_review_fix_retry accepts ecosystem parameter."""
-        from action_harness.pipeline import _run_review_fix_retry
-
         import inspect
+
+        from action_harness.pipeline import _run_review_fix_retry
 
         sig = inspect.signature(_run_review_fix_retry)
         assert "ecosystem" in sig.parameters

@@ -6,6 +6,8 @@ from pathlib import Path
 
 import typer
 
+from action_harness.catalog.frequency import update_frequency
+from action_harness.catalog.loader import load_catalog
 from action_harness.evaluator import run_eval
 from action_harness.event_log import EventLogger
 from action_harness.merge import check_merge_gates, merge_pr, post_merge_blocked_comment
@@ -43,8 +45,6 @@ from action_harness.review_agents import (
     match_findings,
     triage_findings,
 )
-from action_harness.catalog.frequency import update_frequency
-from action_harness.catalog.loader import load_catalog
 from action_harness.worker import count_commits_ahead, dispatch_worker
 from action_harness.worktree import cleanup_worktree, create_worktree
 
@@ -772,12 +772,7 @@ def _run_pipeline_inner(
 
     # Update per-repo finding frequency after review rounds complete
     if not skip_review and harness_home is not None and repo_name is not None:
-        all_review_findings = [
-            f
-            for s in stages
-            if isinstance(s, ReviewResult)
-            for f in s.findings
-        ]
+        all_review_findings = [f for s in stages if isinstance(s, ReviewResult) for f in s.findings]
         if all_review_findings:
             repo_knowledge_dir = harness_home / "repos" / repo_name / "knowledge"
             catalog_entries = load_catalog(ecosystem)

@@ -43,16 +43,15 @@ class TestSeedEntries:
             )
             assert len(entry.ecosystems) > 0, f"{entry_id} has empty ecosystems"
             assert entry.worker_rule, f"{entry_id} has empty worker_rule"
-            assert len(entry.reviewer_checklist) > 0, (
-                f"{entry_id} has empty reviewer_checklist"
-            )
+            assert len(entry.reviewer_checklist) > 0, f"{entry_id} has empty reviewer_checklist"
 
     def test_at_least_6_tagged_python(self) -> None:
         python_entries = load_catalog("python")
         # Python entries include those with ecosystems: [python] AND [all]
         # We want to count only those specifically tagged with python
         python_specific = [e for e in python_entries if "python" in e.ecosystems]
-        assert len(python_specific) >= 4  # subprocess-timeout, bare-assert, type-ignore, string-field
+        # subprocess-timeout, bare-assert, type-ignore, string-field
+        assert len(python_specific) >= 4
 
         # Total python-relevant (python + all) should be at least 6
         assert len(python_entries) >= 6

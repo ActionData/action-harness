@@ -42,6 +42,6 @@
 
 ## 8. Validation [depends: all]
 
-- [ ] 8.1 Run `uv run pytest -v` — all tests pass
-- [ ] 8.2 Run `uv run ruff check .` and `uv run mypy src/` — clean
-- [ ] 8.3 Run `harness run --change <test> --repo . --dry-run` and verify no errors from catalog loading
+- [x] 8.1 Run `uv run pytest -v` — all tests pass
+- [x] 8.2 Run `uv run ruff check .` and `uv run mypy src/` — clean
+- [x] 8.3 Run `harness run --change <test> --repo . --dry-run` and verify no errors from catalog loading

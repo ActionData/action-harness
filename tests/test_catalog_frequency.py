@@ -133,10 +133,12 @@ class TestGetBoostedEntries:
         knowledge_dir = tmp_path / "knowledge"
         knowledge_dir.mkdir(parents=True)
         (knowledge_dir / FREQUENCY_FILENAME).write_text(
-            json.dumps({
-                "subprocess-timeout": {"count": 5, "last_seen": "2026-03-15"},
-                "bare-assert": {"count": 1, "last_seen": "2026-03-14"},
-            })
+            json.dumps(
+                {
+                    "subprocess-timeout": {"count": 5, "last_seen": "2026-03-15"},
+                    "bare-assert": {"count": 1, "last_seen": "2026-03-14"},
+                }
+            )
         )
 
         entry_hot = _make_entry("subprocess-timeout")
@@ -155,10 +157,12 @@ class TestGetBoostedEntries:
         knowledge_dir = tmp_path / "knowledge"
         knowledge_dir.mkdir(parents=True)
         (knowledge_dir / FREQUENCY_FILENAME).write_text(
-            json.dumps({
-                "entry-a": {"count": 3, "last_seen": "2026-03-15"},
-                "entry-b": {"count": 7, "last_seen": "2026-03-15"},
-            })
+            json.dumps(
+                {
+                    "entry-a": {"count": 3, "last_seen": "2026-03-15"},
+                    "entry-b": {"count": 7, "last_seen": "2026-03-15"},
+                }
+            )
         )
 
         entries = [_make_entry("entry-a"), _make_entry("entry-b")]

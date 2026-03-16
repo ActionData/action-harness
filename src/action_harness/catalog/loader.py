@@ -82,11 +82,7 @@ def load_catalog(
         entries.append(entry)
 
     # Filter by ecosystem
-    filtered = [
-        e
-        for e in entries
-        if ecosystem in e.ecosystems or "all" in e.ecosystems
-    ]
+    filtered = [e for e in entries if ecosystem in e.ecosystems or "all" in e.ecosystems]
 
     # Sort by severity (high first)
     filtered.sort(key=lambda e: _SEVERITY_ORDER.get(e.severity, 99))

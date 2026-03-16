@@ -40,7 +40,9 @@ def build_review_prompt(change_name: str, repo_path: Path, harness_agents_dir: P
     then appends the JSON output block.
     """
     persona = load_agent_prompt("openspec-reviewer", repo_path, harness_agents_dir)
-    prompt = persona.format(change_name=change_name)
+    # Use str.replace instead of str.format to avoid crashes on literal
+    # braces in user-editable agent markdown files.
+    prompt = persona.replace("{change_name}", change_name)
     return prompt + _OPENSPEC_JSON_SUFFIX
 
 
@@ -95,12 +97,22 @@ def dispatch_openspec_review(
 
     start_time = time.monotonic()
 
-    result = subprocess.run(
-        cmd,
-        cwd=worktree_path,
-        capture_output=True,
-        text=True,
-    )
+    try:
+        result = subprocess.run(
+            cmd,
+            cwd=worktree_path,
+            capture_output=True,
+            text=True,
+            timeout=7200,
+        )
+    except subprocess.TimeoutExpired:
+        duration = time.monotonic() - start_time
+        typer.echo("[openspec-review] timed out after 7200s", err=True)
+        return "", duration
+    except (FileNotFoundError, OSError) as e:
+        duration = time.monotonic() - start_time
+        typer.echo(f"[openspec-review] failed to launch: {e}", err=True)
+        return "", duration
 
     duration = time.monotonic() - start_time
 
@@ -177,7 +189,10 @@ def push_archive_if_needed(
             cwd=worktree_path,
             capture_output=True,
             text=True,
+            timeout=120,
         )
+    except subprocess.TimeoutExpired:
+        return False, "git push timed out after 120s"
     except (FileNotFoundError, OSError) as e:
         return False, f"git push failed: {e}"
 

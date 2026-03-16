@@ -81,7 +81,9 @@ def build_review_prompt(
     suffix = _JSON_OUTPUT_FORMAT
     if agent_name not in _AGENTS_WITH_CUSTOM_SEVERITY:
         suffix += _GENERIC_SEVERITY_SUFFIX
-    prompt = base.format(pr_number=pr_number) + suffix
+    # Use str.replace instead of str.format to avoid crashes on literal
+    # braces in user-editable agent markdown files (e.g., JSON examples).
+    prompt = base.replace("{pr_number}", str(pr_number)) + suffix
 
     # Append catalog reviewer checklist.
     # Note: load_catalog is called per-agent (once per build_review_prompt call).

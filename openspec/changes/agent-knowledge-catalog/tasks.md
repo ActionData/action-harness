@@ -29,10 +29,10 @@
 
 ## 6. Per-Repo Finding Frequency [depends: 2]
 
-- [ ] 6.1 Create `src/action_harness/catalog/frequency.py` with `update_frequency(repo_knowledge_dir: Path, catalog_entries: list[CatalogEntry], findings: list[ReviewFinding]) -> None`. For each finding, match against catalog entries using: (a) the entry's `id` as a case-insensitive substring of `finding.title` or `finding.description`, OR (b) ALL non-stop-words from the entry's `worker_rule` (case-insensitive) appear in `finding.title + finding.description`. If matched, increment the count in `findings-frequency.json` and update `last_seen`. Test example: finding `"subprocess.run call missing timeout parameter"` SHALL match entry `subprocess-timeout` with rule `"Every subprocess.run() must include timeout="` because "subprocess", "run", "timeout" all appear.
-- [ ] 6.2 Add `get_boosted_entries(repo_knowledge_dir: Path, catalog_entries: list[CatalogEntry], threshold: int = 3) -> list[CatalogEntry]`. Returns entries with frequency count >= threshold that aren't already in the top N by severity. These are the repo's "hot rules".
-- [ ] 6.3 Update `render_for_worker` to accept optional `boosted: list[CatalogEntry]`. When boosted entries exist, add them after the top N (up to 2 extra slots).
-- [ ] 6.4 Add tests: `update_frequency` creates file on first match, increments on subsequent. `get_boosted_entries` returns entries above threshold. Renderer with boosted entries includes them.
+- [x] 6.1 Create `src/action_harness/catalog/frequency.py` with `update_frequency(repo_knowledge_dir: Path, catalog_entries: list[CatalogEntry], findings: list[ReviewFinding]) -> None`. For each finding, match against catalog entries using: (a) the entry's `id` as a case-insensitive substring of `finding.title` or `finding.description`, OR (b) ALL non-stop-words from the entry's `worker_rule` (case-insensitive) appear in `finding.title + finding.description`. If matched, increment the count in `findings-frequency.json` and update `last_seen`. Test example: finding `"subprocess.run call missing timeout parameter"` SHALL match entry `subprocess-timeout` with rule `"Every subprocess.run() must include timeout="` because "subprocess", "run", "timeout" all appear.
+- [x] 6.2 Add `get_boosted_entries(repo_knowledge_dir: Path, catalog_entries: list[CatalogEntry], threshold: int = 3) -> list[CatalogEntry]`. Returns entries with frequency count >= threshold that aren't already in the top N by severity. These are the repo's "hot rules".
+- [x] 6.3 Update `render_for_worker` to accept optional `boosted: list[CatalogEntry]`. When boosted entries exist, add them after the top N (up to 2 extra slots).
+- [x] 6.4 Add tests: `update_frequency` creates file on first match, increments on subsequent. `get_boosted_entries` returns entries above threshold. Renderer with boosted entries includes them.
 
 ## 7. Pipeline Integration [depends: 4, 5, 6]
 

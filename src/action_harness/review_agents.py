@@ -8,6 +8,7 @@ from pathlib import Path
 
 import typer
 
+from action_harness.agents import load_agent_prompt
 from action_harness.catalog.loader import load_catalog
 from action_harness.catalog.renderer import render_for_reviewer
 from action_harness.models import AcknowledgedFinding, ReviewFinding, ReviewResult
@@ -22,95 +23,6 @@ SPEC_COMPLIANCE_AGENT_NAME = "spec-compliance-reviewer"
 # Severity ranking for tolerance-based filtering
 SEVERITY_RANK: dict[str, int] = {"low": 0, "medium": 1, "high": 2, "critical": 3}
 TOLERANCE_THRESHOLD: dict[str, int] = {"low": 0, "med": 1, "high": 2}
-
-# --- Agent prompts (hardcoded, point-in-time copies) ---
-
-_AGENT_PROMPTS: dict[str, str] = {
-    "bug-hunter": """\
-You are a deep bug-finding specialist reviewing a pull request.
-
-Your job is to hunt for:
-- Memory issues and resource leaks
-- Race conditions and concurrency bugs
-- Logic errors and off-by-one errors
-- Edge cases that will crash or produce wrong results
-- Unhandled error paths
-- Security vulnerabilities
-
-Review the PR diff by running `gh pr diff {pr_number}`. Read full files for
-context as needed. Focus on correctness — find bugs that will cause real
-problems, not style issues.
-
-Do NOT modify any files. You are a read-only reviewer.
-""",
-    "test-reviewer": """\
-You are a testing specialist reviewing a pull request.
-
-Your job is to:
-- Analyze test coverage for the changed code
-- Identify untested code paths and edge cases
-- Evaluate test correctness (do tests actually test what they claim?)
-- Check for missing error-case tests
-- Verify test isolation (no shared state, no order dependencies)
-
-Review the PR diff by running `gh pr diff {pr_number}`. Read full files and
-test files for context as needed. Focus on test completeness and correctness.
-
-Do NOT modify any files. You are a read-only reviewer.
-""",
-    "quality-reviewer": """\
-You are a code quality specialist reviewing a pull request.
-
-Before reviewing, read the repo's CLAUDE.md (if it exists) and check linter
-configuration in pyproject.toml or equivalent. Ground every finding in a
-specific rule from these files or an observable existing pattern in the
-codebase. Do not raise findings based on personal preference — cite the rule
-you are enforcing.
-
-Your job is to check:
-- Correctness patterns and defensive coding
-- Convention adherence and consistency with the codebase
-- Maintainability risks (complexity, coupling, unclear naming)
-- Architectural consistency with existing patterns
-- API design and interface quality
-
-Review the PR diff by running `gh pr diff {pr_number}`. Read full files for
-context as needed. Focus on patterns that will cause maintenance burden.
-
-Do NOT modify any files. You are a read-only reviewer.
-""",
-    "spec-compliance-reviewer": """\
-You are a spec compliance reviewer. Your job is to verify that completed tasks
-in the task list were actually implemented as described in the diff.
-
-Instructions:
-1. Parse the tasks provided in the user message and identify all tasks marked `[x]` (complete).
-2. For each completed task, read the description carefully.
-3. Fetch the PR diff by running `gh pr diff {pr_number}`. Read full files for
-   context as needed.
-4. For each `[x]` task, search the diff for evidence that the described
-   behavior was actually implemented. Evidence includes: function calls
-   mentioned in the task appearing in the diff, parameters described in the
-   task present in function signatures, test assertions matching what the task
-   specifies, and integration points described in the task being wired up.
-5. Flag tasks where the diff does not match the description.
-
-Severity definitions for compliance findings:
-- critical: A function call or integration described in the task is completely
-  absent from the diff (e.g., task says "call match_findings" but it is never
-  imported or called).
-- high: The task describes specific behavior but the implementation takes a
-  shortcut (e.g., "filter by matching" but implementation adds everything
-  without filtering).
-- medium: The task describes a parameter, return value, or type that does not
-  match the implementation (e.g., task says Literal type but implementation
-  uses plain str).
-- low: The task describes a test assertion that is weaker than specified or a
-  minor deviation from the task wording.
-
-Do NOT modify any files. You are a read-only reviewer.
-""",
-}
 
 _JSON_OUTPUT_FORMAT = """
 
@@ -155,18 +67,17 @@ _AGENTS_WITH_CUSTOM_SEVERITY = {"spec-compliance-reviewer"}
 def build_review_prompt(
     agent_name: str,
     pr_number: int,
+    repo_path: Path,
+    harness_agents_dir: Path,
     ecosystem: str = "unknown",
 ) -> str:
     """Build the system prompt for a review agent.
 
-    Raises ValueError for unknown agent names.
-    When ecosystem is provided, appends catalog reviewer checklist.
+    Loads the agent persona from file, formats placeholders, and appends
+    the JSON output format suffix. When ecosystem is provided, appends
+    catalog reviewer checklist.
     """
-    base = _AGENT_PROMPTS.get(agent_name)
-    if base is None:
-        raise ValueError(
-            f"Unknown review agent: {agent_name!r}. Expected one of: {', '.join(_AGENT_PROMPTS)}"
-        )
+    base = load_agent_prompt(agent_name, repo_path, harness_agents_dir)
     suffix = _JSON_OUTPUT_FORMAT
     if agent_name not in _AGENTS_WITH_CUSTOM_SEVERITY:
         suffix += _GENERIC_SEVERITY_SUFFIX
@@ -189,6 +100,8 @@ def dispatch_single_review(
     agent_name: str,
     pr_number: int,
     worktree_path: Path,
+    repo_path: Path,
+    harness_agents_dir: Path,
     max_turns: int = 50,
     model: str | None = None,
     effort: str | None = None,
@@ -203,10 +116,15 @@ def dispatch_single_review(
     Builds and runs a `claude -p` command, parses structured findings.
     When ``extra_context`` is provided, it is appended to the user prompt
     after the standard "Review PR #N" text.
+
+    ``repo_path`` is the target repo root (for ``.harness/agents/`` lookup),
+    distinct from ``worktree_path`` (subprocess cwd).
     """
     typer.echo(f"[review:{agent_name}] dispatching for PR #{pr_number}", err=True)
 
-    system_prompt = build_review_prompt(agent_name, pr_number, ecosystem=ecosystem)
+    system_prompt = build_review_prompt(
+        agent_name, pr_number, repo_path, harness_agents_dir, ecosystem=ecosystem
+    )
     user_prompt = f"Review PR #{pr_number}"
     if extra_context is not None:
         user_prompt = f"{user_prompt}\n\n{extra_context}"
@@ -347,6 +265,8 @@ def parse_review_findings(raw_output: str, agent_name: str, duration: float) -> 
 def dispatch_review_agents(
     pr_number: int,
     worktree_path: Path,
+    repo_path: Path,
+    harness_agents_dir: Path,
     max_turns: int = 50,
     model: str | None = None,
     effort: str | None = None,
@@ -411,6 +331,8 @@ def dispatch_review_agents(
                 agent_name=name,
                 pr_number=pr_number,
                 worktree_path=worktree_path,
+                repo_path=repo_path,
+                harness_agents_dir=harness_agents_dir,
                 max_turns=max_turns,
                 model=model,
                 effort=effort,

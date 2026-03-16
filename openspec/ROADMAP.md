@@ -37,14 +37,15 @@ Priority order. Each is an OpenSpec change the harness implements on itself.
 - [x] `focused-fix-retry` — Cap and prioritize findings per fix-retry (`--max-findings-per-retry`). Cross-agent agreement scoring.
 - [x] `spec-compliance-review` — 4th review agent verifying task descriptions match implementation diff.
 - [x] `agent-knowledge-catalog` — 10-entry YAML catalog with ecosystem filtering, worker/reviewer prompt injection, per-repo finding frequency.
+- [x] `agent-definitions` — Agent prompts loaded from `.harness/agents/*.md` files with per-repo override support.
 
 ### Up next
 
-1. `agent-definitions` — Move hardcoded agent prompts to `.harness/agents/*.md` files. Per-repo override support. Richer prompts ported from global agent definitions.
-2. `failure-reporting` — Aggregate failure logs, identify systemic patterns. Pairs with agent-knowledge-catalog: aggregate review findings across runs, identify which catalog rules fire most often, feed patterns back into the catalog.
-3. `checkpoint-resume` — Checkpoint pipeline state so interrupted runs can resume from the last completed stage. Distinct from `retry-progress` which handles within-stage retry continuity — this is about cross-stage resumption after process crashes. Needs specs.
-4. `harness-dashboard` — Read-only CLI dashboard for onboarded repos, workspaces, and cross-repo OpenSpec state. Data layer (Pydantic models) designed for future TUI/web.
-5. `live-progress-feed` — Real-time visibility into worker progress (task completion, file edits, tool calls) during pipeline runs. Needs specs.
-6. `rollback-tags` — Git tag-based rollback points and shipped feature markers. Tags main branch before merge (`harness/pre-merge/{label}`) and after (`harness/shipped/{label}`). `harness rollback` reverts via revert commits. `harness history` lists shipped features. More valuable once auto-merge is routinely used.
-7. `always-on` — Event-driven intake from webhooks, recurring maintenance, Slack escalation. Big scope — requires server mode, event loop. Deferred until core quality loop is solid.
+1. `failure-reporting` — Aggregate failure logs, identify systemic patterns. Pairs with agent-knowledge-catalog: aggregate review findings across runs, identify which catalog rules fire most often, feed patterns back into the catalog.
+2. `checkpoint-resume` — Checkpoint pipeline state so interrupted runs can resume from the last completed stage. Distinct from `retry-progress` which handles within-stage retry continuity — this is about cross-stage resumption after process crashes. Needs specs.
+3. `harness-dashboard` — Read-only CLI dashboard for onboarded repos, workspaces, and cross-repo OpenSpec state. Data layer (Pydantic models) designed for future TUI/web.
+4. `live-progress-feed` — Real-time visibility into worker progress (task completion, file edits, tool calls) during pipeline runs. Needs specs.
+5. `rollback-tags` — Git tag-based rollback points and shipped feature markers. Tags main branch before merge (`harness/pre-merge/{label}`) and after (`harness/shipped/{label}`). `harness rollback` reverts via revert commits. `harness history` lists shipped features. More valuable once auto-merge is routinely used.
+6. `repo-lead` — Unified interactive + autonomous planning agent. `harness lead --repo <path> "prompt"` spawns a Claude Code session with repo context (roadmap, issues, catalog) to draft OpenSpec proposals, create issues, and optionally dispatch harness runs. Phase 1: on-demand for any repo. Phase 2: event-driven (GitHub issue triggers). Phase 3: scheduled triage. Same agent in all modes — only the trigger differs. See `docs/explore/repo-lead.md`.
+7. `always-on` — Event-driven intake from webhooks, recurring maintenance, Slack escalation. Subsumes repo-lead Phase 2 (events) and Phase 3 (scheduled). Requires server mode, event loop.
 8. `ephemeral-observability` — Per-worktree observability stack (Vector → VictoriaLogs/Metrics/Traces) for target apps that emit telemetry. Lets workers query logs (LogsQL), metrics (PromQL), and traces (TraceQL) to validate runtime behavior — not just exit codes. Torn down when task completes. Requires repo-profiling to detect when a target app is a running service. Inspired by OpenAI's Codex harness architecture.

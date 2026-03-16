@@ -778,12 +778,27 @@ def _run_pipeline_inner(
     else:
         typer.echo("[pipeline] skipping review agents (--skip-review)", err=True)
 
-    # Update per-repo finding frequency after review rounds complete
+    # Update per-repo finding frequency using only the LAST review round's
+    # findings (not all rounds — a persistent finding across 3 rounds would
+    # otherwise be counted 3x in a single pipeline run).
     if not skip_review and repo_knowledge_dir is not None:
-        all_review_findings = [f for s in stages if isinstance(s, ReviewResult) for f in s.findings]
-        if all_review_findings:
+        review_stages = [s for s in stages if isinstance(s, ReviewResult)]
+        # Get the last batch of review results (same agent set dispatched together)
+        # by taking results from the last review dispatch round
+        last_round_findings: list[ReviewFinding] = []
+        if review_stages:
+            # Review agents are dispatched in batches; take findings from the
+            # last N results where N = number of distinct agents in the batch
+            agent_names = {s.agent_name for s in review_stages}
+            for s in reversed(review_stages):
+                if s.agent_name in agent_names:
+                    last_round_findings.extend(s.findings)
+                    agent_names.discard(s.agent_name)
+                if not agent_names:
+                    break
+        if last_round_findings:
             catalog_entries = load_catalog(ecosystem)
-            update_frequency(repo_knowledge_dir, catalog_entries, all_review_findings)
+            update_frequency(repo_knowledge_dir, catalog_entries, last_round_findings)
 
     # Stage 6: OpenSpec review (skipped in prompt mode — no OpenSpec artifacts)
     if prompt is not None:

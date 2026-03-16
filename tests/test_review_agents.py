@@ -919,9 +919,10 @@ class TestTitlesOverlap:
         assert _titles_overlap("Crash", "unused import detected") is False
 
     def test_empty_strings(self) -> None:
-        # Empty string is a substring of everything, so this returns True
-        assert _titles_overlap("", "anything") is True
-        assert _titles_overlap("anything", "") is True
+        # Empty titles return False to prevent false-positive matches
+        assert _titles_overlap("", "anything") is False
+        assert _titles_overlap("anything", "") is False
+        assert _titles_overlap("", "") is False
 
     def test_no_shared_bigram(self) -> None:
         """Titles share common words but not as a contiguous bigram."""

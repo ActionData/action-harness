@@ -28,3 +28,10 @@ When implementing an OpenSpec change, use the `opsx:apply` skill to work through
 - No `Any` types — use specific types or unions
 - No silent failures — log errors that affect task flow
 - Functions that perform I/O must log at entry (inputs) and exit (outcome) to stderr
+- Every `subprocess.run()` must include `timeout=` (120s for CLI tools, 600s for long ops). Catch `subprocess.TimeoutExpired` alongside `FileNotFoundError`/`OSError`.
+- Never use bare `assert` for type narrowing — use explicit `if x is None: raise ValueError(...)` instead
+- Use `\b` word boundaries in regex when matching keywords that could be substrings
+- Include actual error text in error messages, not generic descriptions
+- Validate prerequisites (CLI availability, file existence) before operations that depend on them
+- When adding I/O functions, match the error handling pattern of existing functions in the same module
+- Search for existing implementations before writing utility functions — import, don't copy

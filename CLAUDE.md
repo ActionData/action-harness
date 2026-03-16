@@ -59,6 +59,31 @@ The CLI help text (`--help`) is the API documentation. When adding or changing c
 - **Self-validation is required.** Every proposal includes validation steps.
 - **Agent independence.** The implementing agent validates its own work. A separate agent reviews.
 
+### Subprocess safety
+- Every `subprocess.run()` call MUST include a `timeout=` parameter. Use 120s for CLI tools (`gh`, `git`), 600s for long-running operations.
+- Catch `subprocess.TimeoutExpired` alongside `FileNotFoundError` and `OSError` in except clauses.
+
+### Type narrowing
+- Never use bare `assert x is not None` for type narrowing — assertions are stripped by `python -O`. Use explicit `if x is None: raise ValueError(...)` or restructure the conditional so mypy narrows naturally.
+
+### Regex patterns
+- Use `\b` word boundaries when matching keywords that could appear as substrings of other words (e.g., `\bchange:` not `change:` — the latter matches `exchange:`).
+
+### Error messages
+- Include the actual error from stderr/exceptions in error messages, not a generic description. `"Issue #42: gh failed (exit 1): auth required"` not `"Issue #42 not found"`.
+
+### Validation ordering
+- Validate prerequisites before performing operations that depend on them. Check that CLIs exist before calling them. Check that files/dirs exist before reading them.
+
+### Consistency
+- When adding a new function that does I/O, match the error handling pattern of existing functions in the same module. If the module wraps `read_text()` in `try/except (OSError, UnicodeDecodeError)`, new file reads in that module need it too.
+
+### DRY
+- Before writing a utility function, search for existing implementations (`grep -rn 'def function_name' src/`). Import from the canonical location, don't copy.
+
+### Preview fidelity
+- `--dry-run` output must match what the pipeline would actually produce. If the PR title in dry-run says `[harness] prompt-fix-bug` but the actual PR says `[harness] Fix the bug`, the preview is misleading.
+
 ## HARNESS.md convention
 
 `HARNESS.md` is a per-repo file that provides instructions to autonomous harness workers. It lives in the target repo root and is read at worker dispatch time, injected into the worker's system prompt under a `## Repo-Specific Instructions` header.

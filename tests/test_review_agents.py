@@ -635,3 +635,35 @@ class TestMatchFindings:
         matched = match_findings([prior], [current])
         assert len(matched) == 1
         assert matched[0] is current
+
+    def test_different_agent_different_title_no_match(self) -> None:
+        """Same file but different agent and non-overlapping titles → no match."""
+        prior = _make_finding(
+            "high",
+            title="Missing null check",
+            file="a.py",
+            agent="bug-hunter",
+        )
+        current = _make_finding(
+            "medium",
+            title="Unclear naming convention",
+            file="a.py",
+            agent="quality-reviewer",
+        )
+        matched = match_findings([prior], [current])
+        assert len(matched) == 0
+
+
+class TestFormatReviewFeedbackEdgeCases:
+    """Additional edge case tests for format_review_feedback."""
+
+    def test_no_actionable_with_prior_acknowledged_drops_ack_section(self) -> None:
+        """When zero actionable findings exist, prior_acknowledged section is skipped."""
+        low = _make_finding("low", title="Low nit")
+        result = ReviewResult(success=True, agent_name="a", findings=[low])
+        ack_finding = _make_finding("medium", title="Old concern", file="old.py")
+        ack = AcknowledgedFinding(finding=ack_finding, acknowledged_in_round=1)
+        # At tolerance "high", the low finding is not actionable
+        feedback = format_review_feedback([result], tolerance="high", prior_acknowledged=[ack])
+        assert "No findings" in feedback
+        assert "Prior Acknowledged Findings" not in feedback

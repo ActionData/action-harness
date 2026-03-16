@@ -106,6 +106,29 @@ def _medium_only_review_results() -> list[ReviewResult]:
     ]
 
 
+def _low_only_review_results() -> list[ReviewResult]:
+    """Three ReviewResults with only low-severity findings."""
+    from action_harness.models import ReviewFinding
+
+    finding = ReviewFinding(
+        title="Minor nit",
+        file="src/baz.py",
+        severity="low",
+        description="Trailing whitespace",
+        agent="quality-reviewer",
+    )
+    return [
+        ReviewResult(success=True, agent_name="bug-hunter", findings=[], cost_usd=0.02),
+        ReviewResult(success=True, agent_name="test-reviewer", findings=[], cost_usd=0.02),
+        ReviewResult(
+            success=True,
+            agent_name="quality-reviewer",
+            findings=[finding],
+            cost_usd=0.02,
+        ),
+    ]
+
+
 @pytest.fixture
 def test_repo(tmp_path: Path) -> Path:
     """Create a temporary git repo for testing."""
@@ -606,6 +629,46 @@ class TestPipelineWithReviewAgents:
         # Verify needs-human label was added
         label_calls = [c for c in gh_calls if "--add-label" in c and "needs-human" in c]
         assert len(label_calls) >= 1
+
+    def test_short_circuit_on_low_findings_at_med_tolerance(self, test_repo: Path) -> None:
+        """Low-only findings at 'med' tolerance → short-circuit, no fix-retry."""
+        mock = _make_claude_mock(commits=True)
+
+        with (
+            patch("action_harness.worker.subprocess.run", mock),
+            patch("action_harness.pipeline.run_eval", return_value=_passing_eval()),
+            patch("action_harness.pr.subprocess.run", mock),
+            patch("action_harness.pipeline.subprocess.run", mock),
+            patch(
+                "action_harness.pipeline.dispatch_review_agents",
+                return_value=_low_only_review_results(),
+            ),
+            patch(
+                "action_harness.pipeline.dispatch_openspec_review",
+                return_value=('{"result": "{}"}', 1.0),
+            ),
+            patch(
+                "action_harness.pipeline.parse_review_result",
+                return_value=_approved_review_result(),
+            ),
+            patch(
+                "action_harness.pipeline.push_archive_if_needed",
+                return_value=(False, None),
+            ),
+        ):
+            pr_result, manifest = run_pipeline(
+                "test-change", test_repo, max_retries=1, review_cycle=["med", "high"]
+            )
+
+        assert pr_result.success is True
+
+        # No fix-retry should have happened — only 1 initial worker dispatch
+        worker_stages = [s for s in manifest.stages if isinstance(s, WorkerResult)]
+        assert len(worker_stages) == 1  # initial only, no fix-retry
+
+        # Only 1 review round (short-circuited after first round found no actionable)
+        review_stages = [s for s in manifest.stages if isinstance(s, ReviewResult)]
+        assert len(review_stages) == 3  # 3 agents * 1 round
 
 
 class TestFlagPrNeedsHuman:

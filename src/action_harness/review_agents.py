@@ -334,7 +334,7 @@ def filter_actionable_findings(results: list[ReviewResult], tolerance: str) -> l
     actionable: list[ReviewFinding] = []
     for result in results:
         for finding in result.findings:
-            if SEVERITY_RANK.get(finding.severity, 0) >= threshold:
+            if SEVERITY_RANK[finding.severity] >= threshold:
                 actionable.append(finding)
     return actionable
 

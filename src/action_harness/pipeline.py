@@ -16,6 +16,7 @@ from action_harness.models import (
     MergeResult,
     OpenSpecReviewResult,
     PrResult,
+    ReviewFinding,
     ReviewResult,
     RunManifest,
     StageResultUnion,
@@ -39,6 +40,7 @@ from action_harness.review_agents import (
     dispatch_review_agents,
     filter_actionable_findings,
     format_review_feedback,
+    match_findings,
     triage_findings,
 )
 from action_harness.worker import count_commits_ahead, dispatch_worker
@@ -601,6 +603,10 @@ def _run_pipeline_inner(
         last_fix_succeeded = False
         acknowledged: list[AcknowledgedFinding] = []
         rounds_attempted = 0
+        # Pre-fix actionable findings from the prior round, used to detect
+        # which findings persisted after fix-retry via match_findings.
+        prior_round_actionable: list[ReviewFinding] = []
+        prior_round_number: int = 0
 
         for round_idx, tolerance in enumerate(cycle):
             rounds_attempted = round_idx + 1
@@ -609,7 +615,7 @@ def _run_pipeline_inner(
                 f"(tolerance: {tolerance})",
                 err=True,
             )
-            _needs_any, latest_review_results = _run_review_agents(
+            latest_review_results = _run_review_agents_only(
                 pr_result,
                 worktree_path,
                 max_turns,
@@ -620,6 +626,29 @@ def _run_pipeline_inner(
                 verbose,
                 stages,
             )
+
+            # Tag each result with the tolerance level used for this round
+            for rr in latest_review_results:
+                rr.tolerance = tolerance
+
+            # After getting this round's review results, match against prior
+            # round's pre-fix actionable findings to detect what persisted.
+            if prior_round_actionable:
+                all_current_findings = [f for r in latest_review_results for f in r.findings]
+                persisted = match_findings(prior_round_actionable, all_current_findings)
+                for finding in persisted:
+                    already_tracked = any(
+                        af.finding.file == finding.file and af.finding.title == finding.title
+                        for af in acknowledged
+                    )
+                    if not already_tracked:
+                        acknowledged.append(
+                            AcknowledgedFinding(
+                                finding=finding,
+                                acknowledged_in_round=prior_round_number,
+                            )
+                        )
+                prior_round_actionable = []
 
             needs_fix = triage_findings(latest_review_results, tolerance)
 
@@ -683,24 +712,11 @@ def _run_pipeline_inner(
                 typer.echo("[pipeline] review fix-retry failed", err=True)
                 break
 
-            # Track acknowledged findings: re-run review to see what persisted
-            # We check in the next round's review anyway, so just track for now.
-            # Match pre-fix actionable findings against next round's results.
-            # For intermediate tracking, we note all pre-fix actionable as
-            # potentially acknowledged — the next round will confirm via matching.
-            for finding in pre_fix_actionable:
-                # Only add if not already tracked
-                already_tracked = any(
-                    af.finding.file == finding.file and af.finding.title == finding.title
-                    for af in acknowledged
-                )
-                if not already_tracked:
-                    acknowledged.append(
-                        AcknowledgedFinding(
-                            finding=finding,
-                            acknowledged_in_round=rounds_attempted,
-                        )
-                    )
+            # Store this round's pre-fix actionable findings. The next round's
+            # review results will be compared via match_findings to detect which
+            # findings persisted after the fix-retry.
+            prior_round_actionable = pre_fix_actionable
+            prior_round_number = rounds_attempted
 
         # After the loop, if findings were detected but the last fix-retry
         # succeeded, run a final verification review to check whether the
@@ -708,7 +724,7 @@ def _run_pipeline_inner(
         if findings_remain and last_fix_succeeded:
             last_tolerance = cycle[-1]
             typer.echo("[pipeline] running verification review", err=True)
-            _still_needs_any, latest_review_results = _run_review_agents(
+            latest_review_results = _run_review_agents_only(
                 pr_result,
                 worktree_path,
                 max_turns,
@@ -840,7 +856,7 @@ def _run_pipeline_inner(
     return pr_result
 
 
-def _run_review_agents(
+def _run_review_agents_only(
     pr_result: PrResult,
     worktree_path: Path,
     max_turns: int,
@@ -850,11 +866,15 @@ def _run_review_agents(
     permission_mode: str,
     verbose: bool,
     stages: list[StageResultUnion],
-) -> tuple[bool, list[ReviewResult]]:
-    """Run review agents stage. Returns (needs_fix, review_results)."""
+) -> list[ReviewResult]:
+    """Run review agents stage. Returns review results without triaging.
+
+    Triage is the caller's responsibility — tolerance-aware triage must
+    happen at the call site where the current round's tolerance is known.
+    """
     if pr_result.pr_url is None:
         typer.echo("[pipeline] error: PR URL is None, cannot proceed", err=True)
-        return False, []
+        return []
     # Extract PR number from URL (e.g., https://github.com/org/repo/pull/123)
     pr_number = int(pr_result.pr_url.rstrip("/").split("/")[-1])
 
@@ -874,13 +894,10 @@ def _run_review_agents(
     for result in review_results:
         stages.append(result)
 
-    needs_fix = triage_findings(review_results)
-    if needs_fix:
-        typer.echo("[pipeline] findings detected, fix retry needed", err=True)
-    else:
-        typer.echo("[pipeline] no findings, proceeding", err=True)
+    total = sum(len(r.findings) for r in review_results)
+    typer.echo(f"[pipeline] review agents returned {total} finding(s)", err=True)
 
-    return needs_fix, review_results
+    return review_results
 
 
 def _post_review_comment(

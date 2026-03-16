@@ -783,3 +783,12 @@ class TestReviewCycleCli:
             )
         assert result.exit_code == 0
         assert "review-cycle: high (1 round(s))" in result.output
+
+    def test_comma_only_rejected(self) -> None:
+        """A review-cycle of just commas should be rejected as empty."""
+        result = runner.invoke(
+            app,
+            ["run", "--change", "x", "--repo", "/nonexistent", "--review-cycle", ",,,"],
+        )
+        assert result.exit_code == 1
+        assert "empty" in result.output.lower() or "low" in result.output.lower()

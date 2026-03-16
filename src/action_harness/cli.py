@@ -216,7 +216,9 @@ def run(
         raise typer.Exit(code=1)
 
     # Validate --review-cycle
-    valid_tolerances = {"low", "med", "high"}
+    from action_harness.review_agents import TOLERANCE_THRESHOLD
+
+    valid_tolerances = set(TOLERANCE_THRESHOLD.keys())
     review_cycle_list = [t.strip() for t in review_cycle.split(",") if t.strip()]
     if not review_cycle_list:
         typer.echo(

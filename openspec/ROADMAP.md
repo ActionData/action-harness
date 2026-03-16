@@ -31,14 +31,14 @@ Priority order. Each is an OpenSpec change the harness implements on itself.
 - [x] `harness-md` — Per-repo HARNESS.md file convention for autonomous worker instructions. Read at dispatch time, injected into system prompt.
 - [x] `unspecced-tasks` — `--prompt` flag on `harness run` for freeform tasks without a full OpenSpec change. Worker receives the prompt directly. OpenSpec review skipped.
 - [x] `github-issue-intake` — `--issue` flag to dispatch from GitHub issues. Detects OpenSpec change references, falls back to `--prompt` mode. PR links to issue for auto-closure. Status labels.
+- [x] `codebase-assessment` — `harness assess` command scoring agentic readiness across 6 categories. Three modes: base scan, `--deep` agent assessment, `--propose` for auto-generated OpenSpec proposals.
 
 ### Up next
 
 1. `review-tolerance` — Configurable review depth via tolerance levels (low/med/high) per round, acknowledgment protocol for declined findings, two-strike code comment escalation.
-2. `codebase-assessment` — `harness assess` command that scores a repo's agentic readiness across categories (context, testability, CI guardrails, observability, tooling, isolation). Three modes: base mechanical scan (`--repo`), agent-enriched quality assessment (`--deep`), and auto-generated OpenSpec proposals for each gap (`--propose`). Builds on repo-profiling signals. Assessment agent is read-only; spec-writer agents generate proposals in parallel.
-3. `failure-reporting` — Aggregate failure logs, identify systemic patterns
-4. `always-on` — Event-driven intake from webhooks, recurring maintenance, Slack escalation
-5. `checkpoint-resume` — Checkpoint pipeline state so interrupted runs can resume from the last completed stage. Distinct from `retry-progress` which handles within-stage retry continuity — this is about cross-stage resumption after process crashes. Needs specs.
-6. `live-progress-feed` — Real-time visibility into worker progress (task completion, file edits, tool calls) during pipeline runs. Needs specs.
-7. `rollback-tags` — Git tag-based rollback points and shipped feature markers. Tags main branch before merge (`harness/pre-merge/{label}`) and after (`harness/shipped/{label}`). `harness rollback` reverts via revert commits. `harness history` lists shipped features. Requires auto-merge for inline post-merge tagging.
-8. `ephemeral-observability` — Per-worktree observability stack (Vector → VictoriaLogs/Metrics/Traces) for target apps that emit telemetry. Lets workers query logs (LogsQL), metrics (PromQL), and traces (TraceQL) to validate runtime behavior — not just exit codes. Torn down when task completes. Requires repo-profiling to detect when a target app is a running service. Inspired by OpenAI's Codex harness architecture.
+2. `failure-reporting` — Aggregate failure logs, identify systemic patterns
+3. `always-on` — Event-driven intake from webhooks, recurring maintenance, Slack escalation
+4. `checkpoint-resume` — Checkpoint pipeline state so interrupted runs can resume from the last completed stage. Distinct from `retry-progress` which handles within-stage retry continuity — this is about cross-stage resumption after process crashes. Needs specs.
+5. `live-progress-feed` — Real-time visibility into worker progress (task completion, file edits, tool calls) during pipeline runs. Needs specs.
+6. `rollback-tags` — Git tag-based rollback points and shipped feature markers. Tags main branch before merge (`harness/pre-merge/{label}`) and after (`harness/shipped/{label}`). `harness rollback` reverts via revert commits. `harness history` lists shipped features. Requires auto-merge for inline post-merge tagging.
+7. `ephemeral-observability` — Per-worktree observability stack (Vector → VictoriaLogs/Metrics/Traces) for target apps that emit telemetry. Lets workers query logs (LogsQL), metrics (PromQL), and traces (TraceQL) to validate runtime behavior — not just exit codes. Torn down when task completes. Requires repo-profiling to detect when a target app is a running service. Inspired by OpenAI's Codex harness architecture.

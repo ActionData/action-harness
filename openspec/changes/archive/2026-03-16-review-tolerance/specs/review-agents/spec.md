@@ -18,6 +18,8 @@ After all agents complete, the pipeline SHALL filter findings by the current rou
 - **THEN** the pipeline does not re-dispatch the worker
 - **AND** findings are posted to the PR comment
 
+## ADDED Requirements
+
 ### Requirement: Configurable Review Loop
 
 The review-fix loop SHALL iterate through the configured review cycle (an ordered list of tolerance levels) rather than a hardcoded number of rounds. Each round dispatches review agents, triages at that round's tolerance, and runs fix-retry if actionable findings exist. The loop terminates when the cycle is exhausted or a round produces zero actionable findings.

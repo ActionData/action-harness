@@ -19,6 +19,8 @@ The `triage_findings` function SHALL accept a `tolerance` parameter and return `
 - **WHEN** review agents return 0 findings across all agents
 - **THEN** `triage_findings` returns `False` regardless of tolerance level
 
+## ADDED Requirements
+
 ### Requirement: Fix-retry feedback includes actionable findings and prior acknowledgments
 The `format_review_feedback` function SHALL include only actionable findings (at or above the tolerance threshold) in the feedback sent to the fix-retry worker. The feedback SHALL also include a "Prior Acknowledged Findings" section listing findings from earlier rounds that were acknowledged but not fixed, if any exist.
 
@@ -31,9 +33,10 @@ The `format_review_feedback` function SHALL include only actionable findings (at
 - **AND** the pipeline is formatting feedback for round 2
 - **THEN** the feedback includes a "Prior Acknowledged Findings" section with that finding
 
-### Requirement: Review-fix loop capped at 2 rounds
-
 ## REMOVED Requirements
+
+### Requirement: Fix-retry feedback includes all findings
+**Reason**: Replaced by tolerance-aware feedback. The new "Fix-retry feedback includes actionable findings and prior acknowledgments" requirement filters findings by tolerance and adds prior acknowledged findings section.
 
 ### Requirement: Review-fix loop capped at 2 rounds
 **Reason**: Replaced by configurable review cycle. The number and tolerance of review rounds is now defined by the `--review-cycle` flag (default: `["low", "med", "high"]`).

@@ -80,21 +80,21 @@ Each finding SHALL be represented as a `ReviewFinding` model with fields: `title
 
 ### Requirement: Severity-Based Triage
 
-After all agents complete, the pipeline SHALL triage findings by severity. If any finding has severity "critical" or "high", the pipeline SHALL re-dispatch the code worker with the findings as structured feedback.
+After all agents complete, the pipeline SHALL filter findings by the current round's tolerance level. Findings with severity rank at or above the tolerance threshold are actionable. If any actionable findings exist, the pipeline SHALL re-dispatch the code worker with only the actionable findings as structured feedback. Non-actionable findings SHALL still be posted to the PR comment for visibility.
 
-#### Scenario: High-severity findings trigger fix retry
-- WHEN review agents produce at least one finding with severity "critical" or "high"
-- THEN the pipeline re-dispatches the code worker with the findings formatted as feedback
-- AND the pipeline re-runs eval after the fix attempt
-- AND the pipeline updates the PR with new commits
+#### Scenario: Tolerance filters actionable findings
+- **WHEN** review agents produce findings and the current tolerance is `med`
+- **THEN** `triage_findings` considers only medium, high, and critical findings when deciding whether to trigger fix-retry
+- **AND** low-severity findings are excluded from the fix-retry feedback
 
-#### Scenario: Only medium/low findings do not trigger retry
-- WHEN all review findings have severity "medium" or "low"
-- THEN the pipeline proceeds directly to OpenSpec review without re-dispatching the worker
+#### Scenario: All findings posted to PR regardless of tolerance
+- **WHEN** review agents produce findings at any severity
+- **THEN** the PR comment includes all findings regardless of the current tolerance level
 
-#### Scenario: No findings proceed to OpenSpec review
-- WHEN review agents produce zero findings
-- THEN the pipeline proceeds directly to OpenSpec review
+#### Scenario: No actionable findings at current tolerance
+- **WHEN** all review findings have severity below the current tolerance threshold
+- **THEN** the pipeline does not re-dispatch the worker
+- **AND** findings are posted to the PR comment
 
 ### Requirement: Fix Retry Limit
 
@@ -157,4 +157,20 @@ The `StageResultUnion` discriminated union in `models.py` SHALL include `ReviewR
 #### Scenario: ReviewResult round-trips through JSON
 - WHEN a `RunManifest` containing `ReviewResult` stages is serialized to JSON and deserialized back
 - THEN the `ReviewResult` instances are preserved with correct types and field values
+
+### Requirement: Configurable Review Loop
+
+The review-fix loop SHALL iterate through the configured review cycle (an ordered list of tolerance levels) rather than a hardcoded number of rounds. Each round dispatches review agents, triages at that round's tolerance, and runs fix-retry if actionable findings exist. The loop terminates when the cycle is exhausted or a round produces zero actionable findings.
+
+#### Scenario: Cycle defines number of rounds
+- **WHEN** the review cycle is `["low", "med", "high"]`
+- **THEN** the pipeline runs up to 3 review rounds, one per cycle element
+
+#### Scenario: Short-circuit on clean round
+- **WHEN** a review round produces zero actionable findings
+- **THEN** remaining rounds in the cycle are skipped
+
+#### Scenario: Fix retry fails eval
+- **WHEN** the fix worker completes but eval fails
+- **THEN** the pipeline records the failure and stops the review loop
 

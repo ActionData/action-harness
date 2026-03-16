@@ -321,7 +321,8 @@ def _run_pipeline_inner(
         worktree_path=str(wt_result.worktree_path),
     )
 
-    assert wt_result.worktree_path is not None
+    if wt_result.worktree_path is None:
+        raise ValueError("worktree_path is None despite successful creation")
     worktree_path = wt_result.worktree_path
     branch = wt_result.branch
 

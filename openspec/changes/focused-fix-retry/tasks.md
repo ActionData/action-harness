@@ -18,8 +18,8 @@
 
 ## 4. Pipeline Threading [depends: 2, 3]
 
-- [ ] 4.1 Add `max_findings_per_retry: int = 5` to `run_pipeline()`, `_run_pipeline_inner()`, AND `_run_review_fix_retry()`. Thread through the full call chain: `_run_pipeline_inner` passes `max_findings_per_retry` to `_run_review_fix_retry()` at the call site. `_run_review_fix_retry` passes `max_findings=max_findings_per_retry` to `format_review_feedback()`. Do NOT pass to `_post_review_comment` — PR comments show all findings.
-- [ ] 4.2 Add tests: pipeline with `max_findings_per_retry=2` — verify `format_review_feedback` called with `max_findings=2`. Pipeline with default (no flag) — verify `format_review_feedback` called with `max_findings=5`. Verify PR comment still contains all findings (not capped).
+- [x] 4.1 Add `max_findings_per_retry: int = 5` to `run_pipeline()`, `_run_pipeline_inner()`, AND `_run_review_fix_retry()`. Thread through the full call chain: `_run_pipeline_inner` passes `max_findings_per_retry` to `_run_review_fix_retry()` at the call site. `_run_review_fix_retry` passes `max_findings=max_findings_per_retry` to `format_review_feedback()`. Do NOT pass to `_post_review_comment` — PR comments show all findings.
+- [x] 4.2 Add tests: pipeline with `max_findings_per_retry=2` — verify `format_review_feedback` called with `max_findings=2`. Pipeline with default (no flag) — verify `format_review_feedback` called with `max_findings=5`. Verify PR comment still contains all findings (not capped).
 
 ## 5. Validation [depends: all]
 

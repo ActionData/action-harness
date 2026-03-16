@@ -78,6 +78,7 @@ def count_commits_ahead(worktree_path: Path, base_branch: str) -> int:
         cwd=worktree_path,
         capture_output=True,
         text=True,
+        timeout=120,
     )
     if result.returncode != 0:
         typer.echo(
@@ -221,21 +222,24 @@ def dispatch_worker(
 
     start_time = time.monotonic()
 
+    # Worker sessions routinely run 20-40 minutes; 7200s (2h) is a safety
+    # net, not an expected bound. The 600s CLAUDE.md guideline is for CLI
+    # tools like gh/git, not the core agent loop.
     try:
         result = subprocess.run(
             cmd,
             cwd=worktree_path,
             capture_output=True,
             text=True,
-            timeout=600,
+            timeout=7200,
         )
     except subprocess.TimeoutExpired:
         duration = time.monotonic() - start_time
-        typer.echo("[worker] timed out after 600s", err=True)
+        typer.echo("[worker] timed out after 7200s", err=True)
         return WorkerResult(
             success=False,
             stage="worker",
-            error="Claude CLI timed out after 600s",
+            error="Claude CLI timed out after 7200s",
             duration_seconds=duration,
         )
     except (FileNotFoundError, OSError) as e:

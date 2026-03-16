@@ -172,7 +172,11 @@ def build_review_prompt(
         suffix += _GENERIC_SEVERITY_SUFFIX
     prompt = base.format(pr_number=pr_number) + suffix
 
-    # Append catalog reviewer checklist
+    # Append catalog reviewer checklist.
+    # Note: load_catalog is called per-agent (once per build_review_prompt call).
+    # This is redundant when dispatch_review_agents runs 3-4 agents in parallel,
+    # but the cost is negligible (reads ~10 small YAML files from disk) and
+    # caching would add complexity for minimal gain at current scale.
     catalog_entries = load_catalog(ecosystem)
     checklist = render_for_reviewer(catalog_entries)
     if checklist is not None:

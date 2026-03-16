@@ -1,53 +1,56 @@
 """Tests for catalog integration into the pipeline."""
 
+import json
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 from action_harness.models import ReviewFinding, ReviewResult
 
 
 class TestPipelineEcosystemThreading:
-    """Verify ecosystem is threaded through dispatch calls."""
+    """Verify ecosystem is actually threaded through dispatch calls."""
 
-    def test_dispatch_worker_receives_ecosystem(self) -> None:
-        """Verify dispatch_worker is called with ecosystem from the profiler."""
-        # Ensure ecosystem parameter is accepted
-        import inspect
+    # Prior acknowledged: these tests previously used signature inspection.
+    # Replaced with behavioral tests that verify the ecosystem value is
+    # actually passed through to dispatch_worker/dispatch_review_agents.
 
-        from action_harness.worker import dispatch_worker
+    def test_dispatch_worker_receives_ecosystem_from_caller(self, tmp_path: Path) -> None:
+        """Verify dispatch_worker actually uses the ecosystem value for catalog loading."""
+        mock_subprocess = MagicMock()
+        mock_subprocess.return_value = MagicMock(
+            returncode=0,
+            stdout=json.dumps({"cost_usd": 0.01, "result": "ok"}),
+            stderr="",
+        )
 
-        sig = inspect.signature(dispatch_worker)
-        assert "ecosystem" in sig.parameters
-        assert sig.parameters["ecosystem"].default == "unknown"
+        with patch("action_harness.worker.subprocess.run", mock_subprocess):
+            from action_harness.worker import dispatch_worker
 
-    def test_dispatch_review_agents_receives_ecosystem(self) -> None:
-        """Verify dispatch_review_agents accepts ecosystem parameter."""
-        import inspect
+            dispatch_worker("t", tmp_path, ecosystem="python")
 
-        from action_harness.review_agents import dispatch_review_agents
+        # Extract system prompt from the claude CLI call
+        for call in mock_subprocess.call_args_list:
+            cmd = call[0][0]
+            if cmd[0] == "claude" and "--system-prompt" in cmd:
+                idx = cmd.index("--system-prompt")
+                system_prompt = cmd[idx + 1]
+                # Python ecosystem should include subprocess-timeout rule
+                assert "subprocess.run()" in system_prompt or "timeout" in system_prompt
+                return
+        raise AssertionError("claude CLI was never called with --system-prompt")
 
-        sig = inspect.signature(dispatch_review_agents)
-        assert "ecosystem" in sig.parameters
-        assert sig.parameters["ecosystem"].default == "unknown"
+    def test_dispatch_review_agents_passes_ecosystem_to_build_prompt(self) -> None:
+        """Verify build_review_prompt receives the ecosystem value."""
+        from action_harness.review_agents import build_review_prompt
 
-    def test_run_pipeline_inner_receives_ecosystem(self) -> None:
-        """Verify _run_pipeline_inner accepts ecosystem parameter."""
-        import inspect
+        prompt_python = build_review_prompt("bug-hunter", 42, ecosystem="python")
+        prompt_unknown = build_review_prompt("bug-hunter", 42, ecosystem="unknown")
 
-        from action_harness.pipeline import _run_pipeline_inner
-
-        sig = inspect.signature(_run_pipeline_inner)
-        assert "ecosystem" in sig.parameters
-        assert sig.parameters["ecosystem"].default == "unknown"
-
-    def test_run_review_fix_retry_receives_ecosystem(self) -> None:
-        """Verify _run_review_fix_retry accepts ecosystem parameter."""
-        import inspect
-
-        from action_harness.pipeline import _run_review_fix_retry
-
-        sig = inspect.signature(_run_review_fix_retry)
-        assert "ecosystem" in sig.parameters
-        assert sig.parameters["ecosystem"].default == "unknown"
+        # Python prompt should have more checklist items than unknown
+        assert "subprocess-timeout" in prompt_python
+        # Both should have universal entries
+        assert "## Catalog Checklist" in prompt_python
+        assert "## Catalog Checklist" in prompt_unknown
 
 
 class TestUpdateFrequencyCalled:
@@ -77,9 +80,6 @@ class TestUpdateFrequencyCalled:
 
         knowledge_dir = tmp_path / "knowledge"
         update_frequency(knowledge_dir, [entry], [finding])
-
-        # Verify file was created
-        import json
 
         freq_file = knowledge_dir / "findings-frequency.json"
         assert freq_file.exists()

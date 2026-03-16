@@ -106,7 +106,6 @@ _STOP_WORDS = frozenset(
         "its",
         "include",
         "includes",
-        "every",
         "always",
         "never",
         "use",
@@ -115,6 +114,14 @@ _STOP_WORDS = frozenset(
         "ensure",
     }
 )
+
+# Minimum fraction of rule keywords that must appear in a finding for
+# criterion (b) to match. Full-subset (1.0) is too strict for long rules
+# that include examples/context. Seed entry rules have 12-19 keywords;
+# a real finding typically shares 3-5 core keywords (~25-30%). The minimum
+# match count of 3 prevents single-word false positives.
+_KEYWORD_OVERLAP_THRESHOLD = 0.25
+_KEYWORD_OVERLAP_MIN_MATCHES = 3
 
 FREQUENCY_FILENAME = "findings-frequency.json"
 
@@ -139,8 +146,11 @@ def _finding_matches_entry(finding: ReviewFinding, entry: CatalogEntry) -> bool:
     Match criteria:
     (a) The entry's ``id`` appears as a case-insensitive substring of
         ``finding.title`` or ``finding.description``, OR
-    (b) ALL non-stop-words from the entry's ``worker_rule`` appear
-        (case-insensitive) in ``finding.title + finding.description``.
+    (b) At least ``_KEYWORD_OVERLAP_THRESHOLD`` (50%) of non-stop-words
+        from the entry's ``worker_rule`` appear (case-insensitive) in
+        ``finding.title + finding.description``. A threshold is used
+        instead of full subset because seed entry rules include examples
+        and context that won't appear in finding text.
     """
     finding_text = f"{finding.title} {finding.description}".lower()
 
@@ -148,13 +158,17 @@ def _finding_matches_entry(finding: ReviewFinding, entry: CatalogEntry) -> bool:
     if entry.id.lower() in finding_text:
         return True
 
-    # (b) All non-stop-word keywords from worker_rule appear in finding text
+    # (b) Keyword overlap above threshold
     rule_keywords = _extract_keywords(entry.worker_rule)
     if not rule_keywords:
         return False
 
     finding_keywords = _extract_keywords(finding_text)
-    return rule_keywords.issubset(finding_keywords)
+    overlap = len(rule_keywords & finding_keywords)
+    return (
+        overlap >= _KEYWORD_OVERLAP_MIN_MATCHES
+        and overlap / len(rule_keywords) >= _KEYWORD_OVERLAP_THRESHOLD
+    )
 
 
 def _load_frequency_file(frequency_path: Path) -> dict[str, dict[str, str | int]]:

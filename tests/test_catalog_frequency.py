@@ -94,6 +94,39 @@ class TestFindingMatchesEntry:
         )
         assert _finding_matches_entry(finding, entry) is True
 
+    def test_threshold_match_on_long_rule(self) -> None:
+        """Long rules with examples should match on partial keyword overlap."""
+        entry = _make_entry(
+            "subprocess-timeout",
+            rule=(
+                "Every subprocess.run() call must include a timeout= parameter. "
+                "Use 120s for CLI tools (gh, git), 600s for long-running operations. "
+                "Catch subprocess.TimeoutExpired alongside FileNotFoundError and OSError."
+            ),
+        )
+        # A real finding would mention the core concepts, not every example detail
+        finding = _make_finding(
+            "subprocess.run missing timeout",
+            description="Call to subprocess.run without timeout parameter",
+        )
+        assert _finding_matches_entry(finding, entry) is True
+
+    def test_low_overlap_does_not_match(self) -> None:
+        """Findings with only incidental word overlap should not match."""
+        entry = _make_entry(
+            "subprocess-timeout",
+            rule=(
+                "Every subprocess.run() call must include a timeout= parameter. "
+                "Use 120s for CLI tools (gh, git), 600s for long-running operations."
+            ),
+        )
+        # This finding shares 'call' and maybe 'parameter' but is unrelated
+        finding = _make_finding(
+            "Missing docstring on public function call",
+            description="Function parameter lacks documentation",
+        )
+        assert _finding_matches_entry(finding, entry) is False
+
     def test_id_match_in_description(self) -> None:
         entry = _make_entry("bare-assert-narrowing")
         finding = _make_finding(

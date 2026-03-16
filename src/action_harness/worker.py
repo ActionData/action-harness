@@ -221,12 +221,32 @@ def dispatch_worker(
 
     start_time = time.monotonic()
 
-    result = subprocess.run(
-        cmd,
-        cwd=worktree_path,
-        capture_output=True,
-        text=True,
-    )
+    try:
+        result = subprocess.run(
+            cmd,
+            cwd=worktree_path,
+            capture_output=True,
+            text=True,
+            timeout=600,
+        )
+    except subprocess.TimeoutExpired:
+        duration = time.monotonic() - start_time
+        typer.echo("[worker] timed out after 600s", err=True)
+        return WorkerResult(
+            success=False,
+            stage="worker",
+            error="Claude CLI timed out after 600s",
+            duration_seconds=duration,
+        )
+    except (FileNotFoundError, OSError) as e:
+        duration = time.monotonic() - start_time
+        typer.echo(f"[worker] failed to launch: {e}", err=True)
+        return WorkerResult(
+            success=False,
+            stage="worker",
+            error=f"Failed to launch claude CLI: {e}",
+            duration_seconds=duration,
+        )
 
     duration = time.monotonic() - start_time
 

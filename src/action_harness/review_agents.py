@@ -334,9 +334,7 @@ def dispatch_review_agents(
     return results
 
 
-def compute_finding_priority(
-    finding: ReviewFinding, all_findings: list[ReviewFinding]
-) -> int:
+def compute_finding_priority(finding: ReviewFinding, all_findings: list[ReviewFinding]) -> int:
     """Compute priority score for a finding based on severity and cross-agent agreement.
 
     Priority = ``SEVERITY_RANK[severity] * 10 + cross_agent_count`` where

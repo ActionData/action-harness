@@ -675,7 +675,7 @@ class TestMaxFindingsPerRetryPipeline:
     """Task 4.2: verify max_findings_per_retry threading through pipeline."""
 
     def test_custom_max_findings_threaded_to_format(self, test_repo: Path) -> None:
-        """Pipeline with max_findings_per_retry=2 calls format_review_feedback with max_findings=2."""
+        """Pipeline with max_findings_per_retry=2 threads to format."""
         mock = _make_claude_mock(commits=True)
 
         review_call_count = {"n": 0}
@@ -709,7 +709,10 @@ class TestMaxFindingsPerRetryPipeline:
             ),
             patch(
                 "action_harness.pipeline.format_review_feedback",
-                wraps=__import__("action_harness.review_agents", fromlist=["format_review_feedback"]).format_review_feedback,
+                wraps=__import__(
+                    "action_harness.review_agents",
+                    fromlist=["format_review_feedback"],
+                ).format_review_feedback,
             ) as mock_format,
         ):
             pr_result, manifest = run_pipeline(
@@ -757,7 +760,10 @@ class TestMaxFindingsPerRetryPipeline:
             ),
             patch(
                 "action_harness.pipeline.format_review_feedback",
-                wraps=__import__("action_harness.review_agents", fromlist=["format_review_feedback"]).format_review_feedback,
+                wraps=__import__(
+                    "action_harness.review_agents",
+                    fromlist=["format_review_feedback"],
+                ).format_review_feedback,
             ) as mock_format,
         ):
             pr_result, manifest = run_pipeline("test-change", test_repo, max_retries=1)
@@ -811,9 +817,7 @@ class TestMaxFindingsPerRetryPipeline:
         gh_calls = [
             call
             for call in mock_subprocess.call_args_list
-            if len(call[0][0]) > 2
-            and call[0][0][0] == "gh"
-            and "comment" in call[0][0]
+            if len(call[0][0]) > 2 and call[0][0][0] == "gh" and "comment" in call[0][0]
         ]
         # At least one comment should contain the finding title (unfiltered)
         comment_bodies = []

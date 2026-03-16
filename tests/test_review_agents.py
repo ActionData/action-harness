@@ -664,8 +664,12 @@ class TestComputeFindingPriority:
         critical = _make_finding("critical", title="Crash bug", file="f.py", agent="bug-hunter")
         # medium finding flagged by 3 agents on the same file with overlapping title
         med1 = _make_finding("medium", title="Null issue", file="g.py", agent="bug-hunter")
-        med2 = _make_finding("medium", title="Null issue found", file="g.py", agent="quality-reviewer")
-        med3 = _make_finding("medium", title="Null issue detected", file="g.py", agent="test-reviewer")
+        med2 = _make_finding(
+            "medium", title="Null issue found", file="g.py", agent="quality-reviewer"
+        )
+        med3 = _make_finding(
+            "medium", title="Null issue detected", file="g.py", agent="test-reviewer"
+        )
         all_findings = [critical, med1, med2, med3]
         assert compute_finding_priority(critical, all_findings) == 3 * 10 + 1  # 31
         assert compute_finding_priority(med1, all_findings) == 1 * 10 + 3  # 13
@@ -713,12 +717,8 @@ class TestComputeFindingPriority:
 
     def test_no_title_overlap_no_cross_agent(self) -> None:
         """(d) Different titles on same file → cross_agent_count=1 each."""
-        f1 = _make_finding(
-            "high", title="race condition", file="foo.py", agent="bug-hunter"
-        )
-        f2 = _make_finding(
-            "medium", title="unused import", file="foo.py", agent="quality-reviewer"
-        )
+        f1 = _make_finding("high", title="race condition", file="foo.py", agent="bug-hunter")
+        f2 = _make_finding("medium", title="unused import", file="foo.py", agent="quality-reviewer")
         all_findings = [f1, f2]
         assert compute_finding_priority(f1, all_findings) == 2 * 10 + 1  # 21
         assert compute_finding_priority(f2, all_findings) == 1 * 10 + 1  # 11
@@ -755,8 +755,7 @@ class TestFormatReviewFeedbackMaxFindings:
     def test_max_findings_caps_output(self) -> None:
         """max_findings=3 includes only 3 findings in output text."""
         findings = [
-            _make_finding("critical", title=f"Finding {i}", agent=f"agent-{i}")
-            for i in range(6)
+            _make_finding("critical", title=f"Finding {i}", agent=f"agent-{i}") for i in range(6)
         ]
         results = [
             ReviewResult(success=True, agent_name=f"agent-{i}", findings=[f])
@@ -769,9 +768,7 @@ class TestFormatReviewFeedbackMaxFindings:
 
     def test_max_findings_zero_includes_all(self) -> None:
         """max_findings=0 includes all findings (backward compatible)."""
-        findings = [
-            _make_finding("high", title=f"Issue {i}", agent="a") for i in range(5)
-        ]
+        findings = [_make_finding("high", title=f"Issue {i}", agent="a") for i in range(5)]
         result = ReviewResult(success=True, agent_name="a", findings=findings)
         feedback = format_review_feedback([result], max_findings=0)
         for i in range(5):

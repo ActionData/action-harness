@@ -17,9 +17,9 @@
 
 ## 4. Worker Prompt Injection [depends: 2, 3]
 
-- [ ] 4.1 In `dispatch_worker()` in `worker.py`, after injecting HARNESS.md: call `load_catalog(ecosystem)` where `ecosystem` comes from the profiler (already available via the pipeline). Call `render_for_worker(entries)`. If the result is not None, append it to the system prompt.
-- [ ] 4.2 The ecosystem needs to be passed to `dispatch_worker`. Add `ecosystem: str = "unknown"` parameter. The pipeline already has `profile.ecosystem` — pass it through.
-- [ ] 4.3 Add tests: worker dispatched with `ecosystem="python"` — verify system prompt contains `## Quality Rules` with Python-relevant entries. Worker with `ecosystem="unknown"` — verify only universal rules appear. Worker with no matching entries — verify no `## Quality Rules` section.
+- [x] 4.1 In `dispatch_worker()` in `worker.py`, after injecting HARNESS.md: call `load_catalog(ecosystem)` where `ecosystem` comes from the profiler (already available via the pipeline). Call `render_for_worker(entries)`. If the result is not None, append it to the system prompt.
+- [x] 4.2 The ecosystem needs to be passed to `dispatch_worker`. Add `ecosystem: str = "unknown"` parameter. The pipeline already has `profile.ecosystem` — pass it through.
+- [x] 4.3 Add tests: worker dispatched with `ecosystem="python"` — verify system prompt contains `## Quality Rules` with Python-relevant entries. Worker with `ecosystem="unknown"` — verify only universal rules appear. Worker with no matching entries — verify no `## Quality Rules` section.
 
 ## 5. Review Agent Prompt Injection [depends: 2, 3]
 

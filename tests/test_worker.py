@@ -672,3 +672,56 @@ class TestHarnessMdInjection:
         assert harness_content in system_prompt
         user_prompt = get_claude_prompt(mock)
         assert progress_content in user_prompt
+
+
+class TestCatalogInjection:
+    """dispatch_worker injects catalog worker rules based on ecosystem."""
+
+    def test_python_ecosystem_includes_quality_rules(self, tmp_path: Path) -> None:
+        mock = make_mock_subprocess(claude_stdout=_OK_JSON)
+        with patch("action_harness.worker.subprocess.run", mock):
+            dispatch_worker("t", tmp_path, ecosystem="python")
+
+        system_prompt = get_claude_system_prompt(mock)
+        assert "## Quality Rules" in system_prompt
+        # Should include Python-specific rules
+        assert "subprocess.run()" in system_prompt or "timeout" in system_prompt
+
+    def test_unknown_ecosystem_only_universal_rules(self, tmp_path: Path) -> None:
+        mock = make_mock_subprocess(claude_stdout=_OK_JSON)
+        with patch("action_harness.worker.subprocess.run", mock):
+            dispatch_worker("t", tmp_path, ecosystem="unknown")
+
+        system_prompt = get_claude_system_prompt(mock)
+        assert "## Quality Rules" in system_prompt
+        # Universal rules present (e.g., regex word boundary, error messages)
+        assert "Quality Rules" in system_prompt
+
+    def test_no_matching_entries_no_quality_rules_section(self, tmp_path: Path) -> None:
+        """With a custom empty entries dir, no rules should be injected."""
+        entries_dir = tmp_path / "empty_entries"
+        entries_dir.mkdir()
+
+        mock = make_mock_subprocess(claude_stdout=_OK_JSON)
+        with (
+            patch("action_harness.worker.subprocess.run", mock),
+            patch(
+                "action_harness.worker.load_catalog",
+                return_value=[],
+            ),
+        ):
+            dispatch_worker("t", tmp_path, ecosystem="nonexistent")
+
+        system_prompt = get_claude_system_prompt(mock)
+        assert "## Quality Rules" not in system_prompt
+
+    def test_resume_mode_does_not_inject_catalog(self, tmp_path: Path) -> None:
+        """On resume, catalog is not re-injected — the session already has it."""
+        mock = make_mock_subprocess(claude_stdout=_OK_JSON)
+        with patch("action_harness.worker.subprocess.run", mock):
+            dispatch_worker(
+                "t", tmp_path, session_id="sess_abc", feedback="retry", ecosystem="python"
+            )
+
+        cmd = get_claude_cmd(mock)
+        assert "--system-prompt" not in cmd

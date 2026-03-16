@@ -7,6 +7,8 @@ from pathlib import Path
 
 import typer
 
+from action_harness.catalog.loader import load_catalog
+from action_harness.catalog.renderer import render_for_worker
 from action_harness.models import WorkerResult
 from action_harness.progress import PROGRESS_FILENAME
 
@@ -105,6 +107,7 @@ def dispatch_worker(
     verbose: bool = False,
     session_id: str | None = None,
     prompt: str | None = None,
+    ecosystem: str = "unknown",
 ) -> WorkerResult:
     """Dispatch a Claude Code worker to implement a change.
 
@@ -175,6 +178,12 @@ def dispatch_worker(
             user_prompt = (
                 f"Implement the OpenSpec change '{change_name}' using the opsx:apply skill."
             )
+
+        # Inject catalog worker rules into the system prompt
+        catalog_entries = load_catalog(ecosystem)
+        catalog_section = render_for_worker(catalog_entries)
+        if catalog_section is not None:
+            system_prompt = f"{system_prompt}\n\n{catalog_section}"
         if feedback:
             user_prompt = f"{user_prompt}\n\n{feedback}"
         if progress_contents:

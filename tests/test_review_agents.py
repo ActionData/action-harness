@@ -8,7 +8,11 @@ import pytest
 
 from action_harness.models import AcknowledgedFinding, ReviewFinding, ReviewResult
 from action_harness.review_agents import (
+    _AGENT_PROMPTS,
+    _AGENTS_WITH_CUSTOM_SEVERITY,
+    _GENERIC_SEVERITY_SUFFIX,
     REVIEW_AGENT_NAMES,
+    SPEC_COMPLIANCE_AGENT_NAME,
     _titles_overlap,
     build_review_prompt,
     compute_finding_priority,
@@ -54,6 +58,41 @@ class TestBuildReviewPrompt:
     def test_quality_reviewer_prompt_content(self) -> None:
         prompt = build_review_prompt("quality-reviewer", 1)
         assert "quality" in prompt.lower() or "maintainability" in prompt.lower()
+
+    def test_spec_compliance_reviewer_prompt_contains_tasks_and_compliance(self) -> None:
+        prompt = build_review_prompt("spec-compliance-reviewer", 42)
+        assert "tasks" in prompt.lower()
+        assert "compliance" in prompt.lower()
+
+    def test_spec_compliance_reviewer_prompt_contains_severity_definitions(self) -> None:
+        prompt = build_review_prompt("spec-compliance-reviewer", 42)
+        assert "critical" in prompt.lower()
+        assert "high" in prompt.lower()
+        assert "medium" in prompt.lower()
+        assert "low" in prompt.lower()
+
+    def test_spec_compliance_reviewer_prompt_contains_pr_number(self) -> None:
+        prompt = build_review_prompt("spec-compliance-reviewer", 99)
+        assert "99" in prompt
+
+    def test_spec_compliance_reviewer_excludes_generic_severity(self) -> None:
+        """The spec-compliance-reviewer defines its own severity scale and must
+        NOT receive the generic severity definitions from _GENERIC_SEVERITY_SUFFIX."""
+        prompt = build_review_prompt("spec-compliance-reviewer", 42)
+        assert _GENERIC_SEVERITY_SUFFIX.strip() not in prompt
+
+    def test_base_agents_include_generic_severity(self) -> None:
+        for name in REVIEW_AGENT_NAMES:
+            prompt = build_review_prompt(name, 1)
+            assert "data loss" in prompt, f"{name} prompt missing generic severity"
+
+    def test_review_agent_names_subset_of_agent_prompts(self) -> None:
+        """REVIEW_AGENT_NAMES must be a subset of _AGENT_PROMPTS keys."""
+        assert set(REVIEW_AGENT_NAMES) <= set(_AGENT_PROMPTS)
+
+    def test_custom_severity_agents_are_in_agent_prompts(self) -> None:
+        """Every agent in _AGENTS_WITH_CUSTOM_SEVERITY must have a prompt."""
+        assert _AGENTS_WITH_CUSTOM_SEVERITY <= set(_AGENT_PROMPTS)
 
 
 class TestParseReviewFindings:
@@ -423,6 +462,76 @@ class TestDispatchSingleReview:
         assert result.findings[0].title == "Bug"
         assert result.cost_usd == 0.03
 
+    def test_extra_context_included_in_user_prompt(self) -> None:
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = json.dumps({"result": json.dumps({"findings": [], "summary": "ok"})})
+        mock_result.stderr = ""
+
+        with patch(
+            "action_harness.review_agents.subprocess.run",
+            return_value=mock_result,
+        ) as mock_run:
+            dispatch_single_review(
+                "spec-compliance-reviewer",
+                pr_number=42,
+                worktree_path=Path("/tmp/wt"),
+                extra_context="sentinel text",
+            )
+
+        cmd = mock_run.call_args[0][0]
+        # The user prompt is the argument after "-p"
+        p_index = cmd.index("-p")
+        user_prompt = cmd[p_index + 1]
+        assert "sentinel text" in user_prompt
+        assert "Review PR #42" in user_prompt
+
+    def test_extra_context_empty_string_still_appended(self) -> None:
+        """Empty string extra_context is still appended (not treated as None)."""
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = json.dumps({"result": json.dumps({"findings": [], "summary": "ok"})})
+        mock_result.stderr = ""
+
+        with patch(
+            "action_harness.review_agents.subprocess.run",
+            return_value=mock_result,
+        ) as mock_run:
+            dispatch_single_review(
+                "spec-compliance-reviewer",
+                pr_number=42,
+                worktree_path=Path("/tmp/wt"),
+                extra_context="",
+            )
+
+        cmd = mock_run.call_args[0][0]
+        p_index = cmd.index("-p")
+        user_prompt = cmd[p_index + 1]
+        # Empty string is truthy for `is not None`, so it gets appended
+        assert user_prompt == "Review PR #42\n\n"
+
+    def test_extra_context_none_unchanged_user_prompt(self) -> None:
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = json.dumps({"result": json.dumps({"findings": [], "summary": "ok"})})
+        mock_result.stderr = ""
+
+        with patch(
+            "action_harness.review_agents.subprocess.run",
+            return_value=mock_result,
+        ) as mock_run:
+            dispatch_single_review(
+                "bug-hunter",
+                pr_number=42,
+                worktree_path=Path("/tmp/wt"),
+                extra_context=None,
+            )
+
+        cmd = mock_run.call_args[0][0]
+        p_index = cmd.index("-p")
+        user_prompt = cmd[p_index + 1]
+        assert user_prompt == "Review PR #42"
+
 
 class TestDispatchReviewAgents:
     def test_dispatches_three_agents(self) -> None:
@@ -483,6 +592,124 @@ class TestDispatchReviewAgents:
         failed = [r for r in results if not r.success]
         assert len(failed) == 1
         assert failed[0].agent_name == "bug-hunter"
+
+    def test_change_name_with_tasks_md_dispatches_four_agents(self, tmp_path: Path) -> None:
+        """change_name set + tasks.md exists → 4 agents including spec-compliance-reviewer."""
+        tasks_dir = tmp_path / "openspec" / "changes" / "test-change"
+        tasks_dir.mkdir(parents=True)
+        (tasks_dir / "tasks.md").write_text("- [x] 99.1 sentinel task\n")
+
+        dispatched_agents: list[str] = []
+        dispatched_contexts: dict[str, str | None] = {}
+
+        def mock_dispatch(
+            agent_name: str, extra_context: str | None = None, **kwargs: object
+        ) -> ReviewResult:
+            dispatched_agents.append(agent_name)
+            dispatched_contexts[agent_name] = extra_context
+            return ReviewResult(success=True, agent_name=agent_name, findings=[])
+
+        with patch(
+            "action_harness.review_agents.dispatch_single_review",
+            side_effect=mock_dispatch,
+        ):
+            results = dispatch_review_agents(
+                pr_number=42,
+                worktree_path=tmp_path,
+                change_name="test-change",
+            )
+
+        assert len(results) == 4
+        assert SPEC_COMPLIANCE_AGENT_NAME in dispatched_agents
+        assert dispatched_contexts[SPEC_COMPLIANCE_AGENT_NAME] is not None
+        assert "sentinel task" in (dispatched_contexts[SPEC_COMPLIANCE_AGENT_NAME] or "")
+        # Other agents should NOT have extra_context
+        assert dispatched_contexts["bug-hunter"] is None
+
+    def test_change_name_none_dispatches_three_agents(self) -> None:
+        """change_name=None → only 3 base agents."""
+        mock_result = ReviewResult(success=True, agent_name="mock", findings=[])
+
+        with patch(
+            "action_harness.review_agents.dispatch_single_review",
+            return_value=mock_result,
+        ) as mock_dispatch:
+            results = dispatch_review_agents(
+                pr_number=42,
+                worktree_path=Path("/tmp/wt"),
+                change_name=None,
+            )
+
+        assert len(results) == 3
+        assert mock_dispatch.call_count == 3
+
+    def test_change_name_nonexistent_no_tasks_md_dispatches_three(self, tmp_path: Path) -> None:
+        """change_name set but no tasks.md → only 3 base agents."""
+        mock_result = ReviewResult(success=True, agent_name="mock", findings=[])
+
+        with patch(
+            "action_harness.review_agents.dispatch_single_review",
+            return_value=mock_result,
+        ) as mock_dispatch:
+            results = dispatch_review_agents(
+                pr_number=42,
+                worktree_path=tmp_path,
+                change_name="nonexistent",
+            )
+
+        assert len(results) == 3
+        assert mock_dispatch.call_count == 3
+
+    def test_tasks_md_read_failure_oserror_falls_back_to_three_agents(self, tmp_path: Path) -> None:
+        """tasks.md exists but read raises OSError → graceful fallback to 3 agents."""
+        tasks_dir = tmp_path / "openspec" / "changes" / "broken-change"
+        tasks_dir.mkdir(parents=True)
+        tasks_file = tasks_dir / "tasks.md"
+        tasks_file.write_text("- [x] task")
+        # Make file unreadable (targeted — only affects this specific file)
+        tasks_file.chmod(0o000)
+
+        mock_result = ReviewResult(success=True, agent_name="mock", findings=[])
+
+        try:
+            with patch(
+                "action_harness.review_agents.dispatch_single_review",
+                return_value=mock_result,
+            ) as mock_dispatch:
+                results = dispatch_review_agents(
+                    pr_number=42,
+                    worktree_path=tmp_path,
+                    change_name="broken-change",
+                )
+        finally:
+            # Restore permissions so tmp_path cleanup succeeds
+            tasks_file.chmod(0o644)
+
+        assert len(results) == 3
+        assert mock_dispatch.call_count == 3
+
+    def test_tasks_md_read_failure_unicode_falls_back_to_three_agents(self, tmp_path: Path) -> None:
+        """tasks.md with invalid encoding → graceful fallback to 3 agents."""
+        tasks_dir = tmp_path / "openspec" / "changes" / "bad-encoding"
+        tasks_dir.mkdir(parents=True)
+        tasks_file = tasks_dir / "tasks.md"
+        # Write raw bytes that are invalid UTF-8
+        tasks_file.write_bytes(b"\x80\x81\x82 invalid utf-8")
+
+        mock_result = ReviewResult(success=True, agent_name="mock", findings=[])
+
+        with patch(
+            "action_harness.review_agents.dispatch_single_review",
+            return_value=mock_result,
+        ) as mock_dispatch:
+            results = dispatch_review_agents(
+                pr_number=42,
+                worktree_path=tmp_path,
+                change_name="bad-encoding",
+            )
+
+        assert len(results) == 3
+        assert mock_dispatch.call_count == 3
 
 
 def _make_finding(

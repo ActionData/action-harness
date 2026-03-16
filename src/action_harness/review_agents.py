@@ -11,8 +11,11 @@ import typer
 from action_harness.models import AcknowledgedFinding, ReviewFinding, ReviewResult
 from action_harness.parsing import extract_json_block
 
-# Agent names dispatched in parallel
+# Base agent names always dispatched in parallel. The spec-compliance-reviewer
+# is conditionally added when a change_name with tasks.md is available — it is
+# intentionally not in this list because it requires extra_context.
 REVIEW_AGENT_NAMES = ["bug-hunter", "test-reviewer", "quality-reviewer"]
+SPEC_COMPLIANCE_AGENT_NAME = "spec-compliance-reviewer"
 
 # Severity ranking for tolerance-based filtering
 SEVERITY_RANK: dict[str, int] = {"low": 0, "medium": 1, "high": 2, "critical": 3}
@@ -74,9 +77,40 @@ context as needed. Focus on patterns that will cause maintenance burden.
 
 Do NOT modify any files. You are a read-only reviewer.
 """,
+    "spec-compliance-reviewer": """\
+You are a spec compliance reviewer. Your job is to verify that completed tasks
+in the task list were actually implemented as described in the diff.
+
+Instructions:
+1. Parse the tasks provided in the user message and identify all tasks marked `[x]` (complete).
+2. For each completed task, read the description carefully.
+3. Fetch the PR diff by running `gh pr diff {pr_number}`. Read full files for
+   context as needed.
+4. For each `[x]` task, search the diff for evidence that the described
+   behavior was actually implemented. Evidence includes: function calls
+   mentioned in the task appearing in the diff, parameters described in the
+   task present in function signatures, test assertions matching what the task
+   specifies, and integration points described in the task being wired up.
+5. Flag tasks where the diff does not match the description.
+
+Severity definitions for compliance findings:
+- critical: A function call or integration described in the task is completely
+  absent from the diff (e.g., task says "call match_findings" but it is never
+  imported or called).
+- high: The task describes specific behavior but the implementation takes a
+  shortcut (e.g., "filter by matching" but implementation adds everything
+  without filtering).
+- medium: The task describes a parameter, return value, or type that does not
+  match the implementation (e.g., task says Literal type but implementation
+  uses plain str).
+- low: The task describes a test assertion that is weaker than specified or a
+  minor deviation from the task wording.
+
+Do NOT modify any files. You are a read-only reviewer.
+""",
 }
 
-_JSON_OUTPUT_SUFFIX = """
+_JSON_OUTPUT_FORMAT = """
 
 After your review, output a single JSON block with your findings:
 
@@ -101,12 +135,19 @@ If you find no issues, output:
 ```
 
 The `line` field can be null if the issue is not tied to a specific line.
+"""
+
+_GENERIC_SEVERITY_SUFFIX = """\
 Severity levels:
 - critical: Will cause data loss, security breach, or crash in production
 - high: Will cause incorrect behavior that users will notice
 - medium: Code smell or maintainability issue that should be addressed
 - low: Minor style or convention issue
 """
+
+# Agents that define their own severity scale in _AGENT_PROMPTS get only the
+# JSON format instructions; all others also get the generic severity definitions.
+_AGENTS_WITH_CUSTOM_SEVERITY = {"spec-compliance-reviewer"}
 
 
 def build_review_prompt(agent_name: str, pr_number: int) -> str:
@@ -117,10 +158,12 @@ def build_review_prompt(agent_name: str, pr_number: int) -> str:
     base = _AGENT_PROMPTS.get(agent_name)
     if base is None:
         raise ValueError(
-            f"Unknown review agent: {agent_name!r}. "
-            f"Expected one of: {', '.join(REVIEW_AGENT_NAMES)}"
+            f"Unknown review agent: {agent_name!r}. Expected one of: {', '.join(_AGENT_PROMPTS)}"
         )
-    return base.format(pr_number=pr_number) + _JSON_OUTPUT_SUFFIX
+    suffix = _JSON_OUTPUT_FORMAT
+    if agent_name not in _AGENTS_WITH_CUSTOM_SEVERITY:
+        suffix += _GENERIC_SEVERITY_SUFFIX
+    return base.format(pr_number=pr_number) + suffix
 
 
 def dispatch_single_review(
@@ -133,15 +176,20 @@ def dispatch_single_review(
     max_budget_usd: float | None = None,
     permission_mode: str = "bypassPermissions",
     verbose: bool = False,
+    extra_context: str | None = None,
 ) -> ReviewResult:
     """Dispatch a single review agent via Claude Code CLI.
 
     Builds and runs a `claude -p` command, parses structured findings.
+    When ``extra_context`` is provided, it is appended to the user prompt
+    after the standard "Review PR #N" text.
     """
     typer.echo(f"[review:{agent_name}] dispatching for PR #{pr_number}", err=True)
 
     system_prompt = build_review_prompt(agent_name, pr_number)
     user_prompt = f"Review PR #{pr_number}"
+    if extra_context is not None:
+        user_prompt = f"{user_prompt}\n\n{extra_context}"
 
     cmd = [
         "claude",
@@ -285,21 +333,57 @@ def dispatch_review_agents(
     max_budget_usd: float | None = None,
     permission_mode: str = "bypassPermissions",
     verbose: bool = False,
+    change_name: str | None = None,
 ) -> list[ReviewResult]:
-    """Dispatch all three review agents in parallel.
+    """Dispatch review agents in parallel.
 
     Returns a list of ReviewResult, one per agent. All agents run to
     completion regardless of individual failures.
+
+    When ``change_name`` is set and a corresponding tasks.md exists in the
+    worktree's openspec directory, the ``spec-compliance-reviewer`` agent is
+    included alongside the standard agents. The tasks.md content is passed
+    as extra context to that agent.
     """
+    # Build agent list dynamically: start with base agents, conditionally add
+    # spec-compliance-reviewer when a change_name with a tasks.md is available.
+    agent_names = list(REVIEW_AGENT_NAMES)
+    tasks_content: str | None = None
+
+    if change_name is not None:
+        tasks_path = worktree_path / "openspec" / "changes" / change_name / "tasks.md"
+        typer.echo(
+            f"[review] checking for tasks.md at {tasks_path}",
+            err=True,
+        )
+        if tasks_path.is_file():
+            try:
+                tasks_content = tasks_path.read_text(encoding="utf-8")
+                agent_names.append(SPEC_COMPLIANCE_AGENT_NAME)
+                typer.echo(
+                    "[review] including spec-compliance-reviewer (tasks.md found)",
+                    err=True,
+                )
+            except (OSError, UnicodeDecodeError) as e:
+                typer.echo(
+                    f"[review] warning: could not read tasks.md: {e}",
+                    err=True,
+                )
+        else:
+            typer.echo(
+                "[review] skipping spec-compliance-reviewer (no tasks.md)",
+                err=True,
+            )
+
     typer.echo(
-        f"[review] dispatching {len(REVIEW_AGENT_NAMES)} agents for PR #{pr_number}",
+        f"[review] dispatching {len(agent_names)} agents for PR #{pr_number}",
         err=True,
     )
     start_time = time.monotonic()
 
     results: list[ReviewResult] = []
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(agent_names)) as executor:
         futures = {
             executor.submit(
                 dispatch_single_review,
@@ -312,8 +396,9 @@ def dispatch_review_agents(
                 max_budget_usd=max_budget_usd,
                 permission_mode=permission_mode,
                 verbose=verbose,
+                extra_context=tasks_content if name == SPEC_COMPLIANCE_AGENT_NAME else None,
             ): name
-            for name in REVIEW_AGENT_NAMES
+            for name in agent_names
         }
 
         for future in concurrent.futures.as_completed(futures):

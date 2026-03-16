@@ -868,6 +868,99 @@ class TestFlagPrNeedsHuman:
         assert "--add-label" in label_cmd
         assert "needs-human" in label_cmd
 
+
+class TestPipelineChangeNamePassedToReviewAgents:
+    """Verify change_name is threaded to dispatch_review_agents."""
+
+    def test_change_name_passed_in_change_mode(self, test_repo: Path) -> None:
+        """When pipeline runs with a change name, dispatch_review_agents receives it."""
+        mock = _make_claude_mock(commits=True)
+        dispatch_kwargs: list[dict[str, object]] = []
+
+        def tracking_dispatch(**kwargs: object) -> list[ReviewResult]:
+            dispatch_kwargs.append(kwargs)
+            return _no_findings_review_results()
+
+        with (
+            patch("action_harness.worker.subprocess.run", mock),
+            patch("action_harness.pipeline.run_eval", return_value=_passing_eval()),
+            patch("action_harness.pr.subprocess.run", mock),
+            patch("action_harness.pipeline.subprocess.run", mock),
+            patch(
+                "action_harness.pipeline.dispatch_review_agents",
+                side_effect=tracking_dispatch,
+            ),
+            patch(
+                "action_harness.pipeline.dispatch_openspec_review",
+                return_value=('{"result": "{}"}', 1.0),
+            ),
+            patch(
+                "action_harness.pipeline.parse_review_result",
+                return_value=_approved_review_result(),
+            ),
+            patch(
+                "action_harness.pipeline.push_archive_if_needed",
+                return_value=(False, None),
+            ),
+        ):
+            run_pipeline("my-change", test_repo, max_retries=1)
+
+        assert len(dispatch_kwargs) >= 1
+        # Every call to dispatch_review_agents should pass change_name="my-change"
+        for kw in dispatch_kwargs:
+            assert kw.get("change_name") == "my-change"
+
+    def test_prompt_mode_passes_change_name(self, test_repo: Path) -> None:
+        """In prompt mode, change_name is still threaded through (no tasks.md will exist).
+
+        This test verifies the pipeline threads change_name correctly.
+        Agent-exclusion logic (spec-compliance-reviewer not dispatched when
+        tasks.md is absent) is tested in test_review_agents.py —
+        test_change_name_nonexistent_no_tasks_md_dispatches_three.
+        """
+        mock = _make_claude_mock(commits=True)
+        dispatch_kwargs: list[dict[str, object]] = []
+
+        def tracking_dispatch(**kwargs: object) -> list[ReviewResult]:
+            dispatch_kwargs.append(kwargs)
+            return _no_findings_review_results()
+
+        with (
+            patch("action_harness.worker.subprocess.run", mock),
+            patch("action_harness.pipeline.run_eval", return_value=_passing_eval()),
+            patch("action_harness.pr.subprocess.run", mock),
+            patch("action_harness.pipeline.subprocess.run", mock),
+            patch(
+                "action_harness.pipeline.dispatch_review_agents",
+                side_effect=tracking_dispatch,
+            ),
+            patch(
+                "action_harness.pipeline.dispatch_openspec_review",
+                return_value=('{"result": "{}"}', 1.0),
+            ),
+            patch(
+                "action_harness.pipeline.parse_review_result",
+                return_value=_approved_review_result(),
+            ),
+            patch(
+                "action_harness.pipeline.push_archive_if_needed",
+                return_value=(False, None),
+            ),
+        ):
+            # CLI would pass "prompt-fix-bug" as change_name in prompt mode.
+            # The pipeline threads it through regardless — dispatch_review_agents
+            # will skip spec-compliance-reviewer because no tasks.md exists.
+            run_pipeline(
+                "prompt-fix-bug",
+                test_repo,
+                max_retries=1,
+                prompt="fix the bug",
+            )
+
+        assert len(dispatch_kwargs) >= 1
+        for kw in dispatch_kwargs:
+            assert kw.get("change_name") == "prompt-fix-bug"
+
     def test_filters_non_human_findings(self, tmp_path: Path) -> None:
         """Only findings containing 'human' are included in the PR comment."""
         from action_harness.pipeline import _flag_pr_needs_human

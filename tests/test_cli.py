@@ -1,5 +1,6 @@
 """Tests for CLI entrypoint and input validation."""
 
+import re
 import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -11,6 +12,13 @@ from action_harness.cli import ValidationError, app, validate_inputs, validate_i
 from action_harness.models import PrResult, RunManifest
 
 runner = CliRunner()
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _strip_ansi(text: str) -> str:
+    """Remove ANSI escape codes from text for reliable assertions."""
+    return _ANSI_RE.sub("", text)
 
 
 def _mock_pipeline_success(
@@ -64,13 +72,15 @@ def test_not_a_git_repo(tmp_path: Path) -> None:
 
 
 def test_missing_change_dir(fake_repo: Path) -> None:
-    with pytest.raises(ValidationError, match="Change directory not found"):
-        validate_inputs("nonexistent-change", fake_repo)
+    with patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"):
+        with pytest.raises(ValidationError, match="Change directory not found"):
+            validate_inputs("nonexistent-change", fake_repo)
 
 
 def test_path_traversal_in_change_name(fake_repo: Path) -> None:
-    with pytest.raises(ValidationError, match="path traversal"):
-        validate_inputs("../../..", fake_repo)
+    with patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"):
+        with pytest.raises(ValidationError, match="path traversal"):
+            validate_inputs("../../..", fake_repo)
 
 
 def test_missing_claude_cli(fake_repo: Path) -> None:
@@ -106,7 +116,7 @@ class TestCliRunner:
     def test_top_level_help(self) -> None:
         result = runner.invoke(app, ["--help"])
         assert result.exit_code == 0
-        assert "run" in result.output
+        assert "run" in _strip_ansi(result.output)
 
     def test_run_subcommand_required(self) -> None:
         result = runner.invoke(app, ["--change", "x", "--repo", "/some/path"])
@@ -129,12 +139,13 @@ class TestCliRunner:
     def test_help_shows_all_flags(self) -> None:
         result = runner.invoke(app, ["run", "--help"])
         assert result.exit_code == 0
-        assert "--verbose" in result.output
-        assert "--dry-run" in result.output
-        assert "--model" in result.output
-        assert "--effort" in result.output
-        assert "--max-budget-usd" in result.output
-        assert "--permission-mode" in result.output
+        output = _strip_ansi(result.output)
+        assert "--verbose" in output
+        assert "--dry-run" in output
+        assert "--model" in output
+        assert "--effort" in output
+        assert "--max-budget-usd" in output
+        assert "--permission-mode" in output
 
     def test_verbose_flag_accepted(self, fake_repo: Path) -> None:
         with (
@@ -227,23 +238,24 @@ class TestCliRunner:
     def test_help_shows_harness_home(self) -> None:
         result = runner.invoke(app, ["run", "--help"])
         assert result.exit_code == 0
-        assert "--harness-home" in result.output
+        assert "--harness-home" in _strip_ansi(result.output)
 
     def test_help_shows_clean_subcommand(self) -> None:
         result = runner.invoke(app, ["--help"])
         assert result.exit_code == 0
-        assert "clean" in result.output
+        assert "clean" in _strip_ansi(result.output)
 
     def test_repo_help_mentions_urls(self) -> None:
         result = runner.invoke(app, ["run", "--help"])
         assert result.exit_code == 0
-        assert "owner/repo" in result.output
+        assert "owner/repo" in _strip_ansi(result.output)
 
     def test_help_shows_auto_merge_and_wait_for_ci(self) -> None:
         result = runner.invoke(app, ["run", "--help"])
         assert result.exit_code == 0
-        assert "--auto-merge" in result.output
-        assert "--wait-for-ci" in result.output
+        output = _strip_ansi(result.output)
+        assert "--auto-merge" in output
+        assert "--wait-for-ci" in output
 
     def test_dry_run_with_auto_merge(self, fake_repo: Path) -> None:
         with patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"):
@@ -384,7 +396,7 @@ class TestPromptModeCli:
     def test_help_shows_prompt_flag(self) -> None:
         result = runner.invoke(app, ["run", "--help"])
         assert result.exit_code == 0
-        assert "--prompt" in result.output
+        assert "--prompt" in _strip_ansi(result.output)
 
     def test_empty_prompt_fails(self) -> None:
         result = runner.invoke(app, ["run", "--prompt", "", "--repo", "/some/path"])
@@ -429,7 +441,7 @@ class TestIssueModeCli:
     def test_help_shows_issue_flag(self) -> None:
         result = runner.invoke(app, ["run", "--help"])
         assert result.exit_code == 0
-        assert "--issue" in result.output
+        assert "--issue" in _strip_ansi(result.output)
 
     def test_issue_alone_works_and_threads_issue_number(self, fake_repo: Path) -> None:
         """--issue reads issue, dispatches as prompt mode, passes issue_number."""

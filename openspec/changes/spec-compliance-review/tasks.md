@@ -6,9 +6,9 @@
 
 ## 2. Dispatch Integration [depends: 1]
 
-- [ ] 2.1 Add `change_name: str | None = None` parameter to `dispatch_review_agents()`. When `change_name is not None`, check if `worktree_path / "openspec" / "changes" / change_name / "tasks.md"` exists. If it does, read its content and include `spec-compliance-reviewer` in the agent list, passing the tasks content as `extra_context` to `dispatch_single_review`. If `change_name is None` or tasks.md doesn't exist, dispatch only the existing 3 agents.
-- [ ] 2.2 Build the agent list dynamically in `dispatch_review_agents`: start with `REVIEW_AGENT_NAMES` (the existing 3), then append `"spec-compliance-reviewer"` only when change_name is set and tasks.md exists.
-- [ ] 2.3 Add tests: dispatch with `change_name="test-change"` and a mock tasks.md containing `"- [x] 99.1 sentinel task"` — assert 4 agents dispatched and the spec-compliance-reviewer prompt contains the sentinel string. Dispatch with `change_name=None` — assert 3 agents dispatched. Dispatch with `change_name="nonexistent"` (no tasks.md file) — assert 3 agents dispatched.
+- [x] 2.1 Add `change_name: str | None = None` parameter to `dispatch_review_agents()`. When `change_name is not None`, check if `worktree_path / "openspec" / "changes" / change_name / "tasks.md"` exists. If it does, read its content and include `spec-compliance-reviewer` in the agent list, passing the tasks content as `extra_context` to `dispatch_single_review`. If `change_name is None` or tasks.md doesn't exist, dispatch only the existing 3 agents.
+- [x] 2.2 Build the agent list dynamically in `dispatch_review_agents`: start with `REVIEW_AGENT_NAMES` (the existing 3), then append `"spec-compliance-reviewer"` only when change_name is set and tasks.md exists.
+- [x] 2.3 Add tests: dispatch with `change_name="test-change"` and a mock tasks.md containing `"- [x] 99.1 sentinel task"` — assert 4 agents dispatched and the spec-compliance-reviewer prompt contains the sentinel string. Dispatch with `change_name=None` — assert 3 agents dispatched. Dispatch with `change_name="nonexistent"` (no tasks.md file) — assert 3 agents dispatched.
 
 ## 3. Pipeline Threading [depends: 2]
 

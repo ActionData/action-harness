@@ -321,21 +321,59 @@ def dispatch_review_agents(
     max_budget_usd: float | None = None,
     permission_mode: str = "bypassPermissions",
     verbose: bool = False,
+    change_name: str | None = None,
 ) -> list[ReviewResult]:
-    """Dispatch all three review agents in parallel.
+    """Dispatch review agents in parallel.
 
     Returns a list of ReviewResult, one per agent. All agents run to
     completion regardless of individual failures.
+
+    When ``change_name`` is set and a corresponding tasks.md exists in the
+    worktree's openspec directory, the ``spec-compliance-reviewer`` agent is
+    included alongside the standard agents. The tasks.md content is passed
+    as extra context to that agent.
     """
+    # Build agent list dynamically: start with base agents, conditionally add
+    # spec-compliance-reviewer when a change_name with a tasks.md is available.
+    agent_names = list(REVIEW_AGENT_NAMES)
+    tasks_content: str | None = None
+
+    if change_name is not None:
+        tasks_path = (
+            worktree_path / "openspec" / "changes" / change_name / "tasks.md"
+        )
+        typer.echo(
+            f"[review] checking for tasks.md at {tasks_path}",
+            err=True,
+        )
+        if tasks_path.is_file():
+            try:
+                tasks_content = tasks_path.read_text(encoding="utf-8")
+                agent_names.append("spec-compliance-reviewer")
+                typer.echo(
+                    "[review] including spec-compliance-reviewer (tasks.md found)",
+                    err=True,
+                )
+            except (OSError, UnicodeDecodeError) as e:
+                typer.echo(
+                    f"[review] warning: could not read tasks.md: {e}",
+                    err=True,
+                )
+        else:
+            typer.echo(
+                "[review] skipping spec-compliance-reviewer (no tasks.md)",
+                err=True,
+            )
+
     typer.echo(
-        f"[review] dispatching {len(REVIEW_AGENT_NAMES)} agents for PR #{pr_number}",
+        f"[review] dispatching {len(agent_names)} agents for PR #{pr_number}",
         err=True,
     )
     start_time = time.monotonic()
 
     results: list[ReviewResult] = []
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(agent_names)) as executor:
         futures = {
             executor.submit(
                 dispatch_single_review,
@@ -348,8 +386,9 @@ def dispatch_review_agents(
                 max_budget_usd=max_budget_usd,
                 permission_mode=permission_mode,
                 verbose=verbose,
+                extra_context=tasks_content if name == "spec-compliance-reviewer" else None,
             ): name
-            for name in REVIEW_AGENT_NAMES
+            for name in agent_names
         }
 
         for future in concurrent.futures.as_completed(futures):

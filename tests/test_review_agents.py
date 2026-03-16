@@ -550,6 +550,73 @@ class TestDispatchReviewAgents:
         assert len(failed) == 1
         assert failed[0].agent_name == "bug-hunter"
 
+    def test_change_name_with_tasks_md_dispatches_four_agents(self, tmp_path: Path) -> None:
+        """change_name set + tasks.md exists → 4 agents including spec-compliance-reviewer."""
+        tasks_dir = tmp_path / "openspec" / "changes" / "test-change"
+        tasks_dir.mkdir(parents=True)
+        (tasks_dir / "tasks.md").write_text("- [x] 99.1 sentinel task\n")
+
+        dispatched_agents: list[str] = []
+        dispatched_contexts: dict[str, str | None] = {}
+
+        def mock_dispatch(
+            agent_name: str, extra_context: str | None = None, **kwargs: object
+        ) -> ReviewResult:
+            dispatched_agents.append(agent_name)
+            dispatched_contexts[agent_name] = extra_context
+            return ReviewResult(success=True, agent_name=agent_name, findings=[])
+
+        with patch(
+            "action_harness.review_agents.dispatch_single_review",
+            side_effect=mock_dispatch,
+        ):
+            results = dispatch_review_agents(
+                pr_number=42,
+                worktree_path=tmp_path,
+                change_name="test-change",
+            )
+
+        assert len(results) == 4
+        assert "spec-compliance-reviewer" in dispatched_agents
+        assert dispatched_contexts["spec-compliance-reviewer"] is not None
+        assert "sentinel task" in (dispatched_contexts["spec-compliance-reviewer"] or "")
+        # Other agents should NOT have extra_context
+        assert dispatched_contexts["bug-hunter"] is None
+
+    def test_change_name_none_dispatches_three_agents(self) -> None:
+        """change_name=None → only 3 base agents."""
+        mock_result = ReviewResult(success=True, agent_name="mock", findings=[])
+
+        with patch(
+            "action_harness.review_agents.dispatch_single_review",
+            return_value=mock_result,
+        ) as mock_dispatch:
+            results = dispatch_review_agents(
+                pr_number=42,
+                worktree_path=Path("/tmp/wt"),
+                change_name=None,
+            )
+
+        assert len(results) == 3
+        assert mock_dispatch.call_count == 3
+
+    def test_change_name_nonexistent_no_tasks_md_dispatches_three(self, tmp_path: Path) -> None:
+        """change_name set but no tasks.md → only 3 base agents."""
+        mock_result = ReviewResult(success=True, agent_name="mock", findings=[])
+
+        with patch(
+            "action_harness.review_agents.dispatch_single_review",
+            return_value=mock_result,
+        ) as mock_dispatch:
+            results = dispatch_review_agents(
+                pr_number=42,
+                worktree_path=tmp_path,
+                change_name="nonexistent",
+            )
+
+        assert len(results) == 3
+        assert mock_dispatch.call_count == 3
+
 
 def _make_finding(
     severity: str, title: str = "Finding", file: str = "f.py", agent: str = "a"

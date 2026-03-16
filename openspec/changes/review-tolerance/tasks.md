@@ -33,12 +33,12 @@
 
 ## 6. Tests
 
-- [ ] 6.1 Test `filter_actionable_findings` at each tolerance level: create 4 `ReviewFinding` objects with severities low, medium, high, critical. At tolerance `low`, assert all 4 returned. At `med`, assert 3 returned (medium, high, critical). At `high`, assert 2 returned (high, critical).
-- [ ] 6.2 Test `triage_findings` with tolerance: create results with only low-severity findings. Assert `triage_findings(results, "low")` returns `True`. Assert `triage_findings(results, "med")` returns `False`. Assert `triage_findings(results, "high")` returns `False`. With empty findings, assert `False` at all tolerance levels.
-- [ ] 6.3 Test `format_review_feedback` filtering: create results with 1 high and 2 low findings. At tolerance `med`, assert feedback contains the high finding text and does not contain the low finding text. With `prior_acknowledged` containing one `AcknowledgedFinding`, assert feedback contains a "Prior Acknowledged Findings" section with that finding's details.
-- [ ] 6.4 Test CLI validation: invoke `run` with `--review-cycle foo` and assert exit code is nonzero with error message containing "low", "med", "high". Invoke with `--review-cycle low,high` and assert no validation error.
-- [ ] 6.5 Test `match_findings`: create prior finding (file="a.py", title="Missing null check", agent="bug-hunter") and current finding (file="a.py", title="Missing null check on return", agent="quality-reviewer"). Assert match (title substring). Create current finding (file="b.py", title="Missing null check"). Assert no match (different file).
-- [ ] 6.6 Test `match_findings` with same agent: create prior finding (file="a.py", title="Unused import", agent="quality-reviewer") and current finding (file="a.py", title="Unclear naming", agent="quality-reviewer"). Assert match (same file + same agent, even though titles differ).
+- [x] 6.1 Test `filter_actionable_findings` at each tolerance level: create 4 `ReviewFinding` objects with severities low, medium, high, critical. At tolerance `low`, assert all 4 returned. At `med`, assert 3 returned (medium, high, critical). At `high`, assert 2 returned (high, critical).
+- [x] 6.2 Test `triage_findings` with tolerance: create results with only low-severity findings. Assert `triage_findings(results, "low")` returns `True`. Assert `triage_findings(results, "med")` returns `False`. Assert `triage_findings(results, "high")` returns `False`. With empty findings, assert `False` at all tolerance levels.
+- [x] 6.3 Test `format_review_feedback` filtering: create results with 1 high and 2 low findings. At tolerance `med`, assert feedback contains the high finding text and does not contain the low finding text. With `prior_acknowledged` containing one `AcknowledgedFinding`, assert feedback contains a "Prior Acknowledged Findings" section with that finding's details.
+- [x] 6.4 Test CLI validation: invoke `run` with `--review-cycle foo` and assert exit code is nonzero with error message containing "low", "med", "high". Invoke with `--review-cycle low,high` and assert no validation error.
+- [x] 6.5 Test `match_findings`: create prior finding (file="a.py", title="Missing null check", agent="bug-hunter") and current finding (file="a.py", title="Missing null check on return", agent="quality-reviewer"). Assert match (title substring). Create current finding (file="b.py", title="Missing null check"). Assert no match (different file).
+- [x] 6.6 Test `match_findings` with same agent: create prior finding (file="a.py", title="Unused import", agent="quality-reviewer") and current finding (file="a.py", title="Unclear naming", agent="quality-reviewer"). Assert match (same file + same agent, even though titles differ).
 
 ## 7. Self-Validation
 

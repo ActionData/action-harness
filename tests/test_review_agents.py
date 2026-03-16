@@ -6,13 +6,15 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from action_harness.models import ReviewFinding, ReviewResult
+from action_harness.models import AcknowledgedFinding, ReviewFinding, ReviewResult
 from action_harness.review_agents import (
     REVIEW_AGENT_NAMES,
     build_review_prompt,
     dispatch_review_agents,
     dispatch_single_review,
+    filter_actionable_findings,
     format_review_feedback,
+    match_findings,
     parse_review_findings,
     triage_findings,
 )
@@ -478,3 +480,158 @@ class TestDispatchReviewAgents:
         failed = [r for r in results if not r.success]
         assert len(failed) == 1
         assert failed[0].agent_name == "bug-hunter"
+
+
+def _make_finding(
+    severity: str, title: str = "Finding", file: str = "f.py", agent: str = "a"
+) -> ReviewFinding:
+    return ReviewFinding(
+        title=title, file=file, severity=severity, description="desc", agent=agent  # type: ignore[arg-type]
+    )
+
+
+class TestFilterActionableFindings:
+    """Task 6.1: test filter_actionable_findings at each tolerance level."""
+
+    def test_tolerance_low_returns_all(self) -> None:
+        findings = [
+            _make_finding("low"),
+            _make_finding("medium"),
+            _make_finding("high"),
+            _make_finding("critical"),
+        ]
+        result = ReviewResult(success=True, agent_name="a", findings=findings)
+        actionable = filter_actionable_findings([result], "low")
+        assert len(actionable) == 4
+
+    def test_tolerance_med_excludes_low(self) -> None:
+        findings = [
+            _make_finding("low"),
+            _make_finding("medium"),
+            _make_finding("high"),
+            _make_finding("critical"),
+        ]
+        result = ReviewResult(success=True, agent_name="a", findings=findings)
+        actionable = filter_actionable_findings([result], "med")
+        assert len(actionable) == 3
+        assert all(f.severity != "low" for f in actionable)
+
+    def test_tolerance_high_excludes_low_and_medium(self) -> None:
+        findings = [
+            _make_finding("low"),
+            _make_finding("medium"),
+            _make_finding("high"),
+            _make_finding("critical"),
+        ]
+        result = ReviewResult(success=True, agent_name="a", findings=findings)
+        actionable = filter_actionable_findings([result], "high")
+        assert len(actionable) == 2
+        assert {f.severity for f in actionable} == {"high", "critical"}
+
+
+class TestTriageFindingsWithTolerance:
+    """Task 6.2: test triage_findings with tolerance parameter."""
+
+    def test_low_only_at_tolerance_low_returns_true(self) -> None:
+        finding = _make_finding("low")
+        result = ReviewResult(success=True, agent_name="a", findings=[finding])
+        assert triage_findings([result], "low") is True
+
+    def test_low_only_at_tolerance_med_returns_false(self) -> None:
+        finding = _make_finding("low")
+        result = ReviewResult(success=True, agent_name="a", findings=[finding])
+        assert triage_findings([result], "med") is False
+
+    def test_low_only_at_tolerance_high_returns_false(self) -> None:
+        finding = _make_finding("low")
+        result = ReviewResult(success=True, agent_name="a", findings=[finding])
+        assert triage_findings([result], "high") is False
+
+    def test_empty_findings_returns_false_at_all_tolerances(self) -> None:
+        result = ReviewResult(success=True, agent_name="a", findings=[])
+        assert triage_findings([result], "low") is False
+        assert triage_findings([result], "med") is False
+        assert triage_findings([result], "high") is False
+
+
+class TestFormatReviewFeedbackFiltering:
+    """Task 6.3: test format_review_feedback with tolerance filtering."""
+
+    def test_med_tolerance_excludes_low(self) -> None:
+        high = _make_finding("high", title="High issue")
+        low1 = _make_finding("low", title="Low nit 1")
+        low2 = _make_finding("low", title="Low nit 2")
+        result = ReviewResult(
+            success=True, agent_name="a", findings=[high, low1, low2]
+        )
+        feedback = format_review_feedback([result], tolerance="med")
+        assert "High issue" in feedback
+        assert "Low nit 1" not in feedback
+        assert "Low nit 2" not in feedback
+
+    def test_prior_acknowledged_section_included(self) -> None:
+        high = _make_finding("high", title="Real issue")
+        result = ReviewResult(success=True, agent_name="a", findings=[high])
+        ack_finding = _make_finding("medium", title="Old concern", file="old.py")
+        ack = AcknowledgedFinding(finding=ack_finding, acknowledged_in_round=1)
+        feedback = format_review_feedback(
+            [result], tolerance="low", prior_acknowledged=[ack]
+        )
+        assert "Prior Acknowledged Findings" in feedback
+        assert "Old concern" in feedback
+        assert "old.py" in feedback
+        assert "round 1" in feedback
+
+
+class TestMatchFindings:
+    """Tasks 6.5 and 6.6: test match_findings."""
+
+    def test_title_substring_match(self) -> None:
+        prior = _make_finding(
+            "high",
+            title="Missing null check",
+            file="a.py",
+            agent="bug-hunter",
+        )
+        current_match = _make_finding(
+            "high",
+            title="Missing null check on return",
+            file="a.py",
+            agent="quality-reviewer",
+        )
+        matched = match_findings([prior], [current_match])
+        assert len(matched) == 1
+        assert matched[0] is current_match
+
+    def test_different_file_no_match(self) -> None:
+        prior = _make_finding(
+            "high",
+            title="Missing null check",
+            file="a.py",
+            agent="bug-hunter",
+        )
+        current_no_match = _make_finding(
+            "high",
+            title="Missing null check",
+            file="b.py",
+            agent="bug-hunter",
+        )
+        matched = match_findings([prior], [current_no_match])
+        assert len(matched) == 0
+
+    def test_same_agent_same_file_matches(self) -> None:
+        prior = _make_finding(
+            "medium",
+            title="Unused import",
+            file="a.py",
+            agent="quality-reviewer",
+        )
+        current = _make_finding(
+            "medium",
+            title="Unclear naming",
+            file="a.py",
+            agent="quality-reviewer",
+        )
+        matched = match_findings([prior], [current])
+        assert len(matched) == 1
+        assert matched[0] is current

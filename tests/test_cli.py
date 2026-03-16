@@ -728,3 +728,58 @@ class TestCleanCommand:
         # Workspace dirs should be cleaned up
         assert not (harness_home / "workspaces" / "app1" / "change1").exists()
         assert not (harness_home / "workspaces" / "app2" / "change2").exists()
+
+
+class TestReviewCycleCli:
+    """Task 6.4: test --review-cycle CLI validation."""
+
+    def test_invalid_tolerance_rejected(self) -> None:
+        result = runner.invoke(
+            app,
+            ["run", "--change", "x", "--repo", "/nonexistent", "--review-cycle", "foo"],
+        )
+        assert result.exit_code == 1
+        output = result.output
+        assert "low" in output
+        assert "med" in output
+        assert "high" in output
+
+    def test_valid_review_cycle_accepted(self, fake_repo: Path) -> None:
+        with (
+            patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"),
+            patch(
+                "action_harness.pipeline.run_pipeline",
+                return_value=_mock_pipeline_success(),
+            ),
+        ):
+            result = runner.invoke(
+                app,
+                [
+                    "run",
+                    "--change",
+                    "test-change",
+                    "--repo",
+                    str(fake_repo),
+                    "--review-cycle",
+                    "low,high",
+                ],
+            )
+        assert result.exit_code == 0
+
+    def test_dry_run_shows_review_cycle(self, fake_repo: Path) -> None:
+        with patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"):
+            result = runner.invoke(
+                app,
+                [
+                    "run",
+                    "--change",
+                    "test-change",
+                    "--repo",
+                    str(fake_repo),
+                    "--dry-run",
+                    "--review-cycle",
+                    "high",
+                ],
+            )
+        assert result.exit_code == 0
+        assert "review-cycle: high (1 round(s))" in result.output

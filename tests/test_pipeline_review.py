@@ -340,12 +340,13 @@ class TestPipelineWithReviewAgents:
         worker_stages = [s for s in manifest.stages if isinstance(s, WorkerResult)]
         assert len(worker_stages) == 2  # initial + fix retry
 
-    def test_two_round_cap(self, test_repo: Path) -> None:
-        """After 2 fix-retry rounds with persistent findings, post comment and continue."""
+    def test_full_cycle_with_persistent_findings(self, test_repo: Path) -> None:
+        """After all review-cycle rounds with persistent findings, post comment and continue."""
         mock = _make_claude_mock(commits=True)
 
         # Review agents always return findings (never clean) — including
         # the verification review that runs after the loop.
+        # Default cycle is ["low", "med", "high"] = 3 rounds
         with (
             patch("action_harness.worker.subprocess.run", mock),
             patch("action_harness.pipeline.run_eval", return_value=_passing_eval()),
@@ -372,13 +373,14 @@ class TestPipelineWithReviewAgents:
 
         assert pr_result.success is True
 
-        # Should have: initial worker + 2 fix-retry workers = 3 worker dispatches
+        # Should have: initial worker + 3 fix-retry workers = 4 worker dispatches
+        # (3 rounds in default cycle: low, med, high)
         worker_stages = [s for s in manifest.stages if isinstance(s, WorkerResult)]
-        assert len(worker_stages) == 3  # initial + 2 fix-retries
+        assert len(worker_stages) == 4  # initial + 3 fix-retries
 
-        # 3 review rounds: round 1, round 2, + verification review
+        # 4 review dispatches: 3 rounds + verification review = 12 review stages
         review_stages = [s for s in manifest.stages if isinstance(s, ReviewResult)]
-        assert len(review_stages) == 9  # 3 agents * 3 review dispatches
+        assert len(review_stages) == 12  # 3 agents * 4 review dispatches
 
         # Verify a "Remaining findings" comment was posted with specific content
         gh_calls = [

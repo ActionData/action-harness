@@ -227,8 +227,7 @@ def run(
     for t in review_cycle_list:
         if t not in valid_tolerances:
             typer.echo(
-                f"Error: invalid tolerance '{t}' in --review-cycle. "
-                f"Valid values: low, med, high",
+                f"Error: invalid tolerance '{t}' in --review-cycle. Valid values: low, med, high",
                 err=True,
             )
             raise typer.Exit(code=1)
@@ -337,7 +336,8 @@ def run(
         typer.echo("  eval commands:")
         for cmd in profile.eval_commands:
             typer.echo(f"    - {cmd}")
-        typer.echo(f"  review-cycle: {','.join(review_cycle_list)} ({len(review_cycle_list)} round(s))")
+        cycle_str = ",".join(review_cycle_list)
+        typer.echo(f"  review-cycle: {cycle_str} ({len(review_cycle_list)} round(s))")
         typer.echo(f"  pr title: [harness] {task_label}")
         typer.echo(f"  auto-merge: {'enabled' if auto_merge else 'disabled'}")
         typer.echo(f"  wait-for-ci: {'enabled' if wait_for_ci else 'disabled'}")

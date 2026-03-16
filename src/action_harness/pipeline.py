@@ -11,6 +11,7 @@ from action_harness.event_log import EventLogger
 from action_harness.merge import check_merge_gates, merge_pr, post_merge_blocked_comment
 from action_harness.merge import wait_for_ci as wait_for_ci_checks
 from action_harness.models import (
+    AcknowledgedFinding,
     EvalResult,
     MergeResult,
     OpenSpecReviewResult,
@@ -34,12 +35,10 @@ from action_harness.protection import (
     get_changed_files,
     load_protected_patterns,
 )
-from action_harness.models import AcknowledgedFinding, ReviewFinding
 from action_harness.review_agents import (
     dispatch_review_agents,
     filter_actionable_findings,
     format_review_feedback,
-    match_findings,
     triage_findings,
 )
 from action_harness.worker import count_commits_ahead, dispatch_worker
@@ -647,9 +646,7 @@ def _run_pipeline_inner(
                 break
 
             findings_remain = True
-            pre_fix_actionable = filter_actionable_findings(
-                latest_review_results, tolerance
-            )
+            pre_fix_actionable = filter_actionable_findings(latest_review_results, tolerance)
 
             # Post review comment with ALL findings (unfiltered) for visibility
             if pr_result.pr_url:
@@ -659,8 +656,7 @@ def _run_pipeline_inner(
                     latest_review_results,
                     verbose,
                     header=(
-                        f"Review round {rounds_attempted}/{total_rounds} "
-                        f"(tolerance: {tolerance})"
+                        f"Review round {rounds_attempted}/{total_rounds} (tolerance: {tolerance})"
                     ),
                 )
 
@@ -695,8 +691,7 @@ def _run_pipeline_inner(
             for finding in pre_fix_actionable:
                 # Only add if not already tracked
                 already_tracked = any(
-                    af.finding.file == finding.file
-                    and af.finding.title == finding.title
+                    af.finding.file == finding.file and af.finding.title == finding.title
                     for af in acknowledged
                 )
                 if not already_tracked:
@@ -771,8 +766,8 @@ def _run_pipeline_inner(
 
     if review_result is not None and not review_result.success:
         typer.echo("[pipeline] openspec review returned findings", err=True)
-        for finding in review_result.findings:
-            typer.echo(f"  - {finding}", err=True)
+        for openspec_finding in review_result.findings:
+            typer.echo(f"  - {openspec_finding}", err=True)
         typer.echo("[pipeline] complete (failed)", err=True)
         return PrResult(
             success=False,
@@ -914,9 +909,7 @@ def _post_review_comment(
                 location = f.file
                 if f.line is not None:
                     location += f":{f.line}"
-                lines.append(
-                    f"- **[{f.severity.upper()}]** {f.title} (`{location}`)"
-                )
+                lines.append(f"- **[{f.severity.upper()}]** {f.title} (`{location}`)")
                 lines.append(f"  {f.description}")
             lines.append("")
         body = "\n".join(lines)

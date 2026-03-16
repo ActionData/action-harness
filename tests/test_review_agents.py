@@ -486,7 +486,11 @@ def _make_finding(
     severity: str, title: str = "Finding", file: str = "f.py", agent: str = "a"
 ) -> ReviewFinding:
     return ReviewFinding(
-        title=title, file=file, severity=severity, description="desc", agent=agent  # type: ignore[arg-type]
+        title=title,
+        file=file,
+        severity=severity,
+        description="desc",
+        agent=agent,  # type: ignore[arg-type]
     )
 
 
@@ -561,9 +565,7 @@ class TestFormatReviewFeedbackFiltering:
         high = _make_finding("high", title="High issue")
         low1 = _make_finding("low", title="Low nit 1")
         low2 = _make_finding("low", title="Low nit 2")
-        result = ReviewResult(
-            success=True, agent_name="a", findings=[high, low1, low2]
-        )
+        result = ReviewResult(success=True, agent_name="a", findings=[high, low1, low2])
         feedback = format_review_feedback([result], tolerance="med")
         assert "High issue" in feedback
         assert "Low nit 1" not in feedback
@@ -574,9 +576,7 @@ class TestFormatReviewFeedbackFiltering:
         result = ReviewResult(success=True, agent_name="a", findings=[high])
         ack_finding = _make_finding("medium", title="Old concern", file="old.py")
         ack = AcknowledgedFinding(finding=ack_finding, acknowledged_in_round=1)
-        feedback = format_review_feedback(
-            [result], tolerance="low", prior_acknowledged=[ack]
-        )
+        feedback = format_review_feedback([result], tolerance="low", prior_acknowledged=[ack])
         assert "Prior Acknowledged Findings" in feedback
         assert "Old concern" in feedback
         assert "old.py" in feedback

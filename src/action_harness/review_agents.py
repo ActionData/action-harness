@@ -324,9 +324,7 @@ def dispatch_review_agents(
     return results
 
 
-def filter_actionable_findings(
-    results: list[ReviewResult], tolerance: str
-) -> list[ReviewFinding]:
+def filter_actionable_findings(results: list[ReviewResult], tolerance: str) -> list[ReviewFinding]:
     """Return findings at or above the tolerance threshold.
 
     A finding is actionable when ``SEVERITY_RANK[finding.severity] >=
@@ -350,9 +348,7 @@ def triage_findings(results: list[ReviewResult], tolerance: str = "low") -> bool
     return len(filter_actionable_findings(results, tolerance)) > 0
 
 
-def match_findings(
-    prior: list[ReviewFinding], current: list[ReviewFinding]
-) -> list[ReviewFinding]:
+def match_findings(prior: list[ReviewFinding], current: list[ReviewFinding]) -> list[ReviewFinding]:
     """Match current findings against prior findings.
 
     Two findings match if they share the same ``file`` field AND either:

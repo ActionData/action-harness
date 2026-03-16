@@ -821,6 +821,7 @@ class TestMaxFindingsPerRetryPipeline:
             if "--body" in cmd:
                 body_idx = cmd.index("--body") + 1
                 comment_bodies.append(cmd[body_idx])
+        assert comment_bodies, "Expected at least one gh pr comment with --body"
         assert any("Off-by-one error" in body for body in comment_bodies)
 
 

@@ -442,7 +442,7 @@ def match_findings(prior: list[ReviewFinding], current: list[ReviewFinding]) -> 
 
     Two findings match if they share the same ``file`` field AND either:
     (a) the same ``agent`` field, or
-    (b) one finding's ``title`` is a case-insensitive substring of the other's.
+    (b) their titles overlap per ``_titles_overlap`` (substring or bigram match).
 
     Returns the subset of *current* findings that match any prior finding.
     """
@@ -455,10 +455,8 @@ def match_findings(prior: list[ReviewFinding], current: list[ReviewFinding]) -> 
             if cur.agent == pri.agent:
                 matched.append(cur)
                 break
-            # Title substring match (case-insensitive)
-            cur_title_lower = cur.title.lower()
-            pri_title_lower = pri.title.lower()
-            if cur_title_lower in pri_title_lower or pri_title_lower in cur_title_lower:
+            # Title overlap (case-insensitive substring or bigram)
+            if _titles_overlap(cur.title, pri.title):
                 matched.append(cur)
                 break
     return matched
@@ -483,6 +481,10 @@ def format_review_feedback(
     if max_findings > 0 and actionable:
         actionable, deferred = select_top_findings(actionable, max_findings)
         if deferred:
+            # Deferred findings are intentionally not accumulated or returned.
+            # They remain in the ReviewResult stages (for the manifest) and will
+            # be re-discovered by review agents in the next round if still present.
+            # See design.md §3: "Deferred findings logged to stderr, included in next round."
             typer.echo(
                 f"[review] deferred {len(deferred)} finding(s) below priority cap",
                 err=True,

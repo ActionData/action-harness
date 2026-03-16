@@ -36,9 +36,9 @@
 
 ## 7. Pipeline Integration [depends: 4, 5, 6]
 
-- [ ] 7.1 In `_run_pipeline_inner()`, after review rounds complete: call `update_frequency` with the review findings and catalog entries. Use the harness home `repos/<repo_name>/knowledge/` path.
-- [ ] 7.2 Thread `ecosystem` from `profile.ecosystem` through to `dispatch_worker` and `dispatch_review_agents` in ALL call sites. The full list of functions needing `ecosystem: str = "unknown"` added to their signatures: `_run_pipeline_inner`, `_run_review_fix_retry`, `_run_review_agents_only`. Call sites for `dispatch_worker`: main loop (~line 376), resume fallback (~line 406), fix-retry (~line 1010), fix-retry resume fallback (~line 1033). Call sites for `dispatch_review_agents`: `_run_review_agents_only` (~line 884). Thread `ecosystem` through each intermediate function to the dispatch call.
-- [ ] 7.3 Add tests: verify `dispatch_worker` receives `ecosystem` matching the profiler. Verify `dispatch_review_agents` receives `ecosystem`. Verify `update_frequency` is called after review rounds.
+- [x] 7.1 In `_run_pipeline_inner()`, after review rounds complete: call `update_frequency` with the review findings and catalog entries. Use the harness home `repos/<repo_name>/knowledge/` path.
+- [x] 7.2 Thread `ecosystem` from `profile.ecosystem` through to `dispatch_worker` and `dispatch_review_agents` in ALL call sites. The full list of functions needing `ecosystem: str = "unknown"` added to their signatures: `_run_pipeline_inner`, `_run_review_fix_retry`, `_run_review_agents_only`. Call sites for `dispatch_worker`: main loop (~line 376), resume fallback (~line 406), fix-retry (~line 1010), fix-retry resume fallback (~line 1033). Call sites for `dispatch_review_agents`: `_run_review_agents_only` (~line 884). Thread `ecosystem` through each intermediate function to the dispatch call.
+- [x] 7.3 Add tests: verify `dispatch_worker` receives `ecosystem` matching the profiler. Verify `dispatch_review_agents` receives `ecosystem`. Verify `update_frequency` is called after review rounds.
 
 ## 8. Validation [depends: all]
 

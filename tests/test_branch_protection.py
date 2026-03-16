@@ -96,3 +96,19 @@ def test_ssh_non_github_returns_none(tmp_path: Path) -> None:
     ):
         result = check_branch_protection(tmp_path)
         assert result is None
+
+
+def test_ssh_github_url_parsed(tmp_path: Path) -> None:
+    """SSH remote to GitHub is parsed correctly."""
+    responses = {
+        "gh_auth": _make_completed(0),
+        "git_remote": _make_completed(0, stdout="git@github.com:myorg/myrepo.git"),
+        "gh_api": _make_completed(0, stdout='{"required_status_checks": {}}'),
+    }
+
+    with patch(
+        "action_harness.branch_protection.subprocess.run",
+        side_effect=_command_aware_mock(responses),
+    ):
+        result = check_branch_protection(tmp_path)
+        assert result is True

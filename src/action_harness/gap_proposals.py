@@ -161,11 +161,20 @@ def generate_proposals(
         }
 
         for future in as_completed(futures):
-            name, success = future.result()
+            gap = futures[future]
+            try:
+                name, success = future.result()
+            except Exception as exc:
+                name = gap.proposal_name or ""
+                success = False
+                typer.echo(
+                    f"[gap_proposals] ✗ {name} (unexpected error: {exc})",
+                    err=True,
+                )
             results.append((name, success))
             if success:
                 typer.echo(f"[gap_proposals] ✓ {name}", err=True)
-            else:
+            elif name:
                 typer.echo(f"[gap_proposals] ✗ {name} (failed)", err=True)
 
     succeeded = sum(1 for _, s in results if s)

@@ -142,13 +142,22 @@ def identify_gaps(category: str, signals: MechanicalSignalsUnion) -> list[Gap]:
 
     Signals with value None (unknown/couldn't check) are skipped — they
     represent inability to assess, not a confirmed gap.
+
+    For graduated thresholds (e.g. test_files at 1 and 5), only the
+    lowest unmet threshold produces a gap to avoid duplicates.
     """
     weights = _CATEGORY_WEIGHTS.get(category, [])
     gaps: list[Gap] = []
+    # Track fields that already have a gap to avoid duplicates from
+    # graduated thresholds (e.g. test_files at threshold 1 and 5).
+    fields_with_gaps: set[str] = set()
 
     for field, points, threshold, proposal_name in weights:
         if points < 15:
             continue  # Below gap threshold
+
+        if field in fields_with_gaps:
+            continue  # Already reported a gap for this field
 
         if _signal_is_unknown(signals, field):
             continue  # Unknown signal — can't assess, not a gap
@@ -172,6 +181,7 @@ def identify_gaps(category: str, signals: MechanicalSignalsUnion) -> list[Gap]:
                 proposal_name=proposal_name,
             )
         )
+        fields_with_gaps.add(field)
 
     return gaps
 

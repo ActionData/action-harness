@@ -386,9 +386,15 @@ def detect_isolation_signals(repo_path: Path) -> IsolationMechanicalSignals:
         repo_path / ".env.sample"
     ).exists()
 
-    # Check for committed secrets (conservative scan)
-    no_committed_secrets = True
+    # Check for committed secrets (conservative scan).
+    # If git ls-files fails or returns no files for a git repo, treat
+    # as unknown (None) rather than assuming clean.
     source_files = _get_tracked_files(repo_path)
+    no_committed_secrets: bool | None
+    if not source_files and git_repo:
+        no_committed_secrets = None  # couldn't scan — unknown
+    else:
+        no_committed_secrets = True
     for sf in source_files[:50]:  # limit to 50 files
         try:
             content = Path(sf).read_text(errors="replace")

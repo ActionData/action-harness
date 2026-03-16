@@ -74,7 +74,7 @@ class IsolationMechanicalSignals(BaseModel):
     git_repo: bool = False
     lockfile_present: bool = False
     env_example_present: bool = False
-    no_committed_secrets: bool = True
+    no_committed_secrets: bool | None = True
     reproducible_build: bool = False
 
 

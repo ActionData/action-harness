@@ -113,18 +113,24 @@ def _check_pr_trigger(workflow_data: dict[str, object]) -> bool:
     return False
 
 
-def parse_github_actions(repo_path: Path) -> CIMechanicalSignals:
+def parse_github_actions(
+    repo_path: Path,
+    branch_protection: bool | None = None,
+) -> CIMechanicalSignals:
     """Parse GitHub Actions workflow files and return CI mechanical signals.
 
     Scans .github/workflows/*.yml and .github/workflows/*.yaml for CI
     configuration, trigger events, and known tool patterns.
+
+    branch_protection is passed through from the caller (e.g. GitHub API
+    check) so the returned signals object is complete.
     """
     typer.echo("[ci_parser] scanning GitHub Actions workflows", err=True)
 
     workflows_dir = repo_path / ".github" / "workflows"
     if not workflows_dir.is_dir():
         typer.echo("[ci_parser] no .github/workflows/ directory found", err=True)
-        return CIMechanicalSignals()
+        return CIMechanicalSignals(branch_protection=branch_protection)
 
     yml_files = glob_mod.glob(str(workflows_dir / "*.yml")) + glob_mod.glob(
         str(workflows_dir / "*.yaml")
@@ -132,7 +138,7 @@ def parse_github_actions(repo_path: Path) -> CIMechanicalSignals:
 
     if not yml_files:
         typer.echo("[ci_parser] no workflow files found", err=True)
-        return CIMechanicalSignals()
+        return CIMechanicalSignals(branch_protection=branch_protection)
 
     ci_exists = True
     triggers_on_pr = False
@@ -184,4 +190,5 @@ def parse_github_actions(repo_path: Path) -> CIMechanicalSignals:
         runs_lint=runs_lint,
         runs_typecheck=runs_typecheck,
         runs_format_check=runs_format_check,
+        branch_protection=branch_protection,
     )

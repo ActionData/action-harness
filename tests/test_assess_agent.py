@@ -291,3 +291,23 @@ def test_run_agent_assessment_merges(tmp_path: Path) -> None:
 
     assert result["ci_guardrails"].score == 70
     assert result["ci_guardrails"].agent_assessment == "Good CI"
+
+
+def test_dispatch_readonly_worker_no_result_key(tmp_path: Path) -> None:
+    """CLI output without 'result' key returns None."""
+    cli_output = {"session_id": "abc", "cost_usd": 0.01}
+
+    with patch("action_harness.assess_agent.subprocess.run") as mock_run:
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[],
+            returncode=0,
+            stdout=json.dumps(cli_output),
+            stderr="",
+        )
+        result = dispatch_readonly_worker(
+            prompt="test",
+            system_prompt="test",
+            worktree_path=tmp_path,
+        )
+
+    assert result is None

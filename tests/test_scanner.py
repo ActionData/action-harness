@@ -264,6 +264,24 @@ def test_isolation_detects_aws_key(tmp_path: Path) -> None:
     assert result.no_committed_secrets is False
 
 
+def test_rust_test_structure(tmp_path: Path) -> None:
+    """Rust #[test] annotations detected and counted."""
+    (tmp_path / "Cargo.toml").write_text("[package]\nname = 'demo'\n")
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "lib.rs").write_text(
+        "#[cfg(test)]\nmod tests {\n"
+        "    #[test]\n    fn test_a() {}\n"
+        "    #[test]\n    fn test_b() {}\n"
+        "}\n"
+    )
+
+    result = analyze_test_structure(tmp_path, "rust")
+    assert result.test_framework_configured is True
+    assert result.test_files == 1
+    assert result.test_functions == 2
+
+
 def test_isolation_detects_api_key_pattern(tmp_path: Path) -> None:
     """Secret scanner detects api_key = 'value' pattern."""
     subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True)

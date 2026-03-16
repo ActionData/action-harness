@@ -547,8 +547,8 @@ def assess(
     typer.echo(f"[assess] ecosystem: {profile.ecosystem}", err=True)
 
     # Step 2: Run all mechanical scanners
-    ci_signals = parse_github_actions(repo)
-    ci_signals.branch_protection = check_branch_protection(repo)
+    bp = check_branch_protection(repo)
+    ci_signals = parse_github_actions(repo, branch_protection=bp)
 
     testability_signals = analyze_test_structure(repo, profile.ecosystem)
     context_signals = detect_context_signals(repo)

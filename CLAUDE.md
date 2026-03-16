@@ -63,8 +63,9 @@ The CLI help text (`--help`) is the API documentation. When adding or changing c
 - Every `subprocess.run()` call MUST include a `timeout=` parameter. Use 120s for CLI tools (`gh`, `git`), 600s for long-running operations.
 - Catch `subprocess.TimeoutExpired` alongside `FileNotFoundError` and `OSError` in except clauses.
 
-### Type narrowing
+### Type safety
 - Never use bare `assert x is not None` for type narrowing — assertions are stripped by `python -O`. Use explicit `if x is None: raise ValueError(...)` or restructure the conditional so mypy narrows naturally.
+- Never use `# type: ignore` — fix the underlying type mismatch instead. If a value flows through the system as `str` but the destination expects `Literal["a", "b", "c"]`, type the entire chain with the Literal, don't suppress the error at the assignment. `type: ignore` hides real bugs.
 
 ### Regex patterns
 - Use `\b` word boundaries when matching keywords that could appear as substrings of other words (e.g., `\bchange:` not `change:` — the latter matches `exchange:`).

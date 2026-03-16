@@ -41,12 +41,15 @@ Review OpenSpec artifacts for quality, completeness, and agent-implementability.
 
    When reviewing multiple changes, launch them in parallel using multiple Agent tool calls in a single message (foreground parallel, not background).
 
-   Launch a spec-writer agent with subagent_type "spec-writer" to perform the review. The agent should:
+   Launch a spec-writer agent with subagent_type "spec-writer" to perform the review. Include the spec-reviewer agent definition (`.claude/agents/spec-reviewer.md`) in the agent's prompt for evaluation criteria. The agent should:
 
    - Read CLAUDE.md for project conventions
+   - Read `.claude/agents/spec-reviewer.md` for the review rubric
    - Read all the identified openspec artifacts
    - Read any referenced main specs in `openspec/specs/`
-   - Review following the spec-writer agent's evaluation criteria (proposal quality, spec precision, design decisions, task decomposition, self-validation, agent-implementability, assertion depth, test-spec traceability, capability coverage, spec-implementation alignment)
+   - **Trace data flows** through the spec: for each requirement, follow the data from input to output and check for logic errors, false positives in matching criteria, and stale data leaking between iterations
+   - **Check task-implementation alignment**: verify every function mentioned in a task would actually be called, look for shortcut temptation, verify parameter types thread correctly through call chains
+   - Review following the full rubric: proposal quality, spec precision, design decisions, task decomposition, self-validation, agent-implementability, assertion depth, test-spec traceability, capability coverage, spec-implementation alignment, semantic correctness
    - Report findings with severity (high/medium/low), artifact, description, and recommendation
 
 4. **Present findings**

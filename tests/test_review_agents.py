@@ -55,6 +55,22 @@ class TestBuildReviewPrompt:
         prompt = build_review_prompt("quality-reviewer", 1)
         assert "quality" in prompt.lower() or "maintainability" in prompt.lower()
 
+    def test_spec_compliance_reviewer_prompt_contains_tasks_and_compliance(self) -> None:
+        prompt = build_review_prompt("spec-compliance-reviewer", 42)
+        assert "tasks" in prompt.lower()
+        assert "compliance" in prompt.lower()
+
+    def test_spec_compliance_reviewer_prompt_contains_severity_definitions(self) -> None:
+        prompt = build_review_prompt("spec-compliance-reviewer", 42)
+        assert "critical" in prompt.lower()
+        assert "high" in prompt.lower()
+        assert "medium" in prompt.lower()
+        assert "low" in prompt.lower()
+
+    def test_spec_compliance_reviewer_prompt_contains_pr_number(self) -> None:
+        prompt = build_review_prompt("spec-compliance-reviewer", 99)
+        assert "99" in prompt
+
 
 class TestParseReviewFindings:
     def test_valid_json_with_findings(self) -> None:
@@ -422,6 +438,56 @@ class TestDispatchSingleReview:
         assert len(result.findings) == 1
         assert result.findings[0].title == "Bug"
         assert result.cost_usd == 0.03
+
+    def test_extra_context_included_in_user_prompt(self) -> None:
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = json.dumps(
+            {"result": json.dumps({"findings": [], "summary": "ok"})}
+        )
+        mock_result.stderr = ""
+
+        with patch(
+            "action_harness.review_agents.subprocess.run",
+            return_value=mock_result,
+        ) as mock_run:
+            dispatch_single_review(
+                "spec-compliance-reviewer",
+                pr_number=42,
+                worktree_path=Path("/tmp/wt"),
+                extra_context="sentinel text",
+            )
+
+        cmd = mock_run.call_args[0][0]
+        # The user prompt is the argument after "-p"
+        p_index = cmd.index("-p")
+        user_prompt = cmd[p_index + 1]
+        assert "sentinel text" in user_prompt
+        assert "Review PR #42" in user_prompt
+
+    def test_extra_context_none_unchanged_user_prompt(self) -> None:
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = json.dumps(
+            {"result": json.dumps({"findings": [], "summary": "ok"})}
+        )
+        mock_result.stderr = ""
+
+        with patch(
+            "action_harness.review_agents.subprocess.run",
+            return_value=mock_result,
+        ) as mock_run:
+            dispatch_single_review(
+                "bug-hunter",
+                pr_number=42,
+                worktree_path=Path("/tmp/wt"),
+                extra_context=None,
+            )
+
+        cmd = mock_run.call_args[0][0]
+        p_index = cmd.index("-p")
+        user_prompt = cmd[p_index + 1]
+        assert user_prompt == "Review PR #42"
 
 
 class TestDispatchReviewAgents:

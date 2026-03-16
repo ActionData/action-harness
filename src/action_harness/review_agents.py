@@ -74,6 +74,37 @@ context as needed. Focus on patterns that will cause maintenance burden.
 
 Do NOT modify any files. You are a read-only reviewer.
 """,
+    "spec-compliance-reviewer": """\
+You are a spec compliance reviewer. Your job is to verify that completed tasks
+in the task list were actually implemented as described in the diff.
+
+Instructions:
+1. Parse the tasks provided below and identify all tasks marked `[x]` (complete).
+2. For each completed task, read the description carefully.
+3. Fetch the PR diff by running `gh pr diff {pr_number}`. Read full files for
+   context as needed.
+4. For each `[x]` task, search the diff for evidence that the described
+   behavior was actually implemented. Evidence includes: function calls
+   mentioned in the task appearing in the diff, parameters described in the
+   task present in function signatures, test assertions matching what the task
+   specifies, and integration points described in the task being wired up.
+5. Flag tasks where the diff does not match the description.
+
+Severity definitions for compliance findings:
+- critical: A function call or integration described in the task is completely
+  absent from the diff (e.g., task says "call match_findings" but it is never
+  imported or called).
+- high: The task describes specific behavior but the implementation takes a
+  shortcut (e.g., "filter by matching" but implementation adds everything
+  without filtering).
+- medium: The task describes a parameter, return value, or type that does not
+  match the implementation (e.g., task says Literal type but implementation
+  uses plain str).
+- low: The task describes a test assertion that is weaker than specified or a
+  minor deviation from the task wording.
+
+Do NOT modify any files. You are a read-only reviewer.
+""",
 }
 
 _JSON_OUTPUT_SUFFIX = """
@@ -118,7 +149,7 @@ def build_review_prompt(agent_name: str, pr_number: int) -> str:
     if base is None:
         raise ValueError(
             f"Unknown review agent: {agent_name!r}. "
-            f"Expected one of: {', '.join(REVIEW_AGENT_NAMES)}"
+            f"Expected one of: {', '.join(_AGENT_PROMPTS)}"
         )
     return base.format(pr_number=pr_number) + _JSON_OUTPUT_SUFFIX
 
@@ -133,15 +164,20 @@ def dispatch_single_review(
     max_budget_usd: float | None = None,
     permission_mode: str = "bypassPermissions",
     verbose: bool = False,
+    extra_context: str | None = None,
 ) -> ReviewResult:
     """Dispatch a single review agent via Claude Code CLI.
 
     Builds and runs a `claude -p` command, parses structured findings.
+    When ``extra_context`` is provided, it is appended to the user prompt
+    after the standard "Review PR #N" text.
     """
     typer.echo(f"[review:{agent_name}] dispatching for PR #{pr_number}", err=True)
 
     system_prompt = build_review_prompt(agent_name, pr_number)
     user_prompt = f"Review PR #{pr_number}"
+    if extra_context is not None:
+        user_prompt = f"{user_prompt}\n\n{extra_context}"
 
     cmd = [
         "claude",

@@ -1,8 +1,8 @@
 ## 1. Agent Prompt and Dispatch Signature [no dependencies]
 
-- [ ] 1.1 Add `spec-compliance-reviewer` case to `build_review_prompt()` in `review_agents.py`. The system prompt instructs the agent to: parse tasks.md, identify `[x]` tasks, check each against the diff (fetched via `gh pr diff`), and report findings. Include severity definitions: critical (function/integration absent), high (shortcut taken), medium (parameter/type mismatch), low (weak test assertion).
-- [ ] 1.2 Add `extra_context: str | None = None` parameter to `dispatch_single_review()`. When set, append `extra_context` to the user prompt after the standard `"Review PR #{pr_number}"` text. Existing agents pass `None` (no behavior change).
-- [ ] 1.3 Add tests: `build_review_prompt("spec-compliance-reviewer", ...)` returns a prompt containing "tasks" and "compliance" and severity definitions. `dispatch_single_review` with `extra_context="sentinel text"` includes `"sentinel text"` in the user prompt. `dispatch_single_review` with `extra_context=None` produces unchanged user prompt.
+- [x] 1.1 Add `spec-compliance-reviewer` case to `build_review_prompt()` in `review_agents.py`. The system prompt instructs the agent to: parse tasks.md, identify `[x]` tasks, check each against the diff (fetched via `gh pr diff`), and report findings. Include severity definitions: critical (function/integration absent), high (shortcut taken), medium (parameter/type mismatch), low (weak test assertion).
+- [x] 1.2 Add `extra_context: str | None = None` parameter to `dispatch_single_review()`. When set, append `extra_context` to the user prompt after the standard `"Review PR #{pr_number}"` text. Existing agents pass `None` (no behavior change).
+- [x] 1.3 Add tests: `build_review_prompt("spec-compliance-reviewer", ...)` returns a prompt containing "tasks" and "compliance" and severity definitions. `dispatch_single_review` with `extra_context="sentinel text"` includes `"sentinel text"` in the user prompt. `dispatch_single_review` with `extra_context=None` produces unchanged user prompt.
 
 ## 2. Dispatch Integration [depends: 1]
 

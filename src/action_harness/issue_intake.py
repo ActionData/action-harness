@@ -41,9 +41,7 @@ def read_issue(issue_number: int, repo_path: Path) -> IssueData:
             f"[issue-intake] gh issue view timed out after {_GH_TIMEOUT_SECONDS}s",
             err=True,
         )
-        raise ValidationError(
-            f"Issue #{issue_number}: gh command timed out"
-        ) from None
+        raise ValidationError(f"Issue #{issue_number}: gh command timed out") from None
     except (FileNotFoundError, OSError) as e:
         typer.echo(f"[issue-intake] gh issue view failed: {e}", err=True)
         raise ValidationError(f"Issue #{issue_number}: gh command failed: {e}") from e

@@ -457,6 +457,151 @@ def _prune_worktrees(repo_path: Path) -> None:
     typer.echo(f"[clean] pruned worktrees in {repo_path}", err=True)
 
 
+@app.command()
+def assess(
+    repo: Path = typer.Option(
+        ...,
+        help="Path to the repository to assess",
+    ),
+    deep: bool = typer.Option(
+        False,
+        "--deep",
+        help="Run agent-based quality assessment in addition to mechanical scan",
+    ),
+    propose: bool = typer.Option(
+        False,
+        "--propose",
+        help="Generate OpenSpec proposals for identified gaps (implies --deep)",
+    ),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        help="Output full AssessmentReport JSON to stdout",
+    ),
+) -> None:
+    """Assess a repository's readiness for autonomous agent work.
+
+    Scores six categories: CI guardrails, testability, context, tooling,
+    observability, and isolation. Each scores 0-100 based on mechanical
+    signals (file presence, config parsing, CI workflow analysis).
+
+    Modes:
+
+    - **Base** (default): mechanical scan only — fast, no LLM cost.
+    - **--deep**: adds a read-only assessment agent for quality judgment.
+    - **--propose**: generates OpenSpec change proposals for gaps (implies --deep).
+
+    The `--json` flag outputs the full report as JSON to stdout. All
+    diagnostic output goes to stderr.
+
+    Examples:
+
+        action-harness assess --repo .
+
+        action-harness assess --repo ./my-project --json
+
+        action-harness assess --repo . --deep --propose
+    """
+    from datetime import UTC, datetime
+    from typing import Literal
+
+    from action_harness.assessment import AssessmentReport
+    from action_harness.branch_protection import check_branch_protection
+    from action_harness.ci_parser import parse_github_actions
+    from action_harness.formatter import collect_proposals, print_report
+    from action_harness.scanner import (
+        analyze_test_structure,
+        detect_context_signals,
+        detect_isolation_signals,
+        detect_observability_signals,
+        detect_tooling_signals,
+    )
+    from action_harness.scoring import compute_overall, score_all_categories
+
+    # --propose implies --deep
+    if propose:
+        deep = True
+
+    # Determine mode
+    mode: Literal["base", "deep", "propose"]
+    if propose:
+        mode = "propose"
+    elif deep:
+        mode = "deep"
+    else:
+        mode = "base"
+
+    repo = repo.resolve()
+    if not repo.exists():
+        typer.echo(f"Error: repository path does not exist: {repo}", err=True)
+        raise typer.Exit(code=1)
+
+    if not (repo / ".git").exists():
+        typer.echo(f"Error: not a git repository: {repo}", err=True)
+        raise typer.Exit(code=1)
+
+    typer.echo(f"[assess] starting {mode} assessment of {repo}", err=True)
+
+    # Step 1: Profile repo for ecosystem
+    profile = profile_repo(repo)
+    typer.echo(f"[assess] ecosystem: {profile.ecosystem}", err=True)
+
+    # Step 2: Run all mechanical scanners
+    bp = check_branch_protection(repo)
+    ci_signals = parse_github_actions(repo, branch_protection=bp)
+
+    testability_signals = analyze_test_structure(repo, profile.ecosystem)
+    context_signals = detect_context_signals(repo)
+    tooling_signals = detect_tooling_signals(repo)
+    observability_signals = detect_observability_signals(repo)
+    isolation_signals = detect_isolation_signals(repo)
+
+    # Step 3: Score all categories
+    categories = score_all_categories(
+        ci_signals=ci_signals,
+        testability_signals=testability_signals,
+        context_signals=context_signals,
+        tooling_signals=tooling_signals,
+        observability_signals=observability_signals,
+        isolation_signals=isolation_signals,
+    )
+
+    # Step 4: Deep mode — agent assessment
+    if deep:
+        typer.echo("[assess] running agent assessment (--deep)", err=True)
+        from action_harness.assess_agent import run_agent_assessment
+
+        categories = run_agent_assessment(categories, repo)
+
+    # Step 5: Build report
+    overall = compute_overall(categories)
+    proposals = collect_proposals(categories)
+
+    report = AssessmentReport(
+        overall_score=overall,
+        categories=categories,
+        proposals=proposals,
+        repo_path=str(repo),
+        timestamp=datetime.now(UTC).isoformat(),
+        mode=mode,
+    )
+
+    # Step 6: Propose mode — generate OpenSpec proposals
+    if propose and proposals:
+        typer.echo("[assess] generating proposals (--propose)", err=True)
+        from action_harness.gap_proposals import generate_proposals
+
+        generate_proposals(proposals, repo, profile)
+
+    # Step 7: Output
+    if json_output:
+        typer.echo(report.model_dump_json(indent=2))
+    else:
+        print_report(report, deep=deep, propose=propose)
+
+    typer.echo(f"[assess] complete: overall score = {overall}", err=True)
+
+
 def _clean_all_workspaces(workspaces_root: Path, harness_home: Path) -> None:
     """Remove all workspaces across all repos."""
     repos_dir = harness_home / "repos"

@@ -32,25 +32,31 @@ def extract_json_block(text: str) -> dict[str, Any] | None:
         except json.JSONDecodeError:
             pass
 
-    # Look for the last { ... } block (the agent may produce prose before it)
-    brace_start = text.rfind("{")
-    if brace_start == -1:
-        return None
+    # Try each { position from the start to find the outermost JSON object.
+    # Starting from the first brace handles nested JSON correctly (e.g.
+    # {"categories": {"ci": ...}}) — rfind would start at an inner brace.
+    pos = 0
+    while True:
+        brace_start = text.find("{", pos)
+        if brace_start == -1:
+            break
 
-    # Find matching closing brace
-    depth = 0
-    for i in range(brace_start, len(text)):
-        if text[i] == "{":
-            depth += 1
-        elif text[i] == "}":
-            depth -= 1
-            if depth == 0:
-                try:
-                    data = json.loads(text[brace_start : i + 1])
-                    if isinstance(data, dict):
-                        return data
-                except json.JSONDecodeError:
-                    pass
-                break
+        # Find matching closing brace
+        depth = 0
+        for i in range(brace_start, len(text)):
+            if text[i] == "{":
+                depth += 1
+            elif text[i] == "}":
+                depth -= 1
+                if depth == 0:
+                    try:
+                        data = json.loads(text[brace_start : i + 1])
+                        if isinstance(data, dict):
+                            return data
+                    except json.JSONDecodeError:
+                        pass
+                    break
+
+        pos = brace_start + 1
 
     return None

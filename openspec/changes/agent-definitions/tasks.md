@@ -32,15 +32,15 @@
 
 ## 6. Tests
 
-- [ ] 6.1 Test `parse_agent_file` with frontmatter: create a temp file with `---\nname: test\n---\nPrompt body`. Assert metadata `{"name": "test"}` and body `"Prompt body"`.
-- [ ] 6.2 Test `parse_agent_file` without frontmatter: create a temp file with `"Prompt body"`. Assert metadata `{}` and body `"Prompt body"`.
-- [ ] 6.3 Test `parse_agent_file` with malformed YAML: create a temp file with `---\n: invalid: yaml:\n---\nBody`. Assert metadata `{}` and body contains `"Body"`.
-- [ ] 6.4 Test `load_agent_prompt` with repo override: create temp dirs for repo (`.harness/agents/bug-hunter.md` with body `"repo version"`) and harness (`bug-hunter.md` with body `"default version"`). Assert returns `"repo version"`.
-- [ ] 6.5 Test `load_agent_prompt` fallback: create only harness dir with `bug-hunter.md` body `"default version"`. No repo override. Assert returns `"default version"`.
-- [ ] 6.6 Test `load_agent_prompt` missing: call with agent name that has no file in either location. Assert `FileNotFoundError` raised with agent name in message.
-- [ ] 6.7 Test `build_review_prompt` end-to-end: create a real agent file in a temp dir with body `"Review PR #{pr_number} for bugs"`. Call `build_review_prompt("bug-hunter", 42, repo_path, harness_dir, ecosystem="python")`. Assert result contains `"Review PR #42 for bugs"`, contains `_JSON_OUTPUT_FORMAT` text, and contains `_GENERIC_SEVERITY_SUFFIX` text.
-- [ ] 6.8 Test `build_review_prompt` with custom-severity agent: create a temp `spec-compliance-reviewer.md`. Call `build_review_prompt`. Assert result contains `_JSON_OUTPUT_FORMAT` but does NOT contain `_GENERIC_SEVERITY_SUFFIX`.
-- [ ] 6.9 Verify all 5 default agent files exist in `.harness/agents/` and each has valid YAML frontmatter with `name` and `description` fields.
+- [x] 6.1 Test `parse_agent_file` with frontmatter: create a temp file with `---\nname: test\n---\nPrompt body`. Assert metadata `{"name": "test"}` and body `"Prompt body"`.
+- [x] 6.2 Test `parse_agent_file` without frontmatter: create a temp file with `"Prompt body"`. Assert metadata `{}` and body `"Prompt body"`.
+- [x] 6.3 Test `parse_agent_file` with malformed YAML: create a temp file with `---\n: invalid: yaml:\n---\nBody`. Assert metadata `{}` and body contains `"Body"`.
+- [x] 6.4 Test `load_agent_prompt` with repo override: create temp dirs for repo (`.harness/agents/bug-hunter.md` with body `"repo version"`) and harness (`bug-hunter.md` with body `"default version"`). Assert returns `"repo version"`.
+- [x] 6.5 Test `load_agent_prompt` fallback: create only harness dir with `bug-hunter.md` body `"default version"`. No repo override. Assert returns `"default version"`.
+- [x] 6.6 Test `load_agent_prompt` missing: call with agent name that has no file in either location. Assert `FileNotFoundError` raised with agent name in message.
+- [x] 6.7 Test `build_review_prompt` end-to-end: create a real agent file in a temp dir with body `"Review PR #{pr_number} for bugs"`. Call `build_review_prompt("bug-hunter", 42, repo_path, harness_dir, ecosystem="python")`. Assert result contains `"Review PR #42 for bugs"`, contains `_JSON_OUTPUT_FORMAT` text, and contains `_GENERIC_SEVERITY_SUFFIX` text.
+- [x] 6.8 Test `build_review_prompt` with custom-severity agent: create a temp `spec-compliance-reviewer.md`. Call `build_review_prompt`. Assert result contains `_JSON_OUTPUT_FORMAT` but does NOT contain `_GENERIC_SEVERITY_SUFFIX`.
+- [x] 6.9 Verify all 5 default agent files exist in `.harness/agents/` and each has valid YAML frontmatter with `name` and `description` fields.
 
 ## 7. Self-Validation
 

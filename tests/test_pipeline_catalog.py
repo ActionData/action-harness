@@ -41,10 +41,17 @@ class TestPipelineEcosystemThreading:
 
     def test_dispatch_review_agents_passes_ecosystem_to_build_prompt(self) -> None:
         """Verify build_review_prompt receives the ecosystem value."""
+        from action_harness.agents import resolve_harness_agents_dir
         from action_harness.review_agents import build_review_prompt
 
-        prompt_python = build_review_prompt("bug-hunter", 42, ecosystem="python")
-        prompt_unknown = build_review_prompt("bug-hunter", 42, ecosystem="unknown")
+        harness_dir = resolve_harness_agents_dir()
+        empty_repo = Path("/tmp/nonexistent-repo-for-test")
+        prompt_python = build_review_prompt(
+            "bug-hunter", 42, empty_repo, harness_dir, ecosystem="python"
+        )
+        prompt_unknown = build_review_prompt(
+            "bug-hunter", 42, empty_repo, harness_dir, ecosystem="unknown"
+        )
 
         # Python prompt should have more checklist items than unknown
         assert "subprocess-timeout" in prompt_python

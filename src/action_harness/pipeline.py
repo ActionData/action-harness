@@ -627,9 +627,10 @@ def _run_pipeline_inner(
                 stages,
             )
 
-            # Tag each result with the tolerance level used for this round
+            # Tag each result with the tolerance level used for this round.
+            # tolerance is validated at CLI entry; cast for Literal type.
             for rr in latest_review_results:
-                rr.tolerance = tolerance
+                rr.tolerance = tolerance  # type: ignore[assignment]
 
             # After getting this round's review results, match against prior
             # round's pre-fix actionable findings to detect what persisted.
@@ -937,6 +938,7 @@ def _post_review_comment(
             cwd=worktree_path,
             capture_output=True,
             text=True,
+            timeout=120,
         )
         if gh_result.returncode != 0:
             typer.echo(
@@ -945,7 +947,7 @@ def _post_review_comment(
             )
         elif verbose:
             typer.echo("[pipeline] posted review comment on PR", err=True)
-    except (FileNotFoundError, OSError) as e:
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
         typer.echo(f"[pipeline] warning: gh pr comment failed: {e}", err=True)
 
 
@@ -1064,6 +1066,7 @@ def _run_review_fix_retry(
             cwd=worktree_path,
             capture_output=True,
             text=True,
+            timeout=120,
         )
         if push_result.returncode != 0:
             typer.echo(
@@ -1071,7 +1074,7 @@ def _run_review_fix_retry(
                 err=True,
             )
             return False
-    except (FileNotFoundError, OSError) as e:
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
         typer.echo(f"[pipeline] warning: git push failed: {e}", err=True)
         return False
 
@@ -1086,8 +1089,9 @@ def _run_review_fix_retry(
             cwd=worktree_path,
             capture_output=True,
             text=True,
+            timeout=120,
         )
-    except (FileNotFoundError, OSError) as e:
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
         typer.echo(f"[pipeline] warning: gh pr comment failed: {e}", err=True)
 
     typer.echo("[pipeline] review fix retry completed successfully", err=True)
@@ -1175,6 +1179,7 @@ def _flag_pr_needs_human(
             cwd=worktree_path,
             capture_output=True,
             text=True,
+            timeout=120,
         )
         if result.returncode != 0:
             typer.echo(
@@ -1183,7 +1188,7 @@ def _flag_pr_needs_human(
             )
         elif verbose:
             typer.echo("[pipeline] posted needs-human comment on PR", err=True)
-    except (FileNotFoundError, OSError) as e:
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
         typer.echo(f"[pipeline] warning: gh pr comment failed: {e}", err=True)
 
     # Add label
@@ -1193,6 +1198,7 @@ def _flag_pr_needs_human(
             cwd=worktree_path,
             capture_output=True,
             text=True,
+            timeout=120,
         )
         if result.returncode != 0:
             typer.echo(
@@ -1201,7 +1207,7 @@ def _flag_pr_needs_human(
             )
         elif verbose:
             typer.echo("[pipeline] added needs-human label to PR", err=True)
-    except (FileNotFoundError, OSError) as e:
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
         typer.echo(f"[pipeline] warning: gh pr edit --add-label failed: {e}", err=True)
 
 
@@ -1214,6 +1220,7 @@ def _comment_archive_complete(worktree_path: Path, pr_url: str, verbose: bool) -
             cwd=worktree_path,
             capture_output=True,
             text=True,
+            timeout=120,
         )
         if result.returncode != 0:
             typer.echo(
@@ -1222,7 +1229,7 @@ def _comment_archive_complete(worktree_path: Path, pr_url: str, verbose: bool) -
             )
         elif verbose:
             typer.echo("[pipeline] posted archive comment on PR", err=True)
-    except (FileNotFoundError, OSError) as e:
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
         typer.echo(f"[pipeline] warning: gh pr comment failed: {e}", err=True)
 
 

@@ -111,7 +111,7 @@ class ReviewResult(StageResult):
     agent_name: str
     findings: list[ReviewFinding] = []
     cost_usd: float | None = None
-    tolerance: str | None = None
+    tolerance: Literal["low", "med", "high"] | None = None
 
 
 # Discriminated union so Pydantic preserves subtypes through serialization.

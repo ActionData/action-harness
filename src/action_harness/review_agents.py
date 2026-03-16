@@ -175,6 +175,16 @@ def dispatch_single_review(
             cwd=worktree_path,
             capture_output=True,
             text=True,
+            timeout=600,
+        )
+    except subprocess.TimeoutExpired:
+        duration = time.monotonic() - start_time
+        typer.echo(f"[review:{agent_name}] timed out after 600s", err=True)
+        return ReviewResult(
+            success=False,
+            agent_name=agent_name,
+            error="Claude CLI timed out after 600s",
+            duration_seconds=duration,
         )
     except (FileNotFoundError, OSError) as e:
         duration = time.monotonic() - start_time

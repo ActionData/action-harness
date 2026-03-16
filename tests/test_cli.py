@@ -744,13 +744,13 @@ class TestReviewCycleCli:
         assert "med" in output
         assert "high" in output
 
-    def test_valid_review_cycle_accepted(self, fake_repo: Path) -> None:
+    def test_valid_review_cycle_accepted_and_threaded(self, fake_repo: Path) -> None:
         with (
             patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"),
             patch(
                 "action_harness.pipeline.run_pipeline",
                 return_value=_mock_pipeline_success(),
-            ),
+            ) as mock_pipeline,
         ):
             result = runner.invoke(
                 app,
@@ -765,6 +765,9 @@ class TestReviewCycleCli:
                 ],
             )
         assert result.exit_code == 0
+        # Verify review_cycle is threaded through to run_pipeline
+        call_kwargs = mock_pipeline.call_args[1]
+        assert call_kwargs["review_cycle"] == ["low", "high"]
 
     def test_dry_run_shows_review_cycle(self, fake_repo: Path) -> None:
         with patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"):

@@ -11,6 +11,7 @@ import typer
 from action_harness import __version__
 from action_harness.models import ValidationError
 from action_harness.profiler import profile_repo
+from action_harness.review_agents import TOLERANCE_THRESHOLD
 from action_harness.slugify import slugify_prompt
 
 app = typer.Typer(
@@ -216,8 +217,6 @@ def run(
         raise typer.Exit(code=1)
 
     # Validate --review-cycle
-    from action_harness.review_agents import TOLERANCE_THRESHOLD
-
     valid_tolerances = set(TOLERANCE_THRESHOLD.keys())
     review_cycle_list = [t.strip() for t in review_cycle.split(",") if t.strip()]
     if not review_cycle_list:

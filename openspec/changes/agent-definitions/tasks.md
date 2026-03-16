@@ -28,7 +28,7 @@
 
 ## 5. Package Data
 
-- [ ] 5.1 Add `[tool.hatch.build.targets.wheel.force-include]` to `pyproject.toml`: map `.harness/agents/` to `action_harness/default_agents/` so agent files are bundled inside the wheel. This matches the fallback path in `resolve_harness_agents_dir()`.
+- [x] 5.1 Add `[tool.hatch.build.targets.wheel.force-include]` to `pyproject.toml`: map `.harness/agents/` to `action_harness/default_agents/` so agent files are bundled inside the wheel. This matches the fallback path in `resolve_harness_agents_dir()`.
 
 ## 6. Tests
 

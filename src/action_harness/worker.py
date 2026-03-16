@@ -136,7 +136,13 @@ def dispatch_worker(
     progress_contents: str | None = None
     progress_file = worktree_path / PROGRESS_FILENAME
     if progress_file.exists():
-        progress_contents = progress_file.read_text()
+        try:
+            progress_contents = progress_file.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            typer.echo(
+                f"[worker] warning: could not read progress file: {exc}",
+                err=True,
+            )
 
     if session_id is not None and feedback is not None:
         # Resume mode: feedback is the user prompt, no system prompt

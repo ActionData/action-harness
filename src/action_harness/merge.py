@@ -110,7 +110,15 @@ def wait_for_ci(
         return False
 
     if result.returncode != 0:
-        typer.echo(f"[merge] CI checks failed: {result.stderr.strip()}", err=True)
+        stderr = result.stderr.strip()
+        if "no checks" in stderr.lower() or "no status checks" in stderr.lower():
+            typer.echo(
+                "[merge] warning: no CI checks configured on this repo. "
+                "Use --wait-for-ci only on repos with CI. Treating as pass.",
+                err=True,
+            )
+            return True
+        typer.echo(f"[merge] CI checks failed: {stderr}", err=True)
         return False
 
     typer.echo("[merge] CI checks passed", err=True)

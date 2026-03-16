@@ -221,6 +221,13 @@ def run(
 
     # Resolve --issue into --change or --prompt mode
     if issue is not None:
+        # Validate common prerequisites (git repo, claude, gh) before calling gh
+        try:
+            _validate_common(resolved_repo)
+        except ValidationError as e:
+            typer.echo(f"Error: {e}", err=True)
+            raise typer.Exit(code=1) from None
+
         from action_harness.issue_intake import (
             build_issue_prompt,
             detect_openspec_change,
@@ -256,15 +263,16 @@ def run(
             raise typer.Exit(code=1)
         task_label = f"prompt-{slug}"
     else:
-        assert change is not None  # validated above
+        if change is None:
+            typer.echo("Error: specify one of --change, --prompt, or --issue", err=True)
+            raise typer.Exit(code=1)
         task_label = change
 
     # Validate inputs: prompt mode skips OpenSpec directory check
     try:
         if prompt is not None:
             validate_inputs_prompt(resolved_repo)
-        else:
-            assert change is not None
+        elif change is not None:
             validate_inputs(change, resolved_repo)
     except ValidationError as e:
         typer.echo(f"Error: {e}", err=True)

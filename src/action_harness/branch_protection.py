@@ -5,6 +5,8 @@ from pathlib import Path
 
 import typer
 
+from action_harness.worktree import _get_default_branch
+
 
 def _get_remote_owner_repo(repo_path: Path) -> str | None:
     """Extract owner/repo from git remote URL."""
@@ -30,23 +32,6 @@ def _get_remote_owner_repo(repo_path: Path) -> str | None:
         return None
     except FileNotFoundError:
         return None
-
-
-def _get_default_branch(repo_path: Path) -> str:
-    """Get the default branch name."""
-    try:
-        result = subprocess.run(
-            ["git", "symbolic-ref", "refs/remotes/origin/HEAD", "--short"],
-            cwd=repo_path,
-            capture_output=True,
-            text=True,
-        )
-        if result.returncode == 0:
-            # Returns origin/main or origin/master
-            return result.stdout.strip().removeprefix("origin/")
-    except FileNotFoundError:
-        pass
-    return "main"
 
 
 def check_branch_protection(repo_path: Path) -> bool | None:

@@ -10,6 +10,8 @@ import typer
 
 from action_harness.models import ValidationError
 
+_GH_TIMEOUT_SECONDS = 120
+
 
 class IssueData(NamedTuple):
     """Data extracted from a GitHub issue."""
@@ -32,7 +34,16 @@ def read_issue(issue_number: int, repo_path: Path) -> IssueData:
             cwd=repo_path,
             capture_output=True,
             text=True,
+            timeout=_GH_TIMEOUT_SECONDS,
         )
+    except subprocess.TimeoutExpired:
+        typer.echo(
+            f"[issue-intake] gh issue view timed out after {_GH_TIMEOUT_SECONDS}s",
+            err=True,
+        )
+        raise ValidationError(
+            f"Issue #{issue_number}: gh command timed out"
+        ) from None
     except (FileNotFoundError, OSError) as e:
         typer.echo(f"[issue-intake] gh issue view failed: {e}", err=True)
         raise ValidationError(f"Issue #{issue_number}: gh command failed: {e}") from e
@@ -79,7 +90,7 @@ def read_issue(issue_number: int, repo_path: Path) -> IssueData:
 
 _CHANGE_PATTERNS = [
     re.compile(r"openspec:([a-z0-9-]+)"),
-    re.compile(r"change:\s*([a-z0-9-]+)"),
+    re.compile(r"\bchange:\s*([a-z0-9-]+)"),
     re.compile(r"openspec/changes/([a-z0-9-]+)"),
 ]
 
@@ -120,8 +131,9 @@ def label_issue(issue_number: int, label: str, repo_path: Path, verbose: bool = 
             cwd=repo_path,
             capture_output=True,
             text=True,
+            timeout=_GH_TIMEOUT_SECONDS,
         )
-    except (FileNotFoundError, OSError) as e:
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
         typer.echo(
             f"[issue-intake] warning: failed to label issue #{issue_number}: {e}",
             err=True,
@@ -148,8 +160,9 @@ def comment_on_issue(issue_number: int, body: str, repo_path: Path, verbose: boo
             cwd=repo_path,
             capture_output=True,
             text=True,
+            timeout=_GH_TIMEOUT_SECONDS,
         )
-    except (FileNotFoundError, OSError) as e:
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
         typer.echo(
             f"[issue-intake] warning: failed to comment on issue #{issue_number}: {e}",
             err=True,

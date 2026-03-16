@@ -697,21 +697,22 @@ class TestComputeFindingPriority:
         assert p1 > p2
 
     def test_cross_agent_with_title_overlap(self) -> None:
-        """(c) Cross-agent detection via title substring overlap on same file."""
+        """(c) Cross-agent detection: reworded titles with shared bigram overlap."""
+        # Spec scenario: "null check missing in handler" and "Missing null check"
+        # share the bigram "null check" — cross_agent_count should be 2 for both.
         f1 = _make_finding(
             "high",
-            title="null check missing",
+            title="null check missing in handler",
             file="foo.py",
             agent="bug-hunter",
         )
         f2 = _make_finding(
             "high",
-            title="null check missing in handler",
+            title="Missing null check",
             file="foo.py",
             agent="quality-reviewer",
         )
         all_findings = [f1, f2]
-        # "null check missing" is a substring of "null check missing in handler"
         assert compute_finding_priority(f1, all_findings) == 2 * 10 + 2  # 22
         assert compute_finding_priority(f2, all_findings) == 2 * 10 + 2  # 22
 

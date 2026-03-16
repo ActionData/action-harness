@@ -15,6 +15,7 @@ from action_harness.models import (
 )
 from action_harness.openspec_reviewer import parse_review_result
 from action_harness.pipeline import run_pipeline
+from action_harness.review_agents import format_review_feedback
 
 
 def _needs_human_review_result() -> OpenSpecReviewResult:
@@ -709,10 +710,7 @@ class TestMaxFindingsPerRetryPipeline:
             ),
             patch(
                 "action_harness.pipeline.format_review_feedback",
-                wraps=__import__(
-                    "action_harness.review_agents",
-                    fromlist=["format_review_feedback"],
-                ).format_review_feedback,
+                wraps=format_review_feedback,
             ) as mock_format,
         ):
             pr_result, manifest = run_pipeline(
@@ -760,10 +758,7 @@ class TestMaxFindingsPerRetryPipeline:
             ),
             patch(
                 "action_harness.pipeline.format_review_feedback",
-                wraps=__import__(
-                    "action_harness.review_agents",
-                    fromlist=["format_review_feedback"],
-                ).format_review_feedback,
+                wraps=format_review_feedback,
             ) as mock_format,
         ):
             pr_result, manifest = run_pipeline("test-change", test_repo, max_retries=1)

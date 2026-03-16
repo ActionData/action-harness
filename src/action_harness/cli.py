@@ -161,6 +161,7 @@ def run(
     max_findings_per_retry: int = typer.Option(
         5,
         "--max-findings-per-retry",
+        min=0,
         help="Maximum review findings sent to the fix-retry worker per round. "
         "Higher-priority findings are selected first. 0 means no cap.",
     ),

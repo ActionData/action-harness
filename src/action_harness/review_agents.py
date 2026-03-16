@@ -334,22 +334,59 @@ def dispatch_review_agents(
     return results
 
 
+def _titles_overlap(title_a: str, title_b: str) -> bool:
+    """Check whether two titles share a meaningful word overlap.
+
+    Uses case-insensitive comparison. Two titles overlap when either full
+    title is a substring of the other, OR they share a contiguous sequence
+    of 2+ words. Single-word matches (e.g. "Bug") are ignored to avoid
+    false positives from common short words.
+    """
+    a_lower = title_a.lower()
+    b_lower = title_b.lower()
+
+    # Fast path: full-title substring
+    if a_lower in b_lower or b_lower in a_lower:
+        return True
+
+    # Token-overlap: check if any contiguous 2+ word sequence from one
+    # title appears in the other. This catches reworded titles like
+    # "null check missing in handler" vs "Missing null check".
+    a_words = a_lower.split()
+    b_words = b_lower.split()
+    if len(a_words) < 2 or len(b_words) < 2:
+        return False
+
+    # Build set of 2-word sequences from the shorter title, check against longer
+    shorter, longer = (a_words, b_lower) if len(a_words) <= len(b_words) else (b_words, a_lower)
+    for i in range(len(shorter) - 1):
+        bigram = f"{shorter[i]} {shorter[i + 1]}"
+        if bigram in longer:
+            return True
+
+    return False
+
+
 def compute_finding_priority(finding: ReviewFinding, all_findings: list[ReviewFinding]) -> int:
     """Compute priority score for a finding based on severity and cross-agent agreement.
 
     Priority = ``SEVERITY_RANK[severity] * 10 + cross_agent_count`` where
     *cross_agent_count* is the number of distinct agents that flagged a finding
-    on the same file with overlapping title text (case-insensitive substring).
+    on the same file with overlapping title text (case-insensitive token overlap).
     """
-    finding_title_lower = finding.title.lower()
+    finding_title = finding.title
+    if not finding_title:
+        return SEVERITY_RANK[finding.severity] * 10 + 1
+
     agents_with_overlap: set[str] = {finding.agent}
     for other in all_findings:
         if other.file != finding.file:
             continue
         if other.agent == finding.agent:
             continue
-        other_title_lower = other.title.lower()
-        if finding_title_lower in other_title_lower or other_title_lower in finding_title_lower:
+        if not other.title:
+            continue
+        if _titles_overlap(finding_title, other.title):
             agents_with_overlap.add(other.agent)
     cross_agent_count = len(agents_with_overlap)
     return SEVERITY_RANK[finding.severity] * 10 + cross_agent_count

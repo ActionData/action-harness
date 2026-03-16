@@ -334,6 +334,50 @@ def dispatch_review_agents(
     return results
 
 
+def compute_finding_priority(
+    finding: ReviewFinding, all_findings: list[ReviewFinding]
+) -> int:
+    """Compute priority score for a finding based on severity and cross-agent agreement.
+
+    Priority = ``SEVERITY_RANK[severity] * 10 + cross_agent_count`` where
+    *cross_agent_count* is the number of distinct agents that flagged a finding
+    on the same file with overlapping title text (case-insensitive substring).
+    """
+    finding_title_lower = finding.title.lower()
+    agents_with_overlap: set[str] = {finding.agent}
+    for other in all_findings:
+        if other.file != finding.file:
+            continue
+        if other.agent == finding.agent:
+            continue
+        other_title_lower = other.title.lower()
+        if finding_title_lower in other_title_lower or other_title_lower in finding_title_lower:
+            agents_with_overlap.add(other.agent)
+    cross_agent_count = len(agents_with_overlap)
+    return SEVERITY_RANK[finding.severity] * 10 + cross_agent_count
+
+
+def select_top_findings(
+    findings: list[ReviewFinding], max_findings: int
+) -> tuple[list[ReviewFinding], list[ReviewFinding]]:
+    """Select top findings by priority, returning (selected, deferred).
+
+    When ``max_findings <= 0``, all findings are returned as selected with
+    an empty deferred list (no cap).
+    """
+    if max_findings <= 0:
+        return list(findings), []
+
+    scored = sorted(
+        findings,
+        key=lambda f: compute_finding_priority(f, findings),
+        reverse=True,
+    )
+    selected = scored[:max_findings]
+    deferred = scored[max_findings:]
+    return selected, deferred
+
+
 def filter_actionable_findings(results: list[ReviewResult], tolerance: str) -> list[ReviewFinding]:
     """Return findings at or above the tolerance threshold.
 

@@ -10,12 +10,14 @@ from action_harness.models import AcknowledgedFinding, ReviewFinding, ReviewResu
 from action_harness.review_agents import (
     REVIEW_AGENT_NAMES,
     build_review_prompt,
+    compute_finding_priority,
     dispatch_review_agents,
     dispatch_single_review,
     filter_actionable_findings,
     format_review_feedback,
     match_findings,
     parse_review_findings,
+    select_top_findings,
     triage_findings,
 )
 
@@ -652,6 +654,99 @@ class TestMatchFindings:
         )
         matched = match_findings([prior], [current])
         assert len(matched) == 0
+
+
+class TestComputeFindingPriority:
+    """Task 1.3: priority scoring tests."""
+
+    def test_critical_outranks_medium_with_more_agents(self) -> None:
+        """(a) critical(cross=1) priority=31 > medium(cross=3) priority=13."""
+        critical = _make_finding("critical", title="Crash bug", file="f.py", agent="bug-hunter")
+        # medium finding flagged by 3 agents on the same file with overlapping title
+        med1 = _make_finding("medium", title="Null issue", file="g.py", agent="bug-hunter")
+        med2 = _make_finding("medium", title="Null issue found", file="g.py", agent="quality-reviewer")
+        med3 = _make_finding("medium", title="Null issue detected", file="g.py", agent="test-reviewer")
+        all_findings = [critical, med1, med2, med3]
+        assert compute_finding_priority(critical, all_findings) == 3 * 10 + 1  # 31
+        assert compute_finding_priority(med1, all_findings) == 1 * 10 + 3  # 13
+        assert compute_finding_priority(critical, all_findings) > compute_finding_priority(
+            med1, all_findings
+        )
+
+    def test_same_severity_more_agents_ranks_higher(self) -> None:
+        """(b) Two high findings: cross_agent_count=3 beats cross_agent_count=1."""
+        # All three agents flag "null check" variants on foo.py — each title
+        # is a substring of the next, so all three overlap with each other.
+        h1 = _make_finding("high", title="Null check", file="foo.py", agent="bug-hunter")
+        h1_overlap1 = _make_finding(
+            "high", title="Null check missing", file="foo.py", agent="quality-reviewer"
+        )
+        h1_overlap2 = _make_finding(
+            "high", title="Null check missing in handler", file="foo.py", agent="test-reviewer"
+        )
+        h2 = _make_finding("high", title="Race condition", file="bar.py", agent="bug-hunter")
+        all_findings = [h1, h1_overlap1, h1_overlap2, h2]
+        p1 = compute_finding_priority(h1, all_findings)
+        p2 = compute_finding_priority(h2, all_findings)
+        assert p1 == 2 * 10 + 3  # 23
+        assert p2 == 2 * 10 + 1  # 21
+        assert p1 > p2
+
+    def test_cross_agent_with_title_overlap(self) -> None:
+        """(c) Cross-agent detection via title substring overlap on same file."""
+        f1 = _make_finding(
+            "high",
+            title="null check missing",
+            file="foo.py",
+            agent="bug-hunter",
+        )
+        f2 = _make_finding(
+            "high",
+            title="null check missing in handler",
+            file="foo.py",
+            agent="quality-reviewer",
+        )
+        all_findings = [f1, f2]
+        # "null check missing" is a substring of "null check missing in handler"
+        assert compute_finding_priority(f1, all_findings) == 2 * 10 + 2  # 22
+        assert compute_finding_priority(f2, all_findings) == 2 * 10 + 2  # 22
+
+    def test_no_title_overlap_no_cross_agent(self) -> None:
+        """(d) Different titles on same file → cross_agent_count=1 each."""
+        f1 = _make_finding(
+            "high", title="race condition", file="foo.py", agent="bug-hunter"
+        )
+        f2 = _make_finding(
+            "medium", title="unused import", file="foo.py", agent="quality-reviewer"
+        )
+        all_findings = [f1, f2]
+        assert compute_finding_priority(f1, all_findings) == 2 * 10 + 1  # 21
+        assert compute_finding_priority(f2, all_findings) == 1 * 10 + 1  # 11
+
+
+class TestSelectTopFindings:
+    """Task 1.3: selection tests."""
+
+    def test_max_findings_zero_returns_all(self) -> None:
+        """(e) max_findings=0 returns all as selected, empty deferred."""
+        findings = [_make_finding("high"), _make_finding("medium"), _make_finding("low")]
+        selected, deferred = select_top_findings(findings, max_findings=0)
+        assert len(selected) == 3
+        assert len(deferred) == 0
+
+    def test_fewer_than_cap(self) -> None:
+        """(f) max_findings=5 with 3 findings returns 3 selected, 0 deferred."""
+        findings = [_make_finding("high"), _make_finding("medium"), _make_finding("low")]
+        selected, deferred = select_top_findings(findings, max_findings=5)
+        assert len(selected) == 3
+        assert len(deferred) == 0
+
+    def test_more_than_cap(self) -> None:
+        """(g) max_findings=5 with 12 findings returns 5 selected, 7 deferred."""
+        findings = [_make_finding("medium", title=f"Finding {i}") for i in range(12)]
+        selected, deferred = select_top_findings(findings, max_findings=5)
+        assert len(selected) == 5
+        assert len(deferred) == 7
 
 
 class TestFormatReviewFeedbackEdgeCases:

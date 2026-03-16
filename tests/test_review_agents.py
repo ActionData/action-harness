@@ -442,9 +442,7 @@ class TestDispatchSingleReview:
     def test_extra_context_included_in_user_prompt(self) -> None:
         mock_result = MagicMock()
         mock_result.returncode = 0
-        mock_result.stdout = json.dumps(
-            {"result": json.dumps({"findings": [], "summary": "ok"})}
-        )
+        mock_result.stdout = json.dumps({"result": json.dumps({"findings": [], "summary": "ok"})})
         mock_result.stderr = ""
 
         with patch(
@@ -468,9 +466,7 @@ class TestDispatchSingleReview:
     def test_extra_context_none_unchanged_user_prompt(self) -> None:
         mock_result = MagicMock()
         mock_result.returncode = 0
-        mock_result.stdout = json.dumps(
-            {"result": json.dumps({"findings": [], "summary": "ok"})}
-        )
+        mock_result.stdout = json.dumps({"result": json.dumps({"findings": [], "summary": "ok"})})
         mock_result.stderr = ""
 
         with patch(

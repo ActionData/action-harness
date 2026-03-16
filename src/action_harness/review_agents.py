@@ -148,8 +148,7 @@ def build_review_prompt(agent_name: str, pr_number: int) -> str:
     base = _AGENT_PROMPTS.get(agent_name)
     if base is None:
         raise ValueError(
-            f"Unknown review agent: {agent_name!r}. "
-            f"Expected one of: {', '.join(_AGENT_PROMPTS)}"
+            f"Unknown review agent: {agent_name!r}. Expected one of: {', '.join(_AGENT_PROMPTS)}"
         )
     return base.format(pr_number=pr_number) + _JSON_OUTPUT_SUFFIX
 
@@ -339,9 +338,7 @@ def dispatch_review_agents(
     tasks_content: str | None = None
 
     if change_name is not None:
-        tasks_path = (
-            worktree_path / "openspec" / "changes" / change_name / "tasks.md"
-        )
+        tasks_path = worktree_path / "openspec" / "changes" / change_name / "tasks.md"
         typer.echo(
             f"[review] checking for tasks.md at {tasks_path}",
             err=True,

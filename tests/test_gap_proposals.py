@@ -57,7 +57,12 @@ def test_scaffold_and_dispatch(tmp_path: Path) -> None:
 def test_no_proposals_with_names(tmp_path: Path) -> None:
     """Gaps without proposal_name are skipped."""
     gaps = [
-        Gap(severity="low", finding="Minor issue", category="context", proposal_name=None),
+        Gap(
+            severity="low",
+            finding="Minor issue",
+            category="context",
+            proposal_name=None,
+        ),
     ]
     results = generate_proposals(gaps, tmp_path, _make_profile())
     assert len(results) == 0
@@ -66,22 +71,35 @@ def test_no_proposals_with_names(tmp_path: Path) -> None:
 def test_failure_isolation(tmp_path: Path) -> None:
     """One spec-writer failure doesn't block others."""
     gaps = [
-        Gap(severity="high", finding="Gap 1", category="ci_guardrails", proposal_name="gap-one"),
-        Gap(severity="medium", finding="Gap 2", category="context", proposal_name="gap-two"),
+        Gap(
+            severity="high",
+            finding="Gap 1",
+            category="ci_guardrails",
+            proposal_name="gap-one",
+        ),
+        Gap(
+            severity="medium",
+            finding="Gap 2",
+            category="context",
+            proposal_name="gap-two",
+        ),
     ]
 
-    call_count = 0
+    fail_count = 0
+    success_count = 0
 
     def side_effect(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
-        nonlocal call_count
-        call_count += 1
+        nonlocal fail_count, success_count
         # Scaffolding succeeds for both
         if cmd[0] == "openspec":
             return _make_completed(0)
-        # First claude dispatch fails, second succeeds
+        # Differentiate based on prompt content (cmd[2] is the prompt)
         if cmd[0] == "claude":
-            if "gap-one" in str(kwargs.get("cwd", "")):
+            prompt = cmd[2] if len(cmd) > 2 else ""
+            if "gap-one" in prompt:
+                fail_count += 1
                 return _make_completed(1, stderr="failed")
+            success_count += 1
             return _make_completed(0)
         return _make_completed(0)
 
@@ -90,3 +108,12 @@ def test_failure_isolation(tmp_path: Path) -> None:
 
     # Both should have been attempted
     assert len(results) == 2
+    # One should have failed, one succeeded
+    assert fail_count == 1
+    assert success_count == 1
+    succeeded = [name for name, ok in results if ok]
+    failed = [name for name, ok in results if not ok]
+    assert len(succeeded) == 1
+    assert len(failed) == 1
+    assert "gap-two" in succeeded
+    assert "gap-one" in failed

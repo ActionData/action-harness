@@ -2,7 +2,7 @@
 
 import typer
 
-from action_harness.assessment import AssessmentReport, Gap
+from action_harness.assessment import AssessmentReport, CategoryScore, Gap
 
 # Block characters for score bars
 _FULL_BLOCK = "█"
@@ -88,10 +88,12 @@ def print_report(report: AssessmentReport, deep: bool = False, propose: bool = F
     typer.echo(output, err=True)
 
 
-def collect_proposals(report: AssessmentReport) -> list[Gap]:
-    """Collect all gaps with proposal names from the report."""
+def collect_proposals(
+    categories: dict[str, CategoryScore],
+) -> list[Gap]:
+    """Collect all gaps with proposal names from scored categories."""
     proposals: list[Gap] = []
-    for cat in report.categories.values():
+    for cat in categories.values():
         for gap in cat.gaps:
             if gap.proposal_name:
                 proposals.append(gap)

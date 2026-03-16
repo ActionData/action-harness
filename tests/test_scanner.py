@@ -237,3 +237,53 @@ def test_isolation_no_committed_secrets_default(tmp_path: Path) -> None:
     """Default assumption: no committed secrets."""
     result = detect_isolation_signals(tmp_path)
     assert result.no_committed_secrets is True
+
+
+def test_isolation_detects_aws_key(tmp_path: Path) -> None:
+    """Secret scanner detects AWS access key pattern."""
+    subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True)
+    subprocess.run(
+        ["git", "config", "user.email", "t@t.com"],
+        cwd=tmp_path,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "T"],
+        cwd=tmp_path,
+        capture_output=True,
+    )
+    (tmp_path / "config.py").write_text('AWS_KEY = "AKIAIOSFODNN7EXAMPLE1"\n')
+    subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True)
+    subprocess.run(
+        ["git", "commit", "-m", "add config"],
+        cwd=tmp_path,
+        capture_output=True,
+    )
+
+    result = detect_isolation_signals(tmp_path)
+    assert result.no_committed_secrets is False
+
+
+def test_isolation_detects_api_key_pattern(tmp_path: Path) -> None:
+    """Secret scanner detects api_key = 'value' pattern."""
+    subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True)
+    subprocess.run(
+        ["git", "config", "user.email", "t@t.com"],
+        cwd=tmp_path,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "T"],
+        cwd=tmp_path,
+        capture_output=True,
+    )
+    (tmp_path / "settings.py").write_text('api_key = "supersecretkey12345"\n')
+    subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True)
+    subprocess.run(
+        ["git", "commit", "-m", "add settings"],
+        cwd=tmp_path,
+        capture_output=True,
+    )
+
+    result = detect_isolation_signals(tmp_path)
+    assert result.no_committed_secrets is False

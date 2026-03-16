@@ -8,6 +8,7 @@ from pathlib import Path
 import typer
 
 from action_harness.assessment import CategoryScore, Gap
+from action_harness.parsing import extract_json_block
 
 
 def build_system_prompt() -> str:
@@ -145,15 +146,14 @@ def dispatch_readonly_worker(
 
         # The worker result may be a string containing JSON
         if isinstance(worker_result, str):
-            # Try to extract JSON from the result string
-            # Look for the JSON object in the output
-            json_start = worker_result.find("{")
-            json_end = worker_result.rfind("}") + 1
-            if json_start >= 0 and json_end > json_start:
-                assessment_json: dict[str, object] = json.loads(worker_result[json_start:json_end])
-                return assessment_json
+            extracted = extract_json_block(worker_result)
+            if extracted is not None:
+                return extracted
 
-        typer.echo("[assess_agent] could not parse agent output as JSON", err=True)
+        typer.echo(
+            "[assess_agent] could not parse agent output as JSON",
+            err=True,
+        )
         return None
 
     except json.JSONDecodeError as exc:
@@ -210,8 +210,11 @@ def merge_agent_results(
                                 proposal_name=gap_data.get("proposal_name"),
                             )
                         )
-                    except (ValueError, KeyError):
-                        pass
+                    except (ValueError, KeyError) as exc:
+                        typer.echo(
+                            f"[assess_agent] warning: invalid agent gap data: {exc}",
+                            err=True,
+                        )
 
         # Update category
         categories[cat_name] = CategoryScore(

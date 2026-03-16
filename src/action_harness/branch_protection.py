@@ -20,7 +20,7 @@ def _get_remote_owner_repo(repo_path: Path) -> str | None:
 
         url = result.stdout.strip()
         # Handle SSH: git@github.com:owner/repo.git
-        if url.startswith("git@"):
+        if url.startswith("git@") and "github.com" in url:
             parts = url.split(":")[-1]
             return parts.removesuffix(".git")
         # Handle HTTPS: https://github.com/owner/repo.git

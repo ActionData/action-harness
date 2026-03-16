@@ -15,6 +15,31 @@ from action_harness.assessment import (
     ToolingMechanicalSignals,
 )
 
+# Directories to exclude from recursive glob scans (vendored, build artifacts).
+_EXCLUDED_DIRS: set[str] = {
+    ".venv",
+    "venv",
+    "node_modules",
+    "__pycache__",
+    "site-packages",
+    "target",
+    ".git",
+    "dist",
+    "build",
+    ".tox",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+}
+
+
+def _filter_vendored(paths: list[str]) -> list[str]:
+    """Filter out paths inside vendored/build directories."""
+    return [
+        p for p in paths if not any(f"/{d}/" in p or p.startswith(f"{d}/") for d in _EXCLUDED_DIRS)
+    ]
+
+
 # Priority-ordered lockfiles: first match reported as the lockfile name.
 _LOCKFILES: list[str] = [
     "uv.lock",
@@ -79,8 +104,12 @@ def analyze_test_structure(repo_path: Path, ecosystem: str) -> TestabilityMechan
             test_framework_configured = True
 
         # Count test files (test_*.py and *_test.py)
-        test_file_paths = glob_mod.glob(str(repo_path / "**/test_*.py"), recursive=True)
-        test_file_paths += glob_mod.glob(str(repo_path / "**/*_test.py"), recursive=True)
+        test_file_paths = _filter_vendored(
+            glob_mod.glob(str(repo_path / "**/test_*.py"), recursive=True)
+        )
+        test_file_paths += _filter_vendored(
+            glob_mod.glob(str(repo_path / "**/*_test.py"), recursive=True)
+        )
         # Deduplicate
         test_file_paths = list(set(test_file_paths))
         test_files = len(test_file_paths)
@@ -110,7 +139,9 @@ def analyze_test_structure(repo_path: Path, ecosystem: str) -> TestabilityMechan
 
         # Count test files (*.test.ts, *.test.js, *.spec.ts, *.spec.js)
         for pattern in ["**/*.test.ts", "**/*.test.js", "**/*.spec.ts", "**/*.spec.js"]:
-            test_file_paths = glob_mod.glob(str(repo_path / pattern), recursive=True)
+            test_file_paths = _filter_vendored(
+                glob_mod.glob(str(repo_path / pattern), recursive=True)
+            )
             test_files += len(test_file_paths)
             for tf in test_file_paths:
                 try:
@@ -122,7 +153,7 @@ def analyze_test_structure(repo_path: Path, ecosystem: str) -> TestabilityMechan
 
     elif ecosystem == "rust":
         # Rust uses #[test] annotations
-        rs_files = glob_mod.glob(str(repo_path / "**/*.rs"), recursive=True)
+        rs_files = _filter_vendored(glob_mod.glob(str(repo_path / "**/*.rs"), recursive=True))
         for rf in rs_files:
             try:
                 content = Path(rf).read_text()
@@ -171,7 +202,9 @@ def detect_context_signals(repo_path: Path) -> ContextMechanicalSignals:
     source_patterns = ["**/*.py", "**/*.ts", "**/*.rs"]
     sample_files: list[str] = []
     for pattern in source_patterns:
-        sample_files.extend(glob_mod.glob(str(repo_path / pattern), recursive=True))
+        sample_files.extend(
+            _filter_vendored(glob_mod.glob(str(repo_path / pattern), recursive=True))
+        )
         if len(sample_files) >= 10:
             break
 
@@ -294,7 +327,9 @@ def detect_observability_signals(repo_path: Path) -> ObservabilityMechanicalSign
 
     # Also check for logging config in source
     if not structured_logging_lib:
-        source_files = glob_mod.glob(str(repo_path / "**/*.py"), recursive=True)[:10]
+        source_files = _filter_vendored(glob_mod.glob(str(repo_path / "**/*.py"), recursive=True))[
+            :10
+        ]
         for sf in source_files:
             try:
                 content = Path(sf).read_text()
@@ -412,7 +447,7 @@ def _collect_source_snippets(repo_path: Path, limit: int = 20) -> str:
     snippets: list[str] = []
     count = 0
     for pattern in patterns:
-        for sf in glob_mod.glob(str(repo_path / pattern), recursive=True):
+        for sf in _filter_vendored(glob_mod.glob(str(repo_path / pattern), recursive=True)):
             if count >= limit:
                 break
             try:

@@ -197,3 +197,40 @@ def test_compute_overall_average() -> None:
 def test_compute_overall_empty() -> None:
     """Empty categories returns 0."""
     assert compute_overall({}) == 0
+
+
+def test_branch_protection_none_no_penalty() -> None:
+    """branch_protection=None should not lose points or produce a gap."""
+    signals = CIMechanicalSignals(
+        ci_exists=True,
+        triggers_on_pr=True,
+        runs_tests=True,
+        runs_lint=True,
+        runs_typecheck=True,
+        runs_format_check=True,
+        branch_protection=None,  # unknown — gh unavailable
+    )
+    result = score_category("ci_guardrails", signals)
+    # Should get 90 (all except branch_protection's 10 points)
+    # but no gap for branch_protection since it's unknown
+    assert result.score == 90
+    bp_gaps = [g for g in result.gaps if "branch_protection" in g.finding]
+    assert len(bp_gaps) == 0
+
+
+def test_branch_protection_false_is_a_gap() -> None:
+    """branch_protection=False should still not be a gap (only 10 pts < 15)."""
+    signals = CIMechanicalSignals(
+        ci_exists=True,
+        triggers_on_pr=True,
+        runs_tests=True,
+        runs_lint=True,
+        runs_typecheck=True,
+        runs_format_check=True,
+        branch_protection=False,
+    )
+    result = score_category("ci_guardrails", signals)
+    assert result.score == 90
+    # 10 points is below gap threshold so no gap either way
+    bp_gaps = [g for g in result.gaps if "branch_protection" in g.finding]
+    assert len(bp_gaps) == 0

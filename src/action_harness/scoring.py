@@ -1,5 +1,7 @@
 """Scoring logic for codebase assessment."""
 
+from typing import Literal
+
 from action_harness.assessment import (
     CategoryScore,
     CIMechanicalSignals,
@@ -80,8 +82,17 @@ _CATEGORY_WEIGHTS: dict[str, list[tuple[str, int, int | None, str]]] = {
 }
 
 
+def _signal_is_unknown(signals: MechanicalSignalsUnion, field: str) -> bool:
+    """Check if a signal value is None (unknown/couldn't check)."""
+    return getattr(signals, field, None) is None
+
+
 def _signal_earned(signals: MechanicalSignalsUnion, field: str, threshold: int | None) -> bool:
-    """Check if a signal is earned (True for bools, >= threshold for ints)."""
+    """Check if a signal is earned (True for bools, >= threshold for ints).
+
+    Returns False for None values (unknown), but callers should use
+    _signal_is_unknown() to distinguish "not configured" from "couldn't check".
+    """
     value = getattr(signals, field, None)
     if value is None:
         return False
@@ -128,6 +139,9 @@ def identify_gaps(category: str, signals: MechanicalSignalsUnion) -> list[Gap]:
 
     Severity: >= 25 = high, >= 15 = medium, < 15 = low (but those are
     filtered out since they don't become gaps).
+
+    Signals with value None (unknown/couldn't check) are skipped — they
+    represent inability to assess, not a confirmed gap.
     """
     weights = _CATEGORY_WEIGHTS.get(category, [])
     gaps: list[Gap] = []
@@ -136,10 +150,13 @@ def identify_gaps(category: str, signals: MechanicalSignalsUnion) -> list[Gap]:
         if points < 15:
             continue  # Below gap threshold
 
+        if _signal_is_unknown(signals, field):
+            continue  # Unknown signal — can't assess, not a gap
+
         if _signal_earned(signals, field, threshold):
             continue  # Signal is present, no gap
 
-        severity: str = "high" if points >= 25 else "medium"
+        severity: Literal["high", "medium"] = "high" if points >= 25 else "medium"
 
         # Build finding description
         if threshold is not None:
@@ -149,7 +166,7 @@ def identify_gaps(category: str, signals: MechanicalSignalsUnion) -> list[Gap]:
 
         gaps.append(
             Gap(
-                severity=severity,  # type: ignore[arg-type]
+                severity=severity,
                 finding=finding,
                 category=category,
                 proposal_name=proposal_name,

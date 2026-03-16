@@ -503,6 +503,7 @@ def assess(
         action-harness assess --repo . --deep --propose
     """
     from datetime import UTC, datetime
+    from typing import Literal
 
     from action_harness.assessment import AssessmentReport
     from action_harness.branch_protection import check_branch_protection
@@ -522,6 +523,7 @@ def assess(
         deep = True
 
     # Determine mode
+    mode: Literal["base", "deep", "propose"]
     if propose:
         mode = "propose"
     elif deep:
@@ -573,16 +575,7 @@ def assess(
 
     # Step 5: Build report
     overall = compute_overall(categories)
-    proposals = collect_proposals(
-        AssessmentReport(
-            overall_score=overall,
-            categories=categories,
-            proposals=[],
-            repo_path=str(repo),
-            timestamp=datetime.now(UTC).isoformat(),
-            mode=mode,  # type: ignore[arg-type]
-        )
-    )
+    proposals = collect_proposals(categories)
 
     report = AssessmentReport(
         overall_score=overall,
@@ -590,7 +583,7 @@ def assess(
         proposals=proposals,
         repo_path=str(repo),
         timestamp=datetime.now(UTC).isoformat(),
-        mode=mode,  # type: ignore[arg-type]
+        mode=mode,
     )
 
     # Step 6: Propose mode — generate OpenSpec proposals

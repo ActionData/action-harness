@@ -1,11 +1,16 @@
 """Tests for assessment agent dispatch and merging."""
 
 import json
+import subprocess
+from pathlib import Path
+from unittest.mock import patch
 
 from action_harness.assess_agent import (
     build_system_prompt,
     build_user_prompt,
+    dispatch_readonly_worker,
     merge_agent_results,
+    run_agent_assessment,
 )
 from action_harness.assessment import (
     CategoryScore,
@@ -180,3 +185,109 @@ def test_user_prompt_valid_json() -> None:
     json_end = prompt.rfind("}") + 1
     parsed = json.loads(prompt[json_start:json_end])
     assert parsed["ci_guardrails"]["score"] == 60
+
+
+def test_dispatch_readonly_worker_success(tmp_path: Path) -> None:
+    """Successful dispatch returns parsed JSON."""
+    agent_output = {
+        "categories": {
+            "ci_guardrails": {
+                "score_adjustment": 5,
+                "rationale": "Good CI",
+                "gaps": [],
+            }
+        }
+    }
+    cli_output = {"result": json.dumps(agent_output)}
+
+    with patch("action_harness.assess_agent.subprocess.run") as mock_run:
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[],
+            returncode=0,
+            stdout=json.dumps(cli_output),
+            stderr="",
+        )
+        result = dispatch_readonly_worker(
+            prompt="test",
+            system_prompt="test",
+            worktree_path=tmp_path,
+        )
+
+    assert result is not None
+    assert "categories" in result
+
+
+def test_dispatch_readonly_worker_failure(tmp_path: Path) -> None:
+    """Failed dispatch returns None."""
+    with patch("action_harness.assess_agent.subprocess.run") as mock_run:
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=1, stdout="", stderr="error"
+        )
+        result = dispatch_readonly_worker(
+            prompt="test",
+            system_prompt="test",
+            worktree_path=tmp_path,
+        )
+
+    assert result is None
+
+
+def test_dispatch_readonly_worker_timeout(tmp_path: Path) -> None:
+    """Timeout returns None."""
+    with patch("action_harness.assess_agent.subprocess.run") as mock_run:
+        mock_run.side_effect = subprocess.TimeoutExpired(cmd="claude", timeout=300)
+        result = dispatch_readonly_worker(
+            prompt="test",
+            system_prompt="test",
+            worktree_path=tmp_path,
+        )
+
+    assert result is None
+
+
+def test_dispatch_readonly_worker_claude_not_found(tmp_path: Path) -> None:
+    """claude CLI not found returns None."""
+    with patch("action_harness.assess_agent.subprocess.run") as mock_run:
+        mock_run.side_effect = FileNotFoundError("claude")
+        result = dispatch_readonly_worker(
+            prompt="test",
+            system_prompt="test",
+            worktree_path=tmp_path,
+        )
+
+    assert result is None
+
+
+def test_run_agent_assessment_fallback(tmp_path: Path) -> None:
+    """run_agent_assessment falls back on dispatch failure."""
+    categories = _make_categories()
+    original_scores = {k: v.score for k, v in categories.items()}
+
+    with patch("action_harness.assess_agent.dispatch_readonly_worker") as mock:
+        mock.return_value = None  # simulate failure
+        result = run_agent_assessment(categories, tmp_path)
+
+    # Scores unchanged
+    for k, v in result.items():
+        assert v.score == original_scores[k]
+
+
+def test_run_agent_assessment_merges(tmp_path: Path) -> None:
+    """run_agent_assessment merges successful agent results."""
+    categories = _make_categories()
+    agent_output = {
+        "categories": {
+            "ci_guardrails": {
+                "score_adjustment": 10,
+                "rationale": "Good CI",
+                "gaps": [],
+            }
+        }
+    }
+
+    with patch("action_harness.assess_agent.dispatch_readonly_worker") as mock:
+        mock.return_value = agent_output
+        result = run_agent_assessment(categories, tmp_path)
+
+    assert result["ci_guardrails"].score == 70
+    assert result["ci_guardrails"].agent_assessment == "Good CI"

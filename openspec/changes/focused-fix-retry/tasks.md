@@ -6,8 +6,8 @@
 
 ## 2. Integrate into format_review_feedback [depends: 1]
 
-- [ ] 2.1 Add `max_findings: int = 0` parameter to `format_review_feedback()`. When `max_findings > 0`, replace the `actionable` list with `selected, deferred = select_top_findings(actionable, max_findings)` and format only `selected`. Log deferred count to stderr: `typer.echo(f"[review] deferred {len(deferred)} finding(s) below priority cap", err=True)`. Preserve the existing group-by-agent formatting structure — just operate on the selected subset.
-- [ ] 2.2 Add tests: `format_review_feedback` with `max_findings=3` includes only 3 findings in output text. With `max_findings=0` includes all (backward compatible). Deferred findings NOT in feedback text but still in the original `results` objects.
+- [x] 2.1 Add `max_findings: int = 0` parameter to `format_review_feedback()`. When `max_findings > 0`, replace the `actionable` list with `selected, deferred = select_top_findings(actionable, max_findings)` and format only `selected`. Log deferred count to stderr: `typer.echo(f"[review] deferred {len(deferred)} finding(s) below priority cap", err=True)`. Preserve the existing group-by-agent formatting structure — just operate on the selected subset.
+- [x] 2.2 Add tests: `format_review_feedback` with `max_findings=3` includes only 3 findings in output text. With `max_findings=0` includes all (backward compatible). Deferred findings NOT in feedback text but still in the original `results` objects.
 
 ## 3. CLI Flag [depends: 1]
 

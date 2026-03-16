@@ -433,14 +433,25 @@ def format_review_feedback(
     results: list[ReviewResult],
     tolerance: str = "low",
     prior_acknowledged: list[AcknowledgedFinding] | None = None,
+    max_findings: int = 0,
 ) -> str:
     """Format actionable review findings as structured markdown feedback.
 
     Only includes findings at or above the tolerance threshold.
+    When ``max_findings > 0``, selects the top N findings by priority and
+    defers the rest (logged to stderr but not included in feedback).
     Appends a "Prior Acknowledged Findings" section if any exist.
     Used as the feedback string when re-dispatching the code worker.
     """
     actionable = filter_actionable_findings(results, tolerance)
+
+    if max_findings > 0 and actionable:
+        actionable, deferred = select_top_findings(actionable, max_findings)
+        if deferred:
+            typer.echo(
+                f"[review] deferred {len(deferred)} finding(s) below priority cap",
+                err=True,
+            )
 
     lines = ["## Review Agent Findings", ""]
 

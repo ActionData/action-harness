@@ -749,6 +749,49 @@ class TestSelectTopFindings:
         assert len(deferred) == 7
 
 
+class TestFormatReviewFeedbackMaxFindings:
+    """Task 2.2: test format_review_feedback with max_findings parameter."""
+
+    def test_max_findings_caps_output(self) -> None:
+        """max_findings=3 includes only 3 findings in output text."""
+        findings = [
+            _make_finding("critical", title=f"Finding {i}", agent=f"agent-{i}")
+            for i in range(6)
+        ]
+        results = [
+            ReviewResult(success=True, agent_name=f"agent-{i}", findings=[f])
+            for i, f in enumerate(findings)
+        ]
+        feedback = format_review_feedback(results, max_findings=3)
+        # Count how many finding titles appear in the output
+        included = sum(1 for i in range(6) if f"Finding {i}" in feedback)
+        assert included == 3
+
+    def test_max_findings_zero_includes_all(self) -> None:
+        """max_findings=0 includes all findings (backward compatible)."""
+        findings = [
+            _make_finding("high", title=f"Issue {i}", agent="a") for i in range(5)
+        ]
+        result = ReviewResult(success=True, agent_name="a", findings=findings)
+        feedback = format_review_feedback([result], max_findings=0)
+        for i in range(5):
+            assert f"Issue {i}" in feedback
+
+    def test_deferred_not_in_feedback(self) -> None:
+        """Deferred findings do NOT appear in the feedback text."""
+        findings = [
+            _make_finding("critical", title="Critical Bug", agent="a"),
+            _make_finding("low", title="Minor Nit", agent="b"),
+        ]
+        results = [
+            ReviewResult(success=True, agent_name="a", findings=[findings[0]]),
+            ReviewResult(success=True, agent_name="b", findings=[findings[1]]),
+        ]
+        feedback = format_review_feedback(results, max_findings=1)
+        assert "Critical Bug" in feedback
+        assert "Minor Nit" not in feedback
+
+
 class TestFormatReviewFeedbackEdgeCases:
     """Additional edge case tests for format_review_feedback."""
 

@@ -11,10 +11,12 @@ from action_harness.event_log import EventLogger
 from action_harness.merge import check_merge_gates, merge_pr, post_merge_blocked_comment
 from action_harness.merge import wait_for_ci as wait_for_ci_checks
 from action_harness.models import (
+    AcknowledgedFinding,
     EvalResult,
     MergeResult,
     OpenSpecReviewResult,
     PrResult,
+    ReviewFinding,
     ReviewResult,
     RunManifest,
     StageResultUnion,
@@ -36,7 +38,9 @@ from action_harness.protection import (
 )
 from action_harness.review_agents import (
     dispatch_review_agents,
+    filter_actionable_findings,
     format_review_feedback,
+    match_findings,
     triage_findings,
 )
 from action_harness.worker import count_commits_ahead, dispatch_worker
@@ -134,6 +138,7 @@ def run_pipeline(
     wait_for_ci: bool = False,
     prompt: str | None = None,
     issue_number: int | None = None,
+    review_cycle: list[str] | None = None,
 ) -> tuple[PrResult, RunManifest]:
     """Run the full pipeline: worktree -> worker -> eval -> retry -> PR.
 
@@ -212,6 +217,7 @@ def run_pipeline(
             wait_for_ci=wait_for_ci,
             prompt=prompt,
             issue_number=issue_number,
+            review_cycle=review_cycle if review_cycle is not None else ["low", "med", "high"],
         )
     except Exception as e:
         typer.echo(f"[pipeline] unexpected error: {e}", err=True)
@@ -275,6 +281,7 @@ def _run_pipeline_inner(
     wait_for_ci: bool = False,
     prompt: str | None = None,
     issue_number: int | None = None,
+    review_cycle: list[str] | None = None,
 ) -> PrResult:
     """Inner pipeline logic. Appends to stages list as side effect.
 
@@ -588,17 +595,27 @@ def _run_pipeline_inner(
     )
 
     # Stage 5: Review agents (parallel code review) with fix-retry loop
+    cycle = review_cycle if review_cycle is not None else ["low", "med", "high"]
+    total_rounds = len(cycle)
     findings_remain = False
     if not skip_review:
         latest_review_results: list[ReviewResult] = []
         last_fix_succeeded = False
+        acknowledged: list[AcknowledgedFinding] = []
+        rounds_attempted = 0
+        # Pre-fix actionable findings from the prior round, used to detect
+        # which findings persisted after fix-retry via match_findings.
+        prior_round_actionable: list[ReviewFinding] = []
+        prior_round_number: int = 0
 
-        for review_round in range(2):
+        for round_idx, tolerance in enumerate(cycle):
+            rounds_attempted = round_idx + 1
             typer.echo(
-                f"[pipeline] review round {review_round + 1}/2",
+                f"[pipeline] review round {rounds_attempted}/{total_rounds} "
+                f"(tolerance: {tolerance})",
                 err=True,
             )
-            needs_fix, latest_review_results = _run_review_agents(
+            latest_review_results = _run_review_agents_only(
                 pr_result,
                 worktree_path,
                 max_turns,
@@ -610,20 +627,67 @@ def _run_pipeline_inner(
                 stages,
             )
 
+            # Tag each result with the tolerance level used for this round.
+            # tolerance is validated at CLI entry; cast for Literal type.
+            for rr in latest_review_results:
+                rr.tolerance = tolerance  # type: ignore[assignment]
+
+            # After getting this round's review results, match against prior
+            # round's pre-fix actionable findings to detect what persisted.
+            if prior_round_actionable:
+                all_current_findings = [f for r in latest_review_results for f in r.findings]
+                persisted = match_findings(prior_round_actionable, all_current_findings)
+                for finding in persisted:
+                    already_tracked = any(
+                        af.finding.file == finding.file and af.finding.title == finding.title
+                        for af in acknowledged
+                    )
+                    if not already_tracked:
+                        acknowledged.append(
+                            AcknowledgedFinding(
+                                finding=finding,
+                                acknowledged_in_round=prior_round_number,
+                            )
+                        )
+                prior_round_actionable = []
+
+            needs_fix = triage_findings(latest_review_results, tolerance)
+
             if not needs_fix:
+                # Short-circuit: zero actionable findings at this tolerance
                 findings_remain = False
+                # Still post all findings to PR for visibility
+                if pr_result.pr_url:
+                    _post_review_comment(
+                        worktree_path,
+                        pr_result.pr_url,
+                        latest_review_results,
+                        verbose,
+                        header=(
+                            f"Review round {rounds_attempted}/{total_rounds} "
+                            f"(tolerance: {tolerance})"
+                        ),
+                    )
+                typer.echo(
+                    f"[pipeline] no actionable findings at tolerance '{tolerance}', "
+                    f"skipping remaining rounds",
+                    err=True,
+                )
                 break
 
             findings_remain = True
+            pre_fix_actionable = filter_actionable_findings(latest_review_results, tolerance)
 
-            # Post review comment after each review round that finds issues
+            # Post review comment with ALL findings (unfiltered) for visibility
             if pr_result.pr_url:
                 _post_review_comment(
                     worktree_path,
                     pr_result.pr_url,
                     latest_review_results,
                     verbose,
-                    header=f"Review round {review_round + 1} findings",
+                    header=(
+                        f"Review round {rounds_attempted}/{total_rounds} (tolerance: {tolerance})"
+                    ),
                 )
 
             last_fix_succeeded = _run_review_fix_retry(
@@ -641,19 +705,27 @@ def _run_pipeline_inner(
                 eval_commands=eval_commands,
                 logger=logger,
                 review_results=latest_review_results,
+                tolerance=tolerance,
+                prior_acknowledged=acknowledged if acknowledged else None,
                 prompt=prompt,
             )
             if not last_fix_succeeded:
                 typer.echo("[pipeline] review fix-retry failed", err=True)
                 break
 
+            # Store this round's pre-fix actionable findings. The next round's
+            # review results will be compared via match_findings to detect which
+            # findings persisted after the fix-retry.
+            prior_round_actionable = pre_fix_actionable
+            prior_round_number = rounds_attempted
+
         # After the loop, if findings were detected but the last fix-retry
         # succeeded, run a final verification review to check whether the
-        # fix actually resolved them.  Without this, we would post stale
-        # findings from the pre-fix review.
+        # fix actually resolved them.
         if findings_remain and last_fix_succeeded:
+            last_tolerance = cycle[-1]
             typer.echo("[pipeline] running verification review", err=True)
-            still_needs_fix, latest_review_results = _run_review_agents(
+            latest_review_results = _run_review_agents_only(
                 pr_result,
                 worktree_path,
                 max_turns,
@@ -664,11 +736,11 @@ def _run_pipeline_inner(
                 verbose,
                 stages,
             )
+            still_needs_fix = triage_findings(latest_review_results, last_tolerance)
             if not still_needs_fix:
                 findings_remain = False
 
         if findings_remain and pr_result.pr_url:
-            rounds_attempted = review_round + 1
             _post_review_comment(
                 worktree_path,
                 pr_result.pr_url,
@@ -711,8 +783,8 @@ def _run_pipeline_inner(
 
     if review_result is not None and not review_result.success:
         typer.echo("[pipeline] openspec review returned findings", err=True)
-        for finding in review_result.findings:
-            typer.echo(f"  - {finding}", err=True)
+        for openspec_finding in review_result.findings:
+            typer.echo(f"  - {openspec_finding}", err=True)
         typer.echo("[pipeline] complete (failed)", err=True)
         return PrResult(
             success=False,
@@ -785,7 +857,7 @@ def _run_pipeline_inner(
     return pr_result
 
 
-def _run_review_agents(
+def _run_review_agents_only(
     pr_result: PrResult,
     worktree_path: Path,
     max_turns: int,
@@ -795,11 +867,15 @@ def _run_review_agents(
     permission_mode: str,
     verbose: bool,
     stages: list[StageResultUnion],
-) -> tuple[bool, list[ReviewResult]]:
-    """Run review agents stage. Returns (needs_fix, review_results)."""
+) -> list[ReviewResult]:
+    """Run review agents stage. Returns review results without triaging.
+
+    Triage is the caller's responsibility — tolerance-aware triage must
+    happen at the call site where the current round's tolerance is known.
+    """
     if pr_result.pr_url is None:
         typer.echo("[pipeline] error: PR URL is None, cannot proceed", err=True)
-        return False, []
+        return []
     # Extract PR number from URL (e.g., https://github.com/org/repo/pull/123)
     pr_number = int(pr_result.pr_url.rstrip("/").split("/")[-1])
 
@@ -819,13 +895,10 @@ def _run_review_agents(
     for result in review_results:
         stages.append(result)
 
-    needs_fix = triage_findings(review_results)
-    if needs_fix:
-        typer.echo("[pipeline] findings detected, fix retry needed", err=True)
-    else:
-        typer.echo("[pipeline] no findings, proceeding", err=True)
+    total = sum(len(r.findings) for r in review_results)
+    typer.echo(f"[pipeline] review agents returned {total} finding(s)", err=True)
 
-    return needs_fix, review_results
+    return review_results
 
 
 def _post_review_comment(
@@ -835,7 +908,11 @@ def _post_review_comment(
     verbose: bool,
     header: str = "Review Agent Findings",
 ) -> None:
-    """Post a PR comment summarizing review agent findings."""
+    """Post a PR comment summarizing all review agent findings (unfiltered).
+
+    Includes severity label tags on each finding for visibility regardless
+    of the current tolerance level.
+    """
     total_findings = sum(len(r.findings) for r in review_results)
 
     if total_findings == 0:
@@ -861,6 +938,7 @@ def _post_review_comment(
             cwd=worktree_path,
             capture_output=True,
             text=True,
+            timeout=120,
         )
         if gh_result.returncode != 0:
             typer.echo(
@@ -869,7 +947,7 @@ def _post_review_comment(
             )
         elif verbose:
             typer.echo("[pipeline] posted review comment on PR", err=True)
-    except (FileNotFoundError, OSError) as e:
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
         typer.echo(f"[pipeline] warning: gh pr comment failed: {e}", err=True)
 
 
@@ -888,6 +966,8 @@ def _run_review_fix_retry(
     eval_commands: list[str] | None = None,
     logger: EventLogger | None = None,
     review_results: list[ReviewResult] | None = None,
+    tolerance: str = "low",
+    prior_acknowledged: list[AcknowledgedFinding] | None = None,
     prompt: str | None = None,
 ) -> bool:
     """Re-dispatch worker with review feedback, re-run eval, push if passing.
@@ -901,7 +981,9 @@ def _run_review_fix_retry(
     if review_results is None:
         msg = "review_results is required"
         raise ValueError(msg)
-    feedback = format_review_feedback(review_results)
+    feedback = format_review_feedback(
+        review_results, tolerance=tolerance, prior_acknowledged=prior_acknowledged
+    )
 
     # Find session_id from the last successful WorkerResult for resume
     # Also check context_usage_pct — skip resume if context is exhausted
@@ -984,6 +1066,7 @@ def _run_review_fix_retry(
             cwd=worktree_path,
             capture_output=True,
             text=True,
+            timeout=120,
         )
         if push_result.returncode != 0:
             typer.echo(
@@ -991,7 +1074,7 @@ def _run_review_fix_retry(
                 err=True,
             )
             return False
-    except (FileNotFoundError, OSError) as e:
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
         typer.echo(f"[pipeline] warning: git push failed: {e}", err=True)
         return False
 
@@ -1006,8 +1089,9 @@ def _run_review_fix_retry(
             cwd=worktree_path,
             capture_output=True,
             text=True,
+            timeout=120,
         )
-    except (FileNotFoundError, OSError) as e:
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
         typer.echo(f"[pipeline] warning: gh pr comment failed: {e}", err=True)
 
     typer.echo("[pipeline] review fix retry completed successfully", err=True)
@@ -1095,6 +1179,7 @@ def _flag_pr_needs_human(
             cwd=worktree_path,
             capture_output=True,
             text=True,
+            timeout=120,
         )
         if result.returncode != 0:
             typer.echo(
@@ -1103,7 +1188,7 @@ def _flag_pr_needs_human(
             )
         elif verbose:
             typer.echo("[pipeline] posted needs-human comment on PR", err=True)
-    except (FileNotFoundError, OSError) as e:
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
         typer.echo(f"[pipeline] warning: gh pr comment failed: {e}", err=True)
 
     # Add label
@@ -1113,6 +1198,7 @@ def _flag_pr_needs_human(
             cwd=worktree_path,
             capture_output=True,
             text=True,
+            timeout=120,
         )
         if result.returncode != 0:
             typer.echo(
@@ -1121,7 +1207,7 @@ def _flag_pr_needs_human(
             )
         elif verbose:
             typer.echo("[pipeline] added needs-human label to PR", err=True)
-    except (FileNotFoundError, OSError) as e:
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
         typer.echo(f"[pipeline] warning: gh pr edit --add-label failed: {e}", err=True)
 
 
@@ -1134,6 +1220,7 @@ def _comment_archive_complete(worktree_path: Path, pr_url: str, verbose: bool) -
             cwd=worktree_path,
             capture_output=True,
             text=True,
+            timeout=120,
         )
         if result.returncode != 0:
             typer.echo(
@@ -1142,7 +1229,7 @@ def _comment_archive_complete(worktree_path: Path, pr_url: str, verbose: bool) -
             )
         elif verbose:
             typer.echo("[pipeline] posted archive comment on PR", err=True)
-    except (FileNotFoundError, OSError) as e:
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
         typer.echo(f"[pipeline] warning: gh pr comment failed: {e}", err=True)
 
 

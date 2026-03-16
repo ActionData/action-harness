@@ -11,6 +11,7 @@ import typer
 from action_harness import __version__
 from action_harness.models import ValidationError
 from action_harness.profiler import profile_repo
+from action_harness.review_agents import TOLERANCE_THRESHOLD
 from action_harness.slugify import slugify_prompt
 
 app = typer.Typer(
@@ -157,6 +158,13 @@ def run(
         "--wait-for-ci",
         help="Wait for CI status checks before merging (requires --auto-merge)",
     ),
+    review_cycle: str = typer.Option(
+        "low,med,high",
+        "--review-cycle",
+        help="Comma-separated tolerance levels per review round. "
+        "Each level: low (all severities), med (medium+), high (critical/high only). "
+        "Default: low,med,high. Example: --review-cycle high (single strict-only round).",
+    ),
     dry_run: bool = typer.Option(
         False, "--dry-run", help="Validate and print plan without executing"
     ),
@@ -207,6 +215,23 @@ def run(
     if wait_for_ci and not auto_merge:
         typer.echo("Error: --wait-for-ci requires --auto-merge", err=True)
         raise typer.Exit(code=1)
+
+    # Validate --review-cycle
+    valid_tolerances = set(TOLERANCE_THRESHOLD.keys())
+    review_cycle_list = [t.strip() for t in review_cycle.split(",") if t.strip()]
+    if not review_cycle_list:
+        typer.echo(
+            "Error: --review-cycle must not be empty. Valid values: low, med, high",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+    for t in review_cycle_list:
+        if t not in valid_tolerances:
+            typer.echo(
+                f"Error: invalid tolerance '{t}' in --review-cycle. Valid values: low, med, high",
+                err=True,
+            )
+            raise typer.Exit(code=1)
 
     resolved_home = _resolve_harness_home(harness_home)
 
@@ -312,6 +337,8 @@ def run(
         typer.echo("  eval commands:")
         for cmd in profile.eval_commands:
             typer.echo(f"    - {cmd}")
+        cycle_str = ",".join(review_cycle_list)
+        typer.echo(f"  review-cycle: {cycle_str} ({len(review_cycle_list)} round(s))")
         typer.echo(f"  pr title: [harness] {task_label}")
         typer.echo(f"  auto-merge: {'enabled' if auto_merge else 'disabled'}")
         typer.echo(f"  wait-for-ci: {'enabled' if wait_for_ci else 'disabled'}")
@@ -337,6 +364,7 @@ def run(
         wait_for_ci=wait_for_ci,
         prompt=prompt,
         issue_number=issue,
+        review_cycle=review_cycle_list,
     )
 
     if manifest.manifest_path:

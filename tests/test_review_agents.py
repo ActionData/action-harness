@@ -6,9 +6,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from action_harness.agents import resolve_harness_agents_dir
 from action_harness.models import AcknowledgedFinding, ReviewFinding, ReviewResult
 from action_harness.review_agents import (
-    _AGENT_PROMPTS,
     _AGENTS_WITH_CUSTOM_SEVERITY,
     _GENERIC_SEVERITY_SUFFIX,
     REVIEW_AGENT_NAMES,
@@ -26,76 +26,95 @@ from action_harness.review_agents import (
     triage_findings,
 )
 
+# Resolve harness agents dir once for all tests in this module.
+# Use an empty repo path so all lookups fall through to harness defaults.
+_HARNESS_AGENTS_DIR = resolve_harness_agents_dir()
+_EMPTY_REPO = Path("/tmp/nonexistent-repo-for-test")
+
 
 class TestBuildReviewPrompt:
     def test_returns_nonempty_for_each_agent(self) -> None:
         for name in REVIEW_AGENT_NAMES:
-            prompt = build_review_prompt(name, 42)
+            prompt = build_review_prompt(name, 42, _EMPTY_REPO, _HARNESS_AGENTS_DIR)
             assert len(prompt) > 0
 
     def test_contains_json_output_instructions(self) -> None:
         for name in REVIEW_AGENT_NAMES:
-            prompt = build_review_prompt(name, 99)
+            prompt = build_review_prompt(name, 99, _EMPTY_REPO, _HARNESS_AGENTS_DIR)
             assert '"findings"' in prompt
             assert '"severity"' in prompt
 
     def test_unknown_agent_raises(self) -> None:
-        with pytest.raises(ValueError, match="Unknown review agent"):
-            build_review_prompt("nonexistent-agent", 1)
+        with pytest.raises(FileNotFoundError, match="nonexistent-agent"):
+            build_review_prompt("nonexistent-agent", 1, _EMPTY_REPO, _HARNESS_AGENTS_DIR)
 
     def test_prompt_contains_pr_number(self) -> None:
-        prompt = build_review_prompt("bug-hunter", 123)
+        prompt = build_review_prompt("bug-hunter", 123, _EMPTY_REPO, _HARNESS_AGENTS_DIR)
         assert "123" in prompt
 
     def test_bug_hunter_prompt_content(self) -> None:
-        prompt = build_review_prompt("bug-hunter", 1)
+        prompt = build_review_prompt("bug-hunter", 1, _EMPTY_REPO, _HARNESS_AGENTS_DIR)
         assert "bug" in prompt.lower() or "Bug" in prompt
 
     def test_test_reviewer_prompt_content(self) -> None:
-        prompt = build_review_prompt("test-reviewer", 1)
+        prompt = build_review_prompt("test-reviewer", 1, _EMPTY_REPO, _HARNESS_AGENTS_DIR)
         assert "test" in prompt.lower()
 
     def test_quality_reviewer_prompt_content(self) -> None:
-        prompt = build_review_prompt("quality-reviewer", 1)
+        prompt = build_review_prompt("quality-reviewer", 1, _EMPTY_REPO, _HARNESS_AGENTS_DIR)
         assert "quality" in prompt.lower() or "maintainability" in prompt.lower()
 
     def test_spec_compliance_reviewer_prompt_contains_tasks_and_compliance(self) -> None:
-        prompt = build_review_prompt("spec-compliance-reviewer", 42)
+        prompt = build_review_prompt(
+            "spec-compliance-reviewer", 42, _EMPTY_REPO, _HARNESS_AGENTS_DIR
+        )
         assert "tasks" in prompt.lower()
         assert "compliance" in prompt.lower()
 
     def test_spec_compliance_reviewer_prompt_contains_severity_definitions(self) -> None:
-        prompt = build_review_prompt("spec-compliance-reviewer", 42)
+        prompt = build_review_prompt(
+            "spec-compliance-reviewer", 42, _EMPTY_REPO, _HARNESS_AGENTS_DIR
+        )
         assert "critical" in prompt.lower()
         assert "high" in prompt.lower()
         assert "medium" in prompt.lower()
         assert "low" in prompt.lower()
 
     def test_spec_compliance_reviewer_prompt_contains_pr_number(self) -> None:
-        prompt = build_review_prompt("spec-compliance-reviewer", 99)
+        prompt = build_review_prompt(
+            "spec-compliance-reviewer", 99, _EMPTY_REPO, _HARNESS_AGENTS_DIR
+        )
         assert "99" in prompt
 
     def test_spec_compliance_reviewer_excludes_generic_severity(self) -> None:
         """The spec-compliance-reviewer defines its own severity scale and must
         NOT receive the generic severity definitions from _GENERIC_SEVERITY_SUFFIX."""
-        prompt = build_review_prompt("spec-compliance-reviewer", 42)
+        prompt = build_review_prompt(
+            "spec-compliance-reviewer", 42, _EMPTY_REPO, _HARNESS_AGENTS_DIR
+        )
         assert _GENERIC_SEVERITY_SUFFIX.strip() not in prompt
 
     def test_base_agents_include_generic_severity(self) -> None:
         for name in REVIEW_AGENT_NAMES:
-            prompt = build_review_prompt(name, 1)
+            prompt = build_review_prompt(name, 1, _EMPTY_REPO, _HARNESS_AGENTS_DIR)
             assert "data loss" in prompt, f"{name} prompt missing generic severity"
 
-    def test_review_agent_names_subset_of_agent_prompts(self) -> None:
-        """REVIEW_AGENT_NAMES must be a subset of _AGENT_PROMPTS keys."""
-        assert set(REVIEW_AGENT_NAMES) <= set(_AGENT_PROMPTS)
+    def test_review_agent_names_have_agent_files(self) -> None:
+        """Every REVIEW_AGENT_NAMES entry must have a loadable agent file."""
+        for name in REVIEW_AGENT_NAMES:
+            prompt = build_review_prompt(name, 1, _EMPTY_REPO, _HARNESS_AGENTS_DIR)
+            assert len(prompt) > 0
 
-    def test_custom_severity_agents_are_in_agent_prompts(self) -> None:
-        """Every agent in _AGENTS_WITH_CUSTOM_SEVERITY must have a prompt."""
-        assert _AGENTS_WITH_CUSTOM_SEVERITY <= set(_AGENT_PROMPTS)
+    def test_custom_severity_agents_have_agent_files(self) -> None:
+        """Every agent in _AGENTS_WITH_CUSTOM_SEVERITY must have a loadable prompt."""
+        for name in _AGENTS_WITH_CUSTOM_SEVERITY:
+            prompt = build_review_prompt(name, 1, _EMPTY_REPO, _HARNESS_AGENTS_DIR)
+            assert len(prompt) > 0
 
     def test_python_ecosystem_includes_catalog_checklist(self) -> None:
-        prompt = build_review_prompt("bug-hunter", 42, ecosystem="python")
+        prompt = build_review_prompt(
+            "bug-hunter", 42, _EMPTY_REPO, _HARNESS_AGENTS_DIR, ecosystem="python"
+        )
         assert "## Catalog Checklist" in prompt
         # Should include Python-specific entries
         assert "subprocess-timeout" in prompt
@@ -106,8 +125,41 @@ class TestBuildReviewPrompt:
             "action_harness.review_agents.load_catalog",
             return_value=[],
         ):
-            prompt = build_review_prompt("bug-hunter", 42, ecosystem="nonexistent")
+            prompt = build_review_prompt(
+                "bug-hunter", 42, _EMPTY_REPO, _HARNESS_AGENTS_DIR, ecosystem="nonexistent"
+            )
         assert "## Catalog Checklist" not in prompt
+
+    def test_build_review_prompt_end_to_end(self, tmp_path: Path) -> None:
+        """6.7: End-to-end test with a real agent file."""
+        harness_dir = tmp_path / "agents"
+        harness_dir.mkdir()
+        (harness_dir / "bug-hunter.md").write_text(
+            "---\nname: bug-hunter\n---\nReview PR #{pr_number} for bugs"
+        )
+        repo_path = tmp_path / "repo"
+        repo_path.mkdir()
+
+        prompt = build_review_prompt("bug-hunter", 42, repo_path, harness_dir, ecosystem="python")
+
+        assert "Review PR #42 for bugs" in prompt
+        assert '"findings"' in prompt  # JSON output format
+        assert "data loss" in prompt  # Generic severity suffix
+
+    def test_build_review_prompt_custom_severity_agent(self, tmp_path: Path) -> None:
+        """6.8: Custom severity agent gets JSON format but not generic severity."""
+        harness_dir = tmp_path / "agents"
+        harness_dir.mkdir()
+        (harness_dir / "spec-compliance-reviewer.md").write_text(
+            "---\nname: spec-compliance-reviewer\n---\nReview compliance for PR #{pr_number}"
+        )
+        repo_path = tmp_path / "repo"
+        repo_path.mkdir()
+
+        prompt = build_review_prompt("spec-compliance-reviewer", 42, repo_path, harness_dir)
+
+        assert '"findings"' in prompt  # JSON format present
+        assert _GENERIC_SEVERITY_SUFFIX.strip() not in prompt  # No generic severity
 
 
 class TestParseReviewFindings:
@@ -380,6 +432,8 @@ class TestDispatchSingleReview:
                 "bug-hunter",
                 pr_number=42,
                 worktree_path=Path("/tmp/wt"),
+                repo_path=_EMPTY_REPO,
+                harness_agents_dir=_HARNESS_AGENTS_DIR,
                 max_turns=30,
             )
 
@@ -411,6 +465,8 @@ class TestDispatchSingleReview:
                 "test-reviewer",
                 pr_number=10,
                 worktree_path=Path("/tmp/wt"),
+                repo_path=_EMPTY_REPO,
+                harness_agents_dir=_HARNESS_AGENTS_DIR,
                 model="opus",
                 effort="high",
                 max_budget_usd=1.5,
@@ -438,6 +494,8 @@ class TestDispatchSingleReview:
                 "bug-hunter",
                 pr_number=1,
                 worktree_path=Path("/tmp/wt"),
+                repo_path=_EMPTY_REPO,
+                harness_agents_dir=_HARNESS_AGENTS_DIR,
             )
 
         assert result.success is False
@@ -469,6 +527,8 @@ class TestDispatchSingleReview:
                 "bug-hunter",
                 pr_number=5,
                 worktree_path=Path("/tmp/wt"),
+                repo_path=_EMPTY_REPO,
+                harness_agents_dir=_HARNESS_AGENTS_DIR,
             )
 
         assert isinstance(result, ReviewResult)
@@ -491,6 +551,8 @@ class TestDispatchSingleReview:
                 "spec-compliance-reviewer",
                 pr_number=42,
                 worktree_path=Path("/tmp/wt"),
+                repo_path=_EMPTY_REPO,
+                harness_agents_dir=_HARNESS_AGENTS_DIR,
                 extra_context="sentinel text",
             )
 
@@ -516,6 +578,8 @@ class TestDispatchSingleReview:
                 "spec-compliance-reviewer",
                 pr_number=42,
                 worktree_path=Path("/tmp/wt"),
+                repo_path=_EMPTY_REPO,
+                harness_agents_dir=_HARNESS_AGENTS_DIR,
                 extra_context="",
             )
 
@@ -539,6 +603,8 @@ class TestDispatchSingleReview:
                 "bug-hunter",
                 pr_number=42,
                 worktree_path=Path("/tmp/wt"),
+                repo_path=_EMPTY_REPO,
+                harness_agents_dir=_HARNESS_AGENTS_DIR,
                 extra_context=None,
             )
 
@@ -559,6 +625,8 @@ class TestDispatchReviewAgents:
             results = dispatch_review_agents(
                 pr_number=42,
                 worktree_path=Path("/tmp/wt"),
+                repo_path=_EMPTY_REPO,
+                harness_agents_dir=_HARNESS_AGENTS_DIR,
             )
 
         assert len(results) == 3
@@ -575,6 +643,8 @@ class TestDispatchReviewAgents:
             results = dispatch_review_agents(
                 pr_number=10,
                 worktree_path=Path("/tmp/wt"),
+                repo_path=_EMPTY_REPO,
+                harness_agents_dir=_HARNESS_AGENTS_DIR,
             )
 
         agent_names = {r.agent_name for r in results}
@@ -600,6 +670,8 @@ class TestDispatchReviewAgents:
             results = dispatch_review_agents(
                 pr_number=1,
                 worktree_path=Path("/tmp/wt"),
+                repo_path=_EMPTY_REPO,
+                harness_agents_dir=_HARNESS_AGENTS_DIR,
             )
 
         assert len(results) == 3
@@ -631,6 +703,8 @@ class TestDispatchReviewAgents:
             results = dispatch_review_agents(
                 pr_number=42,
                 worktree_path=tmp_path,
+                repo_path=_EMPTY_REPO,
+                harness_agents_dir=_HARNESS_AGENTS_DIR,
                 change_name="test-change",
             )
 
@@ -652,6 +726,8 @@ class TestDispatchReviewAgents:
             results = dispatch_review_agents(
                 pr_number=42,
                 worktree_path=Path("/tmp/wt"),
+                repo_path=_EMPTY_REPO,
+                harness_agents_dir=_HARNESS_AGENTS_DIR,
                 change_name=None,
             )
 
@@ -669,6 +745,8 @@ class TestDispatchReviewAgents:
             results = dispatch_review_agents(
                 pr_number=42,
                 worktree_path=tmp_path,
+                repo_path=_EMPTY_REPO,
+                harness_agents_dir=_HARNESS_AGENTS_DIR,
                 change_name="nonexistent",
             )
 
@@ -694,6 +772,8 @@ class TestDispatchReviewAgents:
                 results = dispatch_review_agents(
                     pr_number=42,
                     worktree_path=tmp_path,
+                    repo_path=_EMPTY_REPO,
+                    harness_agents_dir=_HARNESS_AGENTS_DIR,
                     change_name="broken-change",
                 )
         finally:
@@ -720,6 +800,8 @@ class TestDispatchReviewAgents:
             results = dispatch_review_agents(
                 pr_number=42,
                 worktree_path=tmp_path,
+                repo_path=_EMPTY_REPO,
+                harness_agents_dir=_HARNESS_AGENTS_DIR,
                 change_name="bad-encoding",
             )
 

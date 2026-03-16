@@ -6,6 +6,7 @@ from pathlib import Path
 
 import typer
 
+from action_harness.agents import resolve_harness_agents_dir
 from action_harness.catalog.frequency import update_frequency
 from action_harness.catalog.loader import load_catalog
 from action_harness.evaluator import run_eval
@@ -329,6 +330,9 @@ def _run_pipeline_inner(
     if harness_home is not None and repo_name is not None:
         repo_knowledge_dir = harness_home / "repos" / repo_name / "knowledge"
 
+    # Resolve agent definitions directory once for all review dispatches
+    harness_agents_dir = resolve_harness_agents_dir()
+
     # Label issue as in-progress (best-effort)
     if issue_number is not None:
         from action_harness.issue_intake import comment_on_issue, label_issue
@@ -647,6 +651,8 @@ def _run_pipeline_inner(
                 stages,
                 change_name=change_name,
                 ecosystem=ecosystem,
+                repo_path=repo,
+                harness_agents_dir=harness_agents_dir,
             )
 
             # Tag each result with the tolerance level used for this round.
@@ -762,6 +768,8 @@ def _run_pipeline_inner(
                 stages,
                 change_name=change_name,
                 ecosystem=ecosystem,
+                repo_path=repo,
+                harness_agents_dir=harness_agents_dir,
             )
             still_needs_fix = triage_findings(latest_review_results, last_tolerance)
             if not still_needs_fix:
@@ -818,6 +826,8 @@ def _run_pipeline_inner(
             pr_result,
             stages,
             logger,
+            repo_path=repo,
+            harness_agents_dir=harness_agents_dir,
         )
 
     if review_result is not None:
@@ -918,6 +928,8 @@ def _run_review_agents_only(
     stages: list[StageResultUnion],
     change_name: str | None = None,
     ecosystem: str = "unknown",
+    repo_path: Path | None = None,
+    harness_agents_dir: Path | None = None,
 ) -> list[ReviewResult]:
     """Run review agents stage. Returns review results without triaging.
 
@@ -930,11 +942,19 @@ def _run_review_agents_only(
     # Extract PR number from URL (e.g., https://github.com/org/repo/pull/123)
     pr_number = int(pr_result.pr_url.rstrip("/").split("/")[-1])
 
+    # Resolve paths for agent loading
+    resolved_repo_path = repo_path if repo_path is not None else worktree_path
+    resolved_agents_dir = (
+        harness_agents_dir if harness_agents_dir is not None else resolve_harness_agents_dir()
+    )
+
     typer.echo(f"[pipeline] running review agents for PR #{pr_number}", err=True)
 
     review_results = dispatch_review_agents(
         pr_number=pr_number,
         worktree_path=worktree_path,
+        repo_path=resolved_repo_path,
+        harness_agents_dir=resolved_agents_dir,
         max_turns=max_turns,
         model=model,
         effort=effort,
@@ -1174,15 +1194,25 @@ def _run_openspec_review(
     pr_result: PrResult,
     stages: list[StageResultUnion],
     logger: EventLogger,
+    repo_path: Path | None = None,
+    harness_agents_dir: Path | None = None,
 ) -> OpenSpecReviewResult | None:
     """Run the OpenSpec review stage. Returns the review result, or None on skip."""
     typer.echo("[pipeline] running openspec review", err=True)
+
+    # Resolve paths for agent loading
+    resolved_repo_path = repo_path if repo_path is not None else worktree_path
+    resolved_agents_dir = (
+        harness_agents_dir if harness_agents_dir is not None else resolve_harness_agents_dir()
+    )
 
     commits_before = count_commits_ahead(worktree_path, base_branch)
 
     raw_output, duration = dispatch_openspec_review(
         change_name,
         worktree_path,
+        repo_path=resolved_repo_path,
+        harness_agents_dir=resolved_agents_dir,
         base_branch=base_branch,
         max_turns=max_turns,
         model=model,

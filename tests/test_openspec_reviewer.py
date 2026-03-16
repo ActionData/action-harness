@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from action_harness.agents import resolve_harness_agents_dir
 from action_harness.openspec_reviewer import (
     build_review_prompt,
     dispatch_openspec_review,
@@ -11,34 +12,37 @@ from action_harness.openspec_reviewer import (
     push_archive_if_needed,
 )
 
+_HARNESS_AGENTS_DIR = resolve_harness_agents_dir()
+_EMPTY_REPO = Path("/tmp/nonexistent-repo-for-test")
+
 
 class TestBuildReviewPrompt:
     def test_includes_change_name(self) -> None:
-        prompt = build_review_prompt("my-change")
+        prompt = build_review_prompt("my-change", _EMPTY_REPO, _HARNESS_AGENTS_DIR)
         assert "my-change" in prompt
 
     def test_includes_openspec_validate(self) -> None:
-        prompt = build_review_prompt("my-change")
+        prompt = build_review_prompt("my-change", _EMPTY_REPO, _HARNESS_AGENTS_DIR)
         assert "openspec validate" in prompt
 
     def test_includes_openspec_archive(self) -> None:
-        prompt = build_review_prompt("my-change")
+        prompt = build_review_prompt("my-change", _EMPTY_REPO, _HARNESS_AGENTS_DIR)
         assert "openspec archive" in prompt
 
     def test_includes_deepwiki_reference(self) -> None:
-        prompt = build_review_prompt("my-change")
+        prompt = build_review_prompt("my-change", _EMPTY_REPO, _HARNESS_AGENTS_DIR)
         assert "Fission-AI/OpenSpec" in prompt
         assert "deepwiki" in prompt
 
     def test_includes_json_output_format(self) -> None:
-        prompt = build_review_prompt("my-change")
+        prompt = build_review_prompt("my-change", _EMPTY_REPO, _HARNESS_AGENTS_DIR)
         assert '"status"' in prompt
         assert '"tasks_total"' in prompt
         assert '"findings"' in prompt
         assert '"archived"' in prompt
 
     def test_includes_tasks_md_reference(self) -> None:
-        prompt = build_review_prompt("my-change")
+        prompt = build_review_prompt("my-change", _EMPTY_REPO, _HARNESS_AGENTS_DIR)
         assert "tasks.md" in prompt
 
 
@@ -61,7 +65,12 @@ class TestDispatchOpenspecReview:
         mock = self._mock_subprocess(stdout='{"result": "ok"}')
 
         with patch("action_harness.openspec_reviewer.subprocess.run", mock):
-            dispatch_openspec_review("test-change", Path("/fake/wt"))
+            dispatch_openspec_review(
+                "test-change",
+                Path("/fake/wt"),
+                repo_path=_EMPTY_REPO,
+                harness_agents_dir=_HARNESS_AGENTS_DIR,
+            )
 
         mock.assert_called_once()
         call_args = mock.call_args
@@ -80,7 +89,13 @@ class TestDispatchOpenspecReview:
         mock = self._mock_subprocess(stdout='{"result": "ok"}')
 
         with patch("action_harness.openspec_reviewer.subprocess.run", mock):
-            dispatch_openspec_review("test-change", Path("/fake/wt"), permission_mode="plan")
+            dispatch_openspec_review(
+                "test-change",
+                Path("/fake/wt"),
+                repo_path=_EMPTY_REPO,
+                harness_agents_dir=_HARNESS_AGENTS_DIR,
+                permission_mode="plan",
+            )
 
         cmd = mock.call_args[0][0]
         idx = cmd.index("--permission-mode")
@@ -90,7 +105,12 @@ class TestDispatchOpenspecReview:
         mock = self._mock_subprocess(stdout='{"result": "data"}')
 
         with patch("action_harness.openspec_reviewer.subprocess.run", mock):
-            raw_output, duration = dispatch_openspec_review("test-change", Path("/fake/wt"))
+            raw_output, duration = dispatch_openspec_review(
+                "test-change",
+                Path("/fake/wt"),
+                repo_path=_EMPTY_REPO,
+                harness_agents_dir=_HARNESS_AGENTS_DIR,
+            )
 
         assert raw_output == '{"result": "data"}'
         assert duration >= 0
@@ -99,7 +119,13 @@ class TestDispatchOpenspecReview:
         mock = self._mock_subprocess(stdout='{"result": "ok"}')
 
         with patch("action_harness.openspec_reviewer.subprocess.run", mock):
-            dispatch_openspec_review("test-change", Path("/fake/wt"), max_turns=50)
+            dispatch_openspec_review(
+                "test-change",
+                Path("/fake/wt"),
+                repo_path=_EMPTY_REPO,
+                harness_agents_dir=_HARNESS_AGENTS_DIR,
+                max_turns=50,
+            )
 
         cmd = mock.call_args[0][0]
         idx = cmd.index("--max-turns")

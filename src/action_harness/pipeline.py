@@ -628,6 +628,7 @@ def _run_pipeline_inner(
                 permission_mode,
                 verbose,
                 stages,
+                change_name=change_name,
             )
 
             # Tag each result with the tolerance level used for this round.
@@ -739,6 +740,7 @@ def _run_pipeline_inner(
                 permission_mode,
                 verbose,
                 stages,
+                change_name=change_name,
             )
             still_needs_fix = triage_findings(latest_review_results, last_tolerance)
             if not still_needs_fix:
@@ -871,6 +873,7 @@ def _run_review_agents_only(
     permission_mode: str,
     verbose: bool,
     stages: list[StageResultUnion],
+    change_name: str | None = None,
 ) -> list[ReviewResult]:
     """Run review agents stage. Returns review results without triaging.
 
@@ -894,6 +897,7 @@ def _run_review_agents_only(
         max_budget_usd=max_budget_usd,
         permission_mode=permission_mode,
         verbose=verbose,
+        change_name=change_name,
     )
 
     for result in review_results:

@@ -12,8 +12,8 @@
 
 ## 3. Pipeline Threading [depends: 2]
 
-- [ ] 3.1 Update all call sites of `dispatch_review_agents` in `pipeline.py` to pass `change_name=change_name`. The `change_name` parameter is already available in `_run_pipeline_inner`.
-- [ ] 3.2 Add test: verify that when pipeline runs with a change name, `dispatch_review_agents` is called with `change_name` matching the pipeline's change name. When pipeline runs in prompt mode, `dispatch_review_agents` is called with `change_name` that starts with `prompt-` — verify spec-compliance-reviewer is NOT dispatched (tasks.md won't exist).
+- [x] 3.1 Update all call sites of `dispatch_review_agents` in `pipeline.py` to pass `change_name=change_name`. The `change_name` parameter is already available in `_run_pipeline_inner`.
+- [x] 3.2 Add test: verify that when pipeline runs with a change name, `dispatch_review_agents` is called with `change_name` matching the pipeline's change name. When pipeline runs in prompt mode, `dispatch_review_agents` is called with `change_name` that starts with `prompt-` — verify spec-compliance-reviewer is NOT dispatched (tasks.md won't exist).
 
 ## 4. Validation [depends: all]
 

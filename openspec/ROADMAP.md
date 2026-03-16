@@ -32,10 +32,11 @@ Priority order. Each is an OpenSpec change the harness implements on itself.
 - [x] `unspecced-tasks` — `--prompt` flag on `harness run` for freeform tasks without a full OpenSpec change. Worker receives the prompt directly. OpenSpec review skipped.
 - [x] `github-issue-intake` — `--issue` flag to dispatch from GitHub issues. Detects OpenSpec change references, falls back to `--prompt` mode. PR links to issue for auto-closure. Status labels.
 - [x] `codebase-assessment` — `harness assess` command scoring agentic readiness across 6 categories. Three modes: base scan, `--deep` agent assessment, `--propose` for auto-generated OpenSpec proposals.
+- [x] `review-tolerance` — Configurable review depth via `--review-cycle` (low/med/high per round). Default: `low,med,high` (3 rounds, progressively stricter).
 
 ### Up next
 
-1. `review-tolerance` — Configurable review depth via tolerance levels (low/med/high) per round, acknowledgment protocol for declined findings, two-strike code comment escalation. Active bottleneck: review agents produce 13+ findings that can't be fully resolved in 2 fix-retry rounds.
+1. `agent-knowledge-catalog` — Configurable review depth via tolerance levels (low/med/high) per round, acknowledgment protocol for declined findings, two-strike code comment escalation. Active bottleneck: review agents produce 13+ findings that can't be fully resolved in 2 fix-retry rounds.
 2. `agent-knowledge-catalog` — Structured catalog of bug/quality issue classes (subprocess safety, type narrowing, regex patterns, error clarity, etc.) with per-entry rules for workers, checklists for reviewers, and scoring criteria for assessment. Filtered by ecosystem (Python, JS, Rust). Three-layer context hierarchy: universal → ecosystem → repo-specific. Per-repo knowledge store for findings frequency. Self-improving: review findings seed new entries. Prevents bugs at the source — highest multiplier effect. See `docs/research/agent-quality-catalog.md`.
 3. `failure-reporting` — Aggregate failure logs, identify systemic patterns. Pairs with agent-knowledge-catalog: aggregate review findings across runs, identify which catalog rules fire most often, feed patterns back into the catalog.
 4. `checkpoint-resume` — Checkpoint pipeline state so interrupted runs can resume from the last completed stage. Distinct from `retry-progress` which handles within-stage retry continuity — this is about cross-stage resumption after process crashes. Needs specs.

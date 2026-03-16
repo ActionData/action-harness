@@ -113,7 +113,7 @@ class TestDefaultAgentFiles:
 
             meta, body = parse_agent_file(agent_path)
             assert "name" in meta, f"Missing 'name' in frontmatter of {agent_file_name}"
-            assert (
-                "description" in meta
-            ), f"Missing 'description' in frontmatter of {agent_file_name}"
+            assert "description" in meta, (
+                f"Missing 'description' in frontmatter of {agent_file_name}"
+            )
             assert len(body) > 0, f"Empty body in {agent_file_name}"

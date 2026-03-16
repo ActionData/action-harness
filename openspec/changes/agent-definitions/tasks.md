@@ -44,8 +44,8 @@
 
 ## 7. Self-Validation
 
-- [ ] 7.1 `uv run pytest tests/ -v` — all existing and new tests pass
-- [ ] 7.2 `uv run ruff check .` — no lint errors
-- [ ] 7.3 `uv run ruff format --check .` — formatting clean
-- [ ] 7.4 `uv run mypy src/` — no type errors
-- [ ] 7.5 Verify agent files parse: `python -c "from action_harness.agents import parse_agent_file; from pathlib import Path; [print(parse_agent_file(p)[0]) for p in Path('.harness/agents').glob('*.md')]"` — prints 5 metadata dicts without errors
+- [x] 7.1 `uv run pytest tests/ -v` — all existing and new tests pass
+- [x] 7.2 `uv run ruff check .` — no lint errors
+- [x] 7.3 `uv run ruff format --check .` — formatting clean
+- [x] 7.4 `uv run mypy src/` — no type errors
+- [x] 7.5 Verify agent files parse: `python -c "from action_harness.agents import parse_agent_file; from pathlib import Path; [print(parse_agent_file(p)[0]) for p in Path('.harness/agents').glob('*.md')]"` — prints 5 metadata dicts without errors

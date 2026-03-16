@@ -156,9 +156,7 @@ class TestBuildReviewPrompt:
         repo_path = tmp_path / "repo"
         repo_path.mkdir()
 
-        prompt = build_review_prompt(
-            "spec-compliance-reviewer", 42, repo_path, harness_dir
-        )
+        prompt = build_review_prompt("spec-compliance-reviewer", 42, repo_path, harness_dir)
 
         assert '"findings"' in prompt  # JSON format present
         assert _GENERIC_SEVERITY_SUFFIX.strip() not in prompt  # No generic severity

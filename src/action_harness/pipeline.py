@@ -6,6 +6,7 @@ from pathlib import Path
 
 import typer
 
+from action_harness.agents import resolve_harness_agents_dir
 from action_harness.catalog.frequency import update_frequency
 from action_harness.catalog.loader import load_catalog
 from action_harness.evaluator import run_eval
@@ -38,7 +39,6 @@ from action_harness.protection import (
     get_changed_files,
     load_protected_patterns,
 )
-from action_harness.agents import resolve_harness_agents_dir
 from action_harness.review_agents import (
     dispatch_review_agents,
     filter_actionable_findings,

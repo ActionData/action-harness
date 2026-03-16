@@ -774,9 +774,7 @@ class TestBoostedEntryInjection:
         knowledge_dir = tmp_path / "knowledge"
         knowledge_dir.mkdir()
         freq_data = {"subprocess-timeout": {"count": 5, "last_seen": "2026-03-16"}}
-        (knowledge_dir / FREQUENCY_FILENAME).write_text(
-            json.dumps(freq_data), encoding="utf-8"
-        )
+        (knowledge_dir / FREQUENCY_FILENAME).write_text(json.dumps(freq_data), encoding="utf-8")
 
         mock = make_mock_subprocess(claude_stdout=_OK_JSON)
         with (

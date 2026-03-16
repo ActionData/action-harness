@@ -23,9 +23,9 @@
 
 ## 5. Review Agent Prompt Injection [depends: 2, 3]
 
-- [ ] 5.1 In `build_review_prompt()` in `review_agents.py`, append the catalog reviewer checklist to the system prompt. Call `load_catalog(ecosystem)` and `render_for_reviewer(entries)`. Append to the system prompt string.
-- [ ] 5.2 Thread `ecosystem` through the full review prompt call chain: add `ecosystem: str = "unknown"` to `dispatch_review_agents()`, `dispatch_single_review()`, and `build_review_prompt()`. In `dispatch_review_agents`, pass `ecosystem` to each `executor.submit(dispatch_single_review, ...)` call. In `dispatch_single_review`, pass it to `build_review_prompt()`.
-- [ ] 5.3 Add tests: review agent prompt with `ecosystem="python"` contains `## Catalog Checklist` with Python entries. Prompt with no matching entries has no checklist section.
+- [x] 5.1 In `build_review_prompt()` in `review_agents.py`, append the catalog reviewer checklist to the system prompt. Call `load_catalog(ecosystem)` and `render_for_reviewer(entries)`. Append to the system prompt string.
+- [x] 5.2 Thread `ecosystem` through the full review prompt call chain: add `ecosystem: str = "unknown"` to `dispatch_review_agents()`, `dispatch_single_review()`, and `build_review_prompt()`. In `dispatch_review_agents`, pass `ecosystem` to each `executor.submit(dispatch_single_review, ...)` call. In `dispatch_single_review`, pass it to `build_review_prompt()`.
+- [x] 5.3 Add tests: review agent prompt with `ecosystem="python"` contains `## Catalog Checklist` with Python entries. Prompt with no matching entries has no checklist section.
 
 ## 6. Per-Repo Finding Frequency [depends: 2]
 

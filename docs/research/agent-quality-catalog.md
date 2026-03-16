@@ -188,6 +188,74 @@ For repos that aren't agent-ready, the catalog drives a progressive improvement 
 
 The catalog is both the diagnostic criteria (what to check) and the prescription (what to add). This makes the harness more effective on older codebases by systematically filling the gaps.
 
+## Per-Repo Knowledge Store
+
+Beyond the universal catalog, each onboarded repo accumulates knowledge over time — assessment scores, review findings frequency, agent success patterns. This per-repo data makes the harness smarter for a specific repo with each pipeline run.
+
+### What accumulates per repo
+
+```
+~/.harness/repos/owner-repo/knowledge/
+  findings-history.json    ← review findings classified against catalog
+  catalog-overrides.json   ← repo-specific rule adjustments
+  agent-notes.json         ← things agents learned about this repo
+```
+
+Combined with existing per-repo data:
+- `profile.json` — ecosystem, eval commands (from repo-profiling)
+- `assessment.json` — agentic readiness scores (from codebase-assessment)
+
+### Feedback loop: findings frequency drives worker rules
+
+```
+Pipeline run completes
+  → Review findings classified against catalog
+    → Per-repo finding frequency updated
+      → Next run: top-N most-violated rules
+        injected into worker prompt
+        (in addition to ecosystem defaults)
+
+Run 1:  Worker gets ecosystem defaults only
+Run 5:  Worker gets ecosystem defaults + "this repo often misses timeouts"
+Run 10: Worker gets ecosystem defaults + repo-specific hot rules
+        Review agents find fewer issues → quality improves
+```
+
+The harness doesn't just remember what rules exist — it learns which rules *this repo* needs most.
+
+### Decision: Structured JSON, Not RAG
+
+We considered a vector database (RAG) for catalog retrieval. Decision: **use structured JSON files, not RAG.** Rationale:
+
+```
+                Vector DB (RAG)              Structured JSON
+                ──────────────              ────────────────
+Good at         Semantic similarity,         Exact queries, counts,
+                cross-repo patterns          aggregations, trends
+
+Bad at          Exact queries, counts        Fuzzy matching
+
+Agent access    Needs MCP server or          Read a file — zero
+                API endpoint                 infrastructure
+
+Complexity      Embedding pipeline,          Files in harness home
+                vector store, retrieval
+
+When useful     1000+ entries, 50+ repos,    10-100 entries,
+                cross-repo learning          per-repo history
+```
+
+At current scale (~10 catalog entries, <10 repos), filtering by ecosystem + severity gets you to the right 5-10 rules. No embedding similarity needed.
+
+RAG is the right tool when the catalog grows and simple filtering breaks down. The trigger conditions to revisit this decision:
+
+1. **Catalog exceeds ~200 entries** — too many to filter mechanically by ecosystem alone
+2. **Harness manages 50+ repos** — cross-repo learning ("repos like this tend to have these issues") becomes valuable and requires embedding similarity
+3. **Agents need free-form knowledge queries** — "what patterns should I watch for in error handling?" is a natural language query, not a filter
+4. **Code pattern matching across repos** — "this code looks like a pattern that caused bugs elsewhere" requires embeddings
+
+None of these are true today. Revisit when any trigger fires.
+
 ## Next Steps
 
 This research should inform a roadmap item: `agent-knowledge-catalog`. The implementation would:
@@ -199,6 +267,8 @@ This research should inform a roadmap item: `agent-knowledge-catalog`. The imple
 5. Wire into worker dispatch (inject top N rules into system prompt)
 6. Wire into review agent dispatch (inject full checklist)
 7. Wire into codebase-assessment (use for scoring and gap detection)
+8. Add per-repo knowledge store (JSON in harness home) for findings frequency tracking
+9. Implement the feedback loop: findings frequency → worker prompt rule selection
 
 ## Related
 

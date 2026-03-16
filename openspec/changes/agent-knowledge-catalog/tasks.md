@@ -1,8 +1,8 @@
 ## 1. Catalog Models and Loader [no dependencies]
 
-- [ ] 1.1 Create `src/action_harness/catalog/__init__.py` and `src/action_harness/catalog/models.py` with a `CatalogEntry` Pydantic model: `id: str`, `entry_class: str` (renamed from `class` to avoid Python keyword), `severity: Literal["high", "medium", "low"]`, `ecosystems: list[str]`, `worker_rule: str`, `reviewer_checklist: list[str]`, `examples: dict[str, str] | None = None` (bad/good), `learned_from: list[dict[str, str]] | None = None`.
-- [ ] 1.2 Create `src/action_harness/catalog/loader.py` with `load_catalog(ecosystem: str, entries_dir: Path | None = None) -> list[CatalogEntry]`. Reads all `.yaml` files from `entries_dir` (default: `src/action_harness/catalog/entries/`), parses each into `CatalogEntry`, filters to entries where `ecosystem` is in `entry.ecosystems` or `"all"` is in `entry.ecosystems`. Returns sorted by severity (high first).
-- [ ] 1.3 Add tests: load with ecosystem "python" returns Python + "all" entries. Load with "unknown" returns only "all" entries. Load with "javascript" excludes Python-only entries. Invalid YAML file is skipped with a warning. Empty entries directory returns empty list.
+- [x] 1.1 Create `src/action_harness/catalog/__init__.py` and `src/action_harness/catalog/models.py` with a `CatalogEntry` Pydantic model: `id: str`, `entry_class: str` (renamed from `class` to avoid Python keyword), `severity: Literal["high", "medium", "low"]`, `ecosystems: list[str]`, `worker_rule: str`, `reviewer_checklist: list[str]`, `examples: dict[str, str] | None = None` (bad/good), `learned_from: list[dict[str, str]] | None = None`.
+- [x] 1.2 Create `src/action_harness/catalog/loader.py` with `load_catalog(ecosystem: str, entries_dir: Path | None = None) -> list[CatalogEntry]`. Reads all `.yaml` files from `entries_dir` (default: `src/action_harness/catalog/entries/`), parses each into `CatalogEntry`, filters to entries where `ecosystem` is in `entry.ecosystems` or `"all"` is in `entry.ecosystems`. Returns sorted by severity (high first).
+- [x] 1.3 Add tests: load with ecosystem "python" returns Python + "all" entries. Load with "unknown" returns only "all" entries. Load with "javascript" excludes Python-only entries. Invalid YAML file is skipped with a warning. Empty entries directory returns empty list.
 
 ## 2. Seed Catalog Entries [depends: 1]
 

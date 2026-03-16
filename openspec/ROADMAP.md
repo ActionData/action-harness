@@ -40,10 +40,11 @@ Priority order. Each is an OpenSpec change the harness implements on itself.
 
 ### Up next
 
-1. `failure-reporting` — Aggregate failure logs, identify systemic patterns. Pairs with agent-knowledge-catalog: aggregate review findings across runs, identify which catalog rules fire most often, feed patterns back into the catalog.
-2. `checkpoint-resume` — Checkpoint pipeline state so interrupted runs can resume from the last completed stage. Distinct from `retry-progress` which handles within-stage retry continuity — this is about cross-stage resumption after process crashes. Needs specs.
-3. `harness-dashboard` — Read-only CLI dashboard for onboarded repos, workspaces, and cross-repo OpenSpec state. Data layer (Pydantic models) designed for future TUI/web.
-4. `live-progress-feed` — Real-time visibility into worker progress (task completion, file edits, tool calls) during pipeline runs. Needs specs.
-5. `rollback-tags` — Git tag-based rollback points and shipped feature markers. Tags main branch before merge (`harness/pre-merge/{label}`) and after (`harness/shipped/{label}`). `harness rollback` reverts via revert commits. `harness history` lists shipped features. More valuable once auto-merge is routinely used.
-6. `always-on` — Event-driven intake from webhooks, recurring maintenance, Slack escalation. Big scope — requires server mode, event loop. Deferred until core quality loop is solid.
-7. `ephemeral-observability` — Per-worktree observability stack (Vector → VictoriaLogs/Metrics/Traces) for target apps that emit telemetry. Lets workers query logs (LogsQL), metrics (PromQL), and traces (TraceQL) to validate runtime behavior — not just exit codes. Torn down when task completes. Requires repo-profiling to detect when a target app is a running service. Inspired by OpenAI's Codex harness architecture.
+1. `agent-definitions` — Move hardcoded agent prompts to `.harness/agents/*.md` files. Per-repo override support. Richer prompts ported from global agent definitions.
+2. `failure-reporting` — Aggregate failure logs, identify systemic patterns. Pairs with agent-knowledge-catalog: aggregate review findings across runs, identify which catalog rules fire most often, feed patterns back into the catalog.
+3. `checkpoint-resume` — Checkpoint pipeline state so interrupted runs can resume from the last completed stage. Distinct from `retry-progress` which handles within-stage retry continuity — this is about cross-stage resumption after process crashes. Needs specs.
+4. `harness-dashboard` — Read-only CLI dashboard for onboarded repos, workspaces, and cross-repo OpenSpec state. Data layer (Pydantic models) designed for future TUI/web.
+5. `live-progress-feed` — Real-time visibility into worker progress (task completion, file edits, tool calls) during pipeline runs. Needs specs.
+6. `rollback-tags` — Git tag-based rollback points and shipped feature markers. Tags main branch before merge (`harness/pre-merge/{label}`) and after (`harness/shipped/{label}`). `harness rollback` reverts via revert commits. `harness history` lists shipped features. More valuable once auto-merge is routinely used.
+7. `always-on` — Event-driven intake from webhooks, recurring maintenance, Slack escalation. Big scope — requires server mode, event loop. Deferred until core quality loop is solid.
+8. `ephemeral-observability` — Per-worktree observability stack (Vector → VictoriaLogs/Metrics/Traces) for target apps that emit telemetry. Lets workers query logs (LogsQL), metrics (PromQL), and traces (TraceQL) to validate runtime behavior — not just exit codes. Torn down when task completes. Requires repo-profiling to detect when a target app is a running service. Inspired by OpenAI's Codex harness architecture.

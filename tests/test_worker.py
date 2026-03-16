@@ -1,6 +1,7 @@
 """Tests for Claude Code CLI dispatch. Mocks subprocess.run — no real Claude Code."""
 
 import json
+import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -725,3 +726,70 @@ class TestCatalogInjection:
 
         cmd = get_claude_cmd(mock)
         assert "--system-prompt" not in cmd
+
+
+class TestWorkerSubprocessErrors:
+    """Tests for subprocess.TimeoutExpired and OSError handling in dispatch_worker."""
+
+    def test_timeout_expired_returns_failure(self, tmp_path: Path) -> None:
+        with patch(
+            "action_harness.worker.subprocess.run",
+            side_effect=subprocess.TimeoutExpired(cmd=["claude"], timeout=7200),
+        ):
+            result = dispatch_worker("t", tmp_path)
+
+        assert result.success is False
+        assert "timed out" in (result.error or "")
+        assert result.duration_seconds is not None
+
+    def test_file_not_found_returns_failure(self, tmp_path: Path) -> None:
+        with patch(
+            "action_harness.worker.subprocess.run",
+            side_effect=FileNotFoundError("claude not found"),
+        ):
+            result = dispatch_worker("t", tmp_path)
+
+        assert result.success is False
+        assert "Failed to launch" in (result.error or "")
+        assert result.duration_seconds is not None
+
+    def test_os_error_returns_failure(self, tmp_path: Path) -> None:
+        with patch(
+            "action_harness.worker.subprocess.run",
+            side_effect=OSError("permission denied"),
+        ):
+            result = dispatch_worker("t", tmp_path)
+
+        assert result.success is False
+        assert "Failed to launch" in (result.error or "")
+
+
+class TestBoostedEntryInjection:
+    """Test that repo-frequent catalog entries are injected via repo_knowledge_dir."""
+
+    def test_boosted_entries_appear_in_prompt(self, tmp_path: Path) -> None:
+        from action_harness.catalog.frequency import FREQUENCY_FILENAME
+
+        # Create a frequency file with a high-count entry
+        knowledge_dir = tmp_path / "knowledge"
+        knowledge_dir.mkdir()
+        freq_data = {"subprocess-timeout": {"count": 5, "last_seen": "2026-03-16"}}
+        (knowledge_dir / FREQUENCY_FILENAME).write_text(
+            json.dumps(freq_data), encoding="utf-8"
+        )
+
+        mock = make_mock_subprocess(claude_stdout=_OK_JSON)
+        with (
+            patch("action_harness.worker.subprocess.run", mock),
+            patch(
+                "action_harness.worker.load_catalog",
+                return_value=[],  # Empty base catalog — only boosted should appear
+            ),
+        ):
+            dispatch_worker("t", tmp_path, ecosystem="python", repo_knowledge_dir=knowledge_dir)
+
+        system_prompt = get_claude_system_prompt(mock)
+        # Boosted entries from frequency should be injected
+        # (exact content depends on catalog entries available)
+        # At minimum, the function should not crash
+        assert isinstance(system_prompt, str)

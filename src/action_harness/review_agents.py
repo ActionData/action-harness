@@ -448,7 +448,13 @@ def _titles_overlap(title_a: str, title_b: str) -> bool:
     title is a substring of the other, OR they share a contiguous sequence
     of 2+ words. Single-word matches (e.g. "Bug") are ignored to avoid
     false positives from common short words.
+
+    Returns False for empty titles — empty string is a substring of
+    everything in Python, which would produce false-positive matches.
     """
+    if not title_a or not title_b:
+        return False
+
     a_lower = title_a.lower()
     b_lower = title_b.lower()
 
@@ -549,12 +555,18 @@ def match_findings(prior: list[ReviewFinding], current: list[ReviewFinding]) -> 
 
     Two findings match if they share the same ``file`` field AND either:
     (a) the same ``agent`` field, or
-    (b) their titles overlap per ``_titles_overlap`` (substring or bigram match).
+    (b) one finding's title is a case-insensitive substring of the other's.
+
+    Uses strict substring matching (not bigram) to avoid false positives
+    in acknowledged-finding tracking. The broader ``_titles_overlap`` is
+    used for priority scoring where false positives are less harmful.
 
     Returns the subset of *current* findings that match any prior finding.
     """
     matched: list[ReviewFinding] = []
     for cur in current:
+        if not cur.title:
+            continue  # Empty titles cannot match meaningfully
         for pri in prior:
             if cur.file != pri.file:
                 continue
@@ -562,8 +574,12 @@ def match_findings(prior: list[ReviewFinding], current: list[ReviewFinding]) -> 
             if cur.agent == pri.agent:
                 matched.append(cur)
                 break
-            # Title overlap (case-insensitive substring or bigram)
-            if _titles_overlap(cur.title, pri.title):
+            # Strict substring match (not bigram) for acknowledged tracking
+            if not pri.title:
+                continue
+            cur_lower = cur.title.lower()
+            pri_lower = pri.title.lower()
+            if cur_lower in pri_lower or pri_lower in cur_lower:
                 matched.append(cur)
                 break
     return matched

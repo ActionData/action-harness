@@ -237,10 +237,27 @@ def update_frequency(
     if matches_found > 0:
         try:
             repo_knowledge_dir.mkdir(parents=True, exist_ok=True)
-            frequency_path.write_text(
-                json.dumps(frequency, indent=2),
-                encoding="utf-8",
+            # Atomic write: write to temp file then rename to prevent
+            # corruption on crash or concurrent pipeline runs.
+            import tempfile
+
+            tmp_fd, tmp_path = tempfile.mkstemp(
+                dir=repo_knowledge_dir, suffix=".tmp", prefix="freq-"
             )
+            try:
+                import os
+
+                with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
+                    json.dump(frequency, f, indent=2)
+                    f.write("\n")
+                os.replace(tmp_path, str(frequency_path))
+            except BaseException:
+                # Clean up temp file on any error
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+                raise
         except OSError as exc:
             typer.echo(
                 f"[catalog] warning: could not write frequency file: {exc}",

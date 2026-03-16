@@ -1,0 +1,15 @@
+id: validate-before-operate
+class: ordering
+severity: medium
+ecosystems: [all]
+worker_rule: "Validate prerequisites (CLI availability, file existence) before operations that depend on them. Check that tools exist before calling them."
+reviewer_checklist:
+  - "Check that CLI tools are validated before first use"
+  - "Check that files/directories exist before reading/writing them"
+  - "Verify validation happens before the operation, not after failure"
+examples:
+  bad: "result = subprocess.run(['gh', 'pr', 'list'])"
+  good: "shutil.which('gh') or raise ...; result = subprocess.run(['gh', 'pr', 'list'])"
+learned_from:
+  - pr: "#35"
+    finding: "External tool called without checking availability first"

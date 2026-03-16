@@ -1,0 +1,15 @@
+id: subprocess-timeout
+class: defensive-io
+severity: high
+ecosystems: [python]
+worker_rule: "Every subprocess.run() call must include a timeout= parameter (120s for CLI tools, 600s for long ops). Catch subprocess.TimeoutExpired alongside FileNotFoundError/OSError."
+reviewer_checklist:
+  - "Check all subprocess.run calls have timeout= parameter"
+  - "Check except clauses include subprocess.TimeoutExpired"
+  - "Verify timeout value is reasonable (30-600s)"
+examples:
+  bad: "subprocess.run(cmd, capture_output=True)"
+  good: "subprocess.run(cmd, capture_output=True, timeout=120)"
+learned_from:
+  - pr: "#34"
+    finding: "No subprocess timeout on gh CLI calls"

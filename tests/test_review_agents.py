@@ -94,6 +94,21 @@ class TestBuildReviewPrompt:
         """Every agent in _AGENTS_WITH_CUSTOM_SEVERITY must have a prompt."""
         assert _AGENTS_WITH_CUSTOM_SEVERITY <= set(_AGENT_PROMPTS)
 
+    def test_python_ecosystem_includes_catalog_checklist(self) -> None:
+        prompt = build_review_prompt("bug-hunter", 42, ecosystem="python")
+        assert "## Catalog Checklist" in prompt
+        # Should include Python-specific entries
+        assert "subprocess-timeout" in prompt
+
+    def test_no_matching_entries_no_checklist_section(self) -> None:
+        """With a mock returning no entries, no checklist section added."""
+        with patch(
+            "action_harness.review_agents.load_catalog",
+            return_value=[],
+        ):
+            prompt = build_review_prompt("bug-hunter", 42, ecosystem="nonexistent")
+        assert "## Catalog Checklist" not in prompt
+
 
 class TestParseReviewFindings:
     def test_valid_json_with_findings(self) -> None:

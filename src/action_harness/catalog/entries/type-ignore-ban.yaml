@@ -1,0 +1,14 @@
+id: type-ignore-ban
+class: language-pitfall
+severity: medium
+ecosystems: [python]
+worker_rule: "Never use `# type: ignore` — fix the underlying type mismatch instead. Thread the correct Literal/union type through the call chain."
+reviewer_checklist:
+  - "Check for any # type: ignore comments"
+  - "Verify the type mismatch is fixed at the source, not suppressed"
+examples:
+  bad: "value: str = get_literal_value()  # type: ignore[assignment]"
+  good: "value: Literal['a', 'b'] = get_literal_value()"
+learned_from:
+  - pr: "#33"
+    finding: "type: ignore used to suppress Literal type mismatch"

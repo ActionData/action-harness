@@ -1,0 +1,15 @@
+id: inconsistent-error-handling
+class: consistency
+severity: medium
+ecosystems: [all]
+worker_rule: "When adding a new I/O function, match the error handling pattern of existing functions in the same module. If the module wraps read_text() in try/except, new reads need it too."
+reviewer_checklist:
+  - "Check new functions match error handling patterns of siblings in the module"
+  - "Verify try/except clauses catch the same exception types as existing code"
+  - "Check for inconsistent logging patterns within the same module"
+examples:
+  bad: "def new_read(path): return path.read_text()  # no try/except, but siblings have it"
+  good: "def new_read(path): try: return path.read_text() except (OSError, UnicodeDecodeError): ..."
+learned_from:
+  - pr: "#33"
+    finding: "New function lacked try/except present in all sibling functions"

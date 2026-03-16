@@ -7,6 +7,9 @@ from pathlib import Path
 
 import typer
 
+from action_harness.catalog.frequency import get_boosted_entries
+from action_harness.catalog.loader import load_catalog
+from action_harness.catalog.renderer import render_for_worker
 from action_harness.models import WorkerResult
 from action_harness.progress import PROGRESS_FILENAME
 
@@ -75,6 +78,7 @@ def count_commits_ahead(worktree_path: Path, base_branch: str) -> int:
         cwd=worktree_path,
         capture_output=True,
         text=True,
+        timeout=120,
     )
     if result.returncode != 0:
         typer.echo(
@@ -105,6 +109,8 @@ def dispatch_worker(
     verbose: bool = False,
     session_id: str | None = None,
     prompt: str | None = None,
+    ecosystem: str = "unknown",
+    repo_knowledge_dir: Path | None = None,
 ) -> WorkerResult:
     """Dispatch a Claude Code worker to implement a change.
 
@@ -175,6 +181,17 @@ def dispatch_worker(
             user_prompt = (
                 f"Implement the OpenSpec change '{change_name}' using the opsx:apply skill."
             )
+
+        # Inject catalog worker rules into the system prompt
+        catalog_entries = load_catalog(ecosystem)
+        boosted = (
+            get_boosted_entries(repo_knowledge_dir, catalog_entries)
+            if repo_knowledge_dir is not None
+            else None
+        )
+        catalog_section = render_for_worker(catalog_entries, boosted=boosted)
+        if catalog_section is not None:
+            system_prompt = f"{system_prompt}\n\n{catalog_section}"
         if feedback:
             user_prompt = f"{user_prompt}\n\n{feedback}"
         if progress_contents:
@@ -205,12 +222,35 @@ def dispatch_worker(
 
     start_time = time.monotonic()
 
-    result = subprocess.run(
-        cmd,
-        cwd=worktree_path,
-        capture_output=True,
-        text=True,
-    )
+    # Worker sessions routinely run 20-40 minutes; 7200s (2h) is a safety
+    # net, not an expected bound. The 600s CLAUDE.md guideline is for CLI
+    # tools like gh/git, not the core agent loop.
+    try:
+        result = subprocess.run(
+            cmd,
+            cwd=worktree_path,
+            capture_output=True,
+            text=True,
+            timeout=7200,
+        )
+    except subprocess.TimeoutExpired:
+        duration = time.monotonic() - start_time
+        typer.echo("[worker] timed out after 7200s", err=True)
+        return WorkerResult(
+            success=False,
+            stage="worker",
+            error="Claude CLI timed out after 7200s",
+            duration_seconds=duration,
+        )
+    except (FileNotFoundError, OSError) as e:
+        duration = time.monotonic() - start_time
+        typer.echo(f"[worker] failed to launch: {e}", err=True)
+        return WorkerResult(
+            success=False,
+            stage="worker",
+            error=f"Failed to launch claude CLI: {e}",
+            duration_seconds=duration,
+        )
 
     duration = time.monotonic() - start_time
 

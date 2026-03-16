@@ -1,0 +1,15 @@
+id: string-field-access
+class: stringly-typed
+severity: medium
+ecosystems: [python]
+worker_rule: "Avoid getattr(obj, field_name_string) with unvalidated strings. A typo silently produces wrong results. Use typed access or validate the field name against a known set."
+reviewer_checklist:
+  - "Check for getattr() calls with dynamic string field names"
+  - "Verify field names are validated against a known set before use"
+  - "Check for dictionary key access with unvalidated string keys"
+examples:
+  bad: "value = getattr(config, user_input)"
+  good: "if field not in ALLOWED_FIELDS: raise ValueError(...); value = getattr(config, field)"
+learned_from:
+  - pr: "#35"
+    finding: "getattr used with unvalidated string field name"

@@ -6,6 +6,8 @@ from pathlib import Path
 
 import typer
 
+from action_harness.catalog.frequency import update_frequency
+from action_harness.catalog.loader import load_catalog
 from action_harness.evaluator import run_eval
 from action_harness.event_log import EventLogger
 from action_harness.merge import check_merge_gates, merge_pr, post_merge_blocked_comment
@@ -220,6 +222,9 @@ def run_pipeline(
             issue_number=issue_number,
             review_cycle=review_cycle if review_cycle is not None else ["low", "med", "high"],
             max_findings_per_retry=max_findings_per_retry,
+            ecosystem=profile.ecosystem,
+            harness_home=harness_home,
+            repo_name=repo_name,
         )
     except Exception as e:
         typer.echo(f"[pipeline] unexpected error: {e}", err=True)
@@ -285,6 +290,9 @@ def _run_pipeline_inner(
     issue_number: int | None = None,
     review_cycle: list[str] | None = None,
     max_findings_per_retry: int = 5,
+    ecosystem: str = "unknown",
+    harness_home: Path | None = None,
+    repo_name: str | None = None,
 ) -> PrResult:
     """Inner pipeline logic. Appends to stages list as side effect.
 
@@ -315,6 +323,11 @@ def _run_pipeline_inner(
     assert wt_result.worktree_path is not None
     worktree_path = wt_result.worktree_path
     branch = wt_result.branch
+
+    # Compute repo knowledge dir for frequency-boosted catalog rules
+    repo_knowledge_dir: Path | None = None
+    if harness_home is not None and repo_name is not None:
+        repo_knowledge_dir = harness_home / "repos" / repo_name / "knowledge"
 
     # Label issue as in-progress (best-effort)
     if issue_number is not None:
@@ -389,6 +402,8 @@ def _run_pipeline_inner(
             verbose=verbose,
             session_id=resume_session_id,
             prompt=prompt,
+            ecosystem=ecosystem,
+            repo_knowledge_dir=repo_knowledge_dir,
         )
         stages.append(worker_result)
 
@@ -419,6 +434,8 @@ def _run_pipeline_inner(
                     verbose=verbose,
                     session_id=None,
                     prompt=prompt,
+                    ecosystem=ecosystem,
+                    repo_knowledge_dir=repo_knowledge_dir,
                 )
                 stages.append(worker_result)
 
@@ -629,6 +646,7 @@ def _run_pipeline_inner(
                 verbose,
                 stages,
                 change_name=change_name,
+                ecosystem=ecosystem,
             )
 
             # Tag each result with the tolerance level used for this round.
@@ -713,6 +731,8 @@ def _run_pipeline_inner(
                 prior_acknowledged=acknowledged if acknowledged else None,
                 prompt=prompt,
                 max_findings_per_retry=max_findings_per_retry,
+                ecosystem=ecosystem,
+                repo_knowledge_dir=repo_knowledge_dir,
             )
             if not last_fix_succeeded:
                 typer.echo("[pipeline] review fix-retry failed", err=True)
@@ -741,6 +761,7 @@ def _run_pipeline_inner(
                 verbose,
                 stages,
                 change_name=change_name,
+                ecosystem=ecosystem,
             )
             still_needs_fix = triage_findings(latest_review_results, last_tolerance)
             if not still_needs_fix:
@@ -756,6 +777,13 @@ def _run_pipeline_inner(
             )
     else:
         typer.echo("[pipeline] skipping review agents (--skip-review)", err=True)
+
+    # Update per-repo finding frequency after review rounds complete
+    if not skip_review and repo_knowledge_dir is not None:
+        all_review_findings = [f for s in stages if isinstance(s, ReviewResult) for f in s.findings]
+        if all_review_findings:
+            catalog_entries = load_catalog(ecosystem)
+            update_frequency(repo_knowledge_dir, catalog_entries, all_review_findings)
 
     # Stage 6: OpenSpec review (skipped in prompt mode — no OpenSpec artifacts)
     if prompt is not None:
@@ -874,6 +902,7 @@ def _run_review_agents_only(
     verbose: bool,
     stages: list[StageResultUnion],
     change_name: str | None = None,
+    ecosystem: str = "unknown",
 ) -> list[ReviewResult]:
     """Run review agents stage. Returns review results without triaging.
 
@@ -898,6 +927,7 @@ def _run_review_agents_only(
         permission_mode=permission_mode,
         verbose=verbose,
         change_name=change_name,
+        ecosystem=ecosystem,
     )
 
     for result in review_results:
@@ -978,6 +1008,8 @@ def _run_review_fix_retry(
     prior_acknowledged: list[AcknowledgedFinding] | None = None,
     prompt: str | None = None,
     max_findings_per_retry: int = 5,
+    ecosystem: str = "unknown",
+    repo_knowledge_dir: Path | None = None,
 ) -> bool:
     """Re-dispatch worker with review feedback, re-run eval, push if passing.
 
@@ -1032,6 +1064,8 @@ def _run_review_fix_retry(
         verbose=verbose,
         session_id=fix_session_id,
         prompt=prompt,
+        ecosystem=ecosystem,
+        repo_knowledge_dir=repo_knowledge_dir,
     )
     stages.append(worker_result)
 
@@ -1055,6 +1089,8 @@ def _run_review_fix_retry(
                 verbose=verbose,
                 session_id=None,
                 prompt=prompt,
+                ecosystem=ecosystem,
+                repo_knowledge_dir=repo_knowledge_dir,
             )
             stages.append(worker_result)
 

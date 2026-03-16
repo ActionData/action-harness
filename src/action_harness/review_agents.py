@@ -8,6 +8,8 @@ from pathlib import Path
 
 import typer
 
+from action_harness.catalog.loader import load_catalog
+from action_harness.catalog.renderer import render_for_reviewer
 from action_harness.models import AcknowledgedFinding, ReviewFinding, ReviewResult
 from action_harness.parsing import extract_json_block
 
@@ -150,10 +152,15 @@ Severity levels:
 _AGENTS_WITH_CUSTOM_SEVERITY = {"spec-compliance-reviewer"}
 
 
-def build_review_prompt(agent_name: str, pr_number: int) -> str:
+def build_review_prompt(
+    agent_name: str,
+    pr_number: int,
+    ecosystem: str = "unknown",
+) -> str:
     """Build the system prompt for a review agent.
 
     Raises ValueError for unknown agent names.
+    When ecosystem is provided, appends catalog reviewer checklist.
     """
     base = _AGENT_PROMPTS.get(agent_name)
     if base is None:
@@ -163,7 +170,19 @@ def build_review_prompt(agent_name: str, pr_number: int) -> str:
     suffix = _JSON_OUTPUT_FORMAT
     if agent_name not in _AGENTS_WITH_CUSTOM_SEVERITY:
         suffix += _GENERIC_SEVERITY_SUFFIX
-    return base.format(pr_number=pr_number) + suffix
+    prompt = base.format(pr_number=pr_number) + suffix
+
+    # Append catalog reviewer checklist.
+    # Note: load_catalog is called per-agent (once per build_review_prompt call).
+    # This is redundant when dispatch_review_agents runs 3-4 agents in parallel,
+    # but the cost is negligible (reads ~10 small YAML files from disk) and
+    # caching would add complexity for minimal gain at current scale.
+    catalog_entries = load_catalog(ecosystem)
+    checklist = render_for_reviewer(catalog_entries)
+    if checklist is not None:
+        prompt = f"{prompt}\n\n{checklist}"
+
+    return prompt
 
 
 def dispatch_single_review(
@@ -177,6 +196,7 @@ def dispatch_single_review(
     permission_mode: str = "bypassPermissions",
     verbose: bool = False,
     extra_context: str | None = None,
+    ecosystem: str = "unknown",
 ) -> ReviewResult:
     """Dispatch a single review agent via Claude Code CLI.
 
@@ -186,7 +206,7 @@ def dispatch_single_review(
     """
     typer.echo(f"[review:{agent_name}] dispatching for PR #{pr_number}", err=True)
 
-    system_prompt = build_review_prompt(agent_name, pr_number)
+    system_prompt = build_review_prompt(agent_name, pr_number, ecosystem=ecosystem)
     user_prompt = f"Review PR #{pr_number}"
     if extra_context is not None:
         user_prompt = f"{user_prompt}\n\n{extra_context}"
@@ -334,6 +354,7 @@ def dispatch_review_agents(
     permission_mode: str = "bypassPermissions",
     verbose: bool = False,
     change_name: str | None = None,
+    ecosystem: str = "unknown",
 ) -> list[ReviewResult]:
     """Dispatch review agents in parallel.
 
@@ -397,6 +418,7 @@ def dispatch_review_agents(
                 permission_mode=permission_mode,
                 verbose=verbose,
                 extra_context=tasks_content if name == SPEC_COMPLIANCE_AGENT_NAME else None,
+                ecosystem=ecosystem,
             ): name
             for name in agent_names
         }

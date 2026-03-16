@@ -1,0 +1,15 @@
+id: duplicated-utility
+class: DRY
+severity: medium
+ecosystems: [all]
+worker_rule: "Before writing a utility function, search for existing implementations. Import from the canonical location instead of copying."
+reviewer_checklist:
+  - "Search for existing implementations of similar utility functions"
+  - "Check if the new function duplicates logic from another module"
+  - "Verify imports come from the canonical location"
+examples:
+  bad: "def slugify(name): return name.replace('/', '-').lower()  # already exists in slugify.py"
+  good: "from action_harness.slugify import slugify"
+learned_from:
+  - pr: "#31"
+    finding: "Utility function duplicated instead of imported"

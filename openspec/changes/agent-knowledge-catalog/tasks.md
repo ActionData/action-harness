@@ -11,9 +11,9 @@
 
 ## 3. Renderer [depends: 1]
 
-- [ ] 3.1 Create `src/action_harness/catalog/renderer.py` with `render_for_worker(entries: list[CatalogEntry], top_n: int = 10) -> str | None`. Returns a `## Quality Rules` section with the top N entries' `worker_rule` as bullets. Returns None if no entries (caller skips injection). Sort by severity descending.
-- [ ] 3.2 Add `render_for_reviewer(entries: list[CatalogEntry]) -> str | None`. Returns a `## Catalog Checklist` section with each entry's id, checklist items, and examples. Returns None if no entries.
-- [ ] 3.3 Add tests: `render_for_worker` with 15 entries and `top_n=10` returns 10 lines. With 3 entries returns 3. With 0 entries returns None. `render_for_reviewer` includes checklist items and example code.
+- [x] 3.1 Create `src/action_harness/catalog/renderer.py` with `render_for_worker(entries: list[CatalogEntry], top_n: int = 10) -> str | None`. Returns a `## Quality Rules` section with the top N entries' `worker_rule` as bullets. Returns None if no entries (caller skips injection). Sort by severity descending.
+- [x] 3.2 Add `render_for_reviewer(entries: list[CatalogEntry]) -> str | None`. Returns a `## Catalog Checklist` section with each entry's id, checklist items, and examples. Returns None if no entries.
+- [x] 3.3 Add tests: `render_for_worker` with 15 entries and `top_n=10` returns 10 lines. With 3 entries returns 3. With 0 entries returns None. `render_for_reviewer` includes checklist items and example code.
 
 ## 4. Worker Prompt Injection [depends: 2, 3]
 

@@ -826,6 +826,8 @@ def _run_pipeline_inner(
             pr_result,
             stages,
             logger,
+            repo_path=repo,
+            harness_agents_dir=harness_agents_dir,
         )
 
     if review_result is not None:
@@ -1192,15 +1194,25 @@ def _run_openspec_review(
     pr_result: PrResult,
     stages: list[StageResultUnion],
     logger: EventLogger,
+    repo_path: Path | None = None,
+    harness_agents_dir: Path | None = None,
 ) -> OpenSpecReviewResult | None:
     """Run the OpenSpec review stage. Returns the review result, or None on skip."""
     typer.echo("[pipeline] running openspec review", err=True)
+
+    # Resolve paths for agent loading
+    resolved_repo_path = repo_path if repo_path is not None else worktree_path
+    resolved_agents_dir = (
+        harness_agents_dir if harness_agents_dir is not None else resolve_harness_agents_dir()
+    )
 
     commits_before = count_commits_ahead(worktree_path, base_branch)
 
     raw_output, duration = dispatch_openspec_review(
         change_name,
         worktree_path,
+        repo_path=resolved_repo_path,
+        harness_agents_dir=resolved_agents_dir,
         base_branch=base_branch,
         max_turns=max_turns,
         model=model,

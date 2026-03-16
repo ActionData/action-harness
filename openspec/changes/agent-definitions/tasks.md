@@ -21,10 +21,10 @@
 
 ## 4. Wire Into OpenSpec Reviewer
 
-- [ ] 4.1 In `openspec_reviewer.py`, remove `REVIEW_SYSTEM_PROMPT` string. Extract the JSON output block (from `5. Output a final JSON block...` through the end of the `Important:` paragraph) into a module-level constant `_OPENSPEC_JSON_SUFFIX`. This constant uses literal braces `{` `}` (not escaped `{{` `}}`), because it is appended AFTER `.format(change_name=...)` is called on the persona text.
-- [ ] 4.2 Update `build_review_prompt(change_name: str, repo_path: Path, harness_agents_dir: Path) -> str`. Call `load_agent_prompt("openspec-reviewer", repo_path, harness_agents_dir)`, then `.format(change_name=change_name)` on the result, then append `_OPENSPEC_JSON_SUFFIX`.
-- [ ] 4.3 Update `dispatch_openspec_review` signature: add `repo_path: Path` and `harness_agents_dir: Path`. Pass through to `build_review_prompt`.
-- [ ] 4.4 Update call site in `pipeline.py` (`_run_openspec_review`): pass `repo_path` and `harness_agents_dir` to `dispatch_openspec_review`.
+- [x] 4.1 In `openspec_reviewer.py`, remove `REVIEW_SYSTEM_PROMPT` string. Extract the JSON output block (from `5. Output a final JSON block...` through the end of the `Important:` paragraph) into a module-level constant `_OPENSPEC_JSON_SUFFIX`. This constant uses literal braces `{` `}` (not escaped `{{` `}}`), because it is appended AFTER `.format(change_name=...)` is called on the persona text.
+- [x] 4.2 Update `build_review_prompt(change_name: str, repo_path: Path, harness_agents_dir: Path) -> str`. Call `load_agent_prompt("openspec-reviewer", repo_path, harness_agents_dir)`, then `.format(change_name=change_name)` on the result, then append `_OPENSPEC_JSON_SUFFIX`.
+- [x] 4.3 Update `dispatch_openspec_review` signature: add `repo_path: Path` and `harness_agents_dir: Path`. Pass through to `build_review_prompt`.
+- [x] 4.4 Update call site in `pipeline.py` (`_run_openspec_review`): pass `repo_path` and `harness_agents_dir` to `dispatch_openspec_review`.
 
 ## 5. Package Data
 

@@ -7,28 +7,19 @@ from pathlib import Path
 
 import typer
 
+from action_harness.agents import load_agent_prompt
 from action_harness.models import OpenSpecReviewResult
 from action_harness.parsing import extract_json_block
 from action_harness.worker import count_commits_ahead
 
-REVIEW_SYSTEM_PROMPT = """\
-You are the OpenSpec review agent for the change '{change_name}'.
+# JSON output block appended AFTER .format(change_name=...) is called on the
+# persona text. Uses literal braces (not escaped) because it has no placeholders.
+_OPENSPEC_JSON_SUFFIX = """
 
-Your job is to validate that the OpenSpec lifecycle is complete and archive the change.
-
-Steps:
-1. Read openspec/changes/{change_name}/tasks.md and verify ALL tasks are marked [x].
-   Count total tasks and completed tasks.
-2. Run `openspec validate {change_name}` and check for errors.
-3. Read the change's specs (under openspec/changes/{change_name}/specs/) and compare
-   against the implementation diff to assess semantic alignment. This is advisory —
-   note gaps but do not block archival for semantic issues alone.
-4. If structural checks pass (all tasks [x] AND validation clean), run
-   `openspec archive {change_name} -y` and commit the results.
 5. Output a final JSON block with exactly these keys:
 
 ```json
-{{
+{
   "status": "approved" or "findings" or "needs-human",
   "tasks_total": <int>,
   "tasks_complete": <int>,
@@ -37,32 +28,27 @@ Steps:
   "semantic_review_passed": <bool>,
   "findings": [<list of strings describing any issues>],
   "archived": <bool>
-}}
+}
 ```
-
-When checking tasks.md, tasks containing `[HUMAN]` in the task text are expected to be
-agent-incomplete. Count them separately. If all non-HUMAN tasks are `[x]` and only HUMAN
-tasks remain `[ ]`, output `status: 'needs-human'` with `human_tasks_remaining` set to the
-count. Do NOT archive when status is `needs-human` — the change is not fully complete.
-Validation and semantic review still run normally.
-
-For OpenSpec conventions (delta spec rules, archive semantics, validation), consult
-Fission-AI/OpenSpec on deepwiki.
-
-Important: structural validation (tasks complete + openspec validate) is the hard gate.
-Semantic review is advisory. If structural checks pass, archive even if you have
-semantic findings — include those findings in your output for informational purposes.
 """
 
 
-def build_review_prompt(change_name: str) -> str:
-    """Build the system prompt for the OpenSpec review agent."""
-    return REVIEW_SYSTEM_PROMPT.format(change_name=change_name)
+def build_review_prompt(change_name: str, repo_path: Path, harness_agents_dir: Path) -> str:
+    """Build the system prompt for the OpenSpec review agent.
+
+    Loads the persona from file, formats {change_name} placeholders,
+    then appends the JSON output block.
+    """
+    persona = load_agent_prompt("openspec-reviewer", repo_path, harness_agents_dir)
+    prompt = persona.format(change_name=change_name)
+    return prompt + _OPENSPEC_JSON_SUFFIX
 
 
 def dispatch_openspec_review(
     change_name: str,
     worktree_path: Path,
+    repo_path: Path,
+    harness_agents_dir: Path,
     base_branch: str = "main",
     max_turns: int = 200,
     model: str | None = None,
@@ -77,7 +63,7 @@ def dispatch_openspec_review(
     """
     typer.echo(f"[openspec-review] dispatching for '{change_name}'", err=True)
 
-    system_prompt = build_review_prompt(change_name)
+    system_prompt = build_review_prompt(change_name, repo_path, harness_agents_dir)
     user_prompt = (
         f"Review the OpenSpec change '{change_name}' — validate tasks, "
         f"run structural checks, perform semantic review, and archive if ready."

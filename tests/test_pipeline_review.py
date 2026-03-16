@@ -911,7 +911,13 @@ class TestPipelineChangeNamePassedToReviewAgents:
             assert kw.get("change_name") == "my-change"
 
     def test_prompt_mode_passes_change_name(self, test_repo: Path) -> None:
-        """In prompt mode, change_name is still threaded through (no tasks.md will exist)."""
+        """In prompt mode, change_name is still threaded through (no tasks.md will exist).
+
+        This test verifies the pipeline threads change_name correctly.
+        Agent-exclusion logic (spec-compliance-reviewer not dispatched when
+        tasks.md is absent) is tested in test_review_agents.py —
+        test_change_name_nonexistent_no_tasks_md_dispatches_three.
+        """
         mock = _make_claude_mock(commits=True)
         dispatch_kwargs: list[dict[str, object]] = []
 

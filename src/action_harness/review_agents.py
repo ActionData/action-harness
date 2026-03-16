@@ -11,8 +11,11 @@ import typer
 from action_harness.models import AcknowledgedFinding, ReviewFinding, ReviewResult
 from action_harness.parsing import extract_json_block
 
-# Agent names dispatched in parallel
+# Base agent names always dispatched in parallel. The spec-compliance-reviewer
+# is conditionally added when a change_name with tasks.md is available — it is
+# intentionally not in this list because it requires extra_context.
 REVIEW_AGENT_NAMES = ["bug-hunter", "test-reviewer", "quality-reviewer"]
+SPEC_COMPLIANCE_AGENT_NAME = "spec-compliance-reviewer"
 
 # Severity ranking for tolerance-based filtering
 SEVERITY_RANK: dict[str, int] = {"low": 0, "medium": 1, "high": 2, "critical": 3}
@@ -356,7 +359,7 @@ def dispatch_review_agents(
         if tasks_path.is_file():
             try:
                 tasks_content = tasks_path.read_text(encoding="utf-8")
-                agent_names.append("spec-compliance-reviewer")
+                agent_names.append(SPEC_COMPLIANCE_AGENT_NAME)
                 typer.echo(
                     "[review] including spec-compliance-reviewer (tasks.md found)",
                     err=True,
@@ -393,7 +396,7 @@ def dispatch_review_agents(
                 max_budget_usd=max_budget_usd,
                 permission_mode=permission_mode,
                 verbose=verbose,
-                extra_context=tasks_content if name == "spec-compliance-reviewer" else None,
+                extra_context=tasks_content if name == SPEC_COMPLIANCE_AGENT_NAME else None,
             ): name
             for name in agent_names
         }

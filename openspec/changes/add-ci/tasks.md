@@ -7,4 +7,4 @@
 
 - [x] 2.1 Run `uv run pytest -v` locally and verify all tests pass
 - [x] 2.2 Run `uv run ruff check .` and `uv run mypy src/` locally and verify clean
-- [ ] 2.3 Verify `.github/workflows/ci.yml` exists and contains the expected steps
+- [x] 2.3 Verify `.github/workflows/ci.yml` exists and contains the expected steps

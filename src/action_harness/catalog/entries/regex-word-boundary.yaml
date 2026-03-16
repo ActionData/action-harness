@@ -1,0 +1,14 @@
+id: regex-word-boundary
+class: pattern-safety
+severity: medium
+ecosystems: [all]
+worker_rule: "Use \\b word boundaries in regex when matching keywords that could appear as substrings of other words (e.g., \\bchange: not change: — the latter matches exchange:)."
+reviewer_checklist:
+  - "Check regex patterns for missing word boundaries"
+  - "Verify keyword patterns won't match as substrings of longer words"
+examples:
+  bad: "re.search(r'change:', text)"
+  good: "re.search(r'\\bchange:', text)"
+learned_from:
+  - pr: "#32"
+    finding: "Regex pattern matched unintended substrings"

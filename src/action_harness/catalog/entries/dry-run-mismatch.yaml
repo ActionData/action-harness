@@ -1,0 +1,15 @@
+id: dry-run-mismatch
+class: preview-fidelity
+severity: medium
+ecosystems: [all]
+worker_rule: "--dry-run output must match what the pipeline would actually produce. If the preview says one thing but the actual run does another, the preview is misleading."
+reviewer_checklist:
+  - "Check that --dry-run output matches actual pipeline behavior"
+  - "Verify PR titles, branch names, and descriptions in dry-run match actual output"
+  - "Check for code paths that differ between dry-run and actual execution"
+examples:
+  bad: "dry-run shows '[harness] prompt-fix-bug' but actual PR says '[harness] Fix the bug'"
+  good: "Both dry-run and actual produce identical PR title from the same code path"
+learned_from:
+  - pr: "#34"
+    finding: "Dry-run PR title did not match actual PR title"

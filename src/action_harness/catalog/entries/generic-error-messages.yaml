@@ -1,0 +1,15 @@
+id: generic-error-messages
+class: error-clarity
+severity: medium
+ecosystems: [all]
+worker_rule: "Include actual error text from stderr/exceptions in error messages, not generic descriptions. 'gh failed (exit 1): auth required' not 'Issue not found'."
+reviewer_checklist:
+  - "Check error messages include the original exception text"
+  - "Verify subprocess error messages include stderr output"
+  - "Check for generic descriptions that hide actual errors"
+examples:
+  bad: "raise RuntimeError('Issue not found')"
+  good: "raise RuntimeError(f'Issue #{num}: gh failed (exit {rc}): {stderr}')"
+learned_from:
+  - pr: "#34"
+    finding: "Error messages used generic descriptions instead of actual error text"

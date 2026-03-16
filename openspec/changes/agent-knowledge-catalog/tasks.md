@@ -6,8 +6,8 @@
 
 ## 2. Seed Catalog Entries [depends: 1]
 
-- [ ] 2.1 Create `src/action_harness/catalog/entries/` directory with YAML files for the 10 entries identified from PRs #31-35: `subprocess-timeout.yaml`, `bare-assert-narrowing.yaml`, `type-ignore-ban.yaml`, `regex-word-boundary.yaml`, `generic-error-messages.yaml`, `validate-before-operate.yaml`, `inconsistent-error-handling.yaml`, `duplicated-utility.yaml`, `dry-run-mismatch.yaml`, `string-field-access.yaml`. Map to research doc classes: defensive-io, language-pitfall, language-pitfall, pattern-safety, error-clarity, ordering, consistency, DRY, preview-fidelity, stringly-typed. Use the examples and provenance from `docs/research/agent-quality-catalog.md`.
-- [ ] 2.2 Add test: verify all 10 entries load successfully and have valid fields. Verify at least 6 are tagged with `ecosystems: [python]` and at least 3 with `ecosystems: [all]`.
+- [x] 2.1 Create `src/action_harness/catalog/entries/` directory with YAML files for the 10 entries identified from PRs #31-35: `subprocess-timeout.yaml`, `bare-assert-narrowing.yaml`, `type-ignore-ban.yaml`, `regex-word-boundary.yaml`, `generic-error-messages.yaml`, `validate-before-operate.yaml`, `inconsistent-error-handling.yaml`, `duplicated-utility.yaml`, `dry-run-mismatch.yaml`, `string-field-access.yaml`. Map to research doc classes: defensive-io, language-pitfall, language-pitfall, pattern-safety, error-clarity, ordering, consistency, DRY, preview-fidelity, stringly-typed. Use the examples and provenance from `docs/research/agent-quality-catalog.md`.
+- [x] 2.2 Add test: verify all 10 entries load successfully and have valid fields. Verify at least 6 are tagged with `ecosystems: [python]` and at least 3 with `ecosystems: [all]`.
 
 ## 3. Renderer [depends: 1]
 

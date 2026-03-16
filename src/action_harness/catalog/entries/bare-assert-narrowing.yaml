@@ -1,0 +1,14 @@
+id: bare-assert-narrowing
+class: language-pitfall
+severity: medium
+ecosystems: [python]
+worker_rule: "Never use bare `assert x is not None` for type narrowing — assertions are stripped by `python -O`. Use explicit `if x is None: raise ValueError(...)` instead."
+reviewer_checklist:
+  - "Check for bare assert used for type narrowing"
+  - "Verify explicit if/raise pattern is used instead"
+examples:
+  bad: "assert result is not None"
+  good: "if result is None: raise ValueError('result must not be None')"
+learned_from:
+  - pr: "#31"
+    finding: "Bare assert used for type narrowing in pipeline"

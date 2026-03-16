@@ -139,6 +139,7 @@ def run_pipeline(
     prompt: str | None = None,
     issue_number: int | None = None,
     review_cycle: list[str] | None = None,
+    max_findings_per_retry: int = 5,
 ) -> tuple[PrResult, RunManifest]:
     """Run the full pipeline: worktree -> worker -> eval -> retry -> PR.
 
@@ -218,6 +219,7 @@ def run_pipeline(
             prompt=prompt,
             issue_number=issue_number,
             review_cycle=review_cycle if review_cycle is not None else ["low", "med", "high"],
+            max_findings_per_retry=max_findings_per_retry,
         )
     except Exception as e:
         typer.echo(f"[pipeline] unexpected error: {e}", err=True)
@@ -282,6 +284,7 @@ def _run_pipeline_inner(
     prompt: str | None = None,
     issue_number: int | None = None,
     review_cycle: list[str] | None = None,
+    max_findings_per_retry: int = 5,
 ) -> PrResult:
     """Inner pipeline logic. Appends to stages list as side effect.
 
@@ -708,6 +711,7 @@ def _run_pipeline_inner(
                 tolerance=tolerance,
                 prior_acknowledged=acknowledged if acknowledged else None,
                 prompt=prompt,
+                max_findings_per_retry=max_findings_per_retry,
             )
             if not last_fix_succeeded:
                 typer.echo("[pipeline] review fix-retry failed", err=True)
@@ -969,6 +973,7 @@ def _run_review_fix_retry(
     tolerance: str = "low",
     prior_acknowledged: list[AcknowledgedFinding] | None = None,
     prompt: str | None = None,
+    max_findings_per_retry: int = 5,
 ) -> bool:
     """Re-dispatch worker with review feedback, re-run eval, push if passing.
 
@@ -982,7 +987,10 @@ def _run_review_fix_retry(
         msg = "review_results is required"
         raise ValueError(msg)
     feedback = format_review_feedback(
-        review_results, tolerance=tolerance, prior_acknowledged=prior_acknowledged
+        review_results,
+        tolerance=tolerance,
+        prior_acknowledged=prior_acknowledged,
+        max_findings=max_findings_per_retry,
     )
 
     # Find session_id from the last successful WorkerResult for resume

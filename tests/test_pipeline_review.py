@@ -15,6 +15,7 @@ from action_harness.models import (
 )
 from action_harness.openspec_reviewer import parse_review_result
 from action_harness.pipeline import run_pipeline
+from action_harness.review_agents import format_review_feedback
 
 
 def _needs_human_review_result() -> OpenSpecReviewResult:
@@ -669,6 +670,159 @@ class TestPipelineWithReviewAgents:
         # Only 1 review round (short-circuited after first round found no actionable)
         review_stages = [s for s in manifest.stages if isinstance(s, ReviewResult)]
         assert len(review_stages) == 3  # 3 agents * 1 round
+
+
+class TestMaxFindingsPerRetryPipeline:
+    """Task 4.2: verify max_findings_per_retry threading through pipeline."""
+
+    def test_custom_max_findings_threaded_to_format(self, test_repo: Path) -> None:
+        """Pipeline with max_findings_per_retry=2 threads to format."""
+        mock = _make_claude_mock(commits=True)
+
+        review_call_count = {"n": 0}
+
+        def review_side_effect(**kwargs: object) -> list[ReviewResult]:
+            review_call_count["n"] += 1
+            if review_call_count["n"] == 1:
+                return _high_severity_review_results()
+            return _no_findings_review_results()
+
+        with (
+            patch("action_harness.worker.subprocess.run", mock),
+            patch("action_harness.pipeline.run_eval", return_value=_passing_eval()),
+            patch("action_harness.pr.subprocess.run", mock),
+            patch("action_harness.pipeline.subprocess.run", mock),
+            patch(
+                "action_harness.pipeline.dispatch_review_agents",
+                side_effect=review_side_effect,
+            ),
+            patch(
+                "action_harness.pipeline.dispatch_openspec_review",
+                return_value=('{"result": "{}"}', 1.0),
+            ),
+            patch(
+                "action_harness.pipeline.parse_review_result",
+                return_value=_approved_review_result(),
+            ),
+            patch(
+                "action_harness.pipeline.push_archive_if_needed",
+                return_value=(False, None),
+            ),
+            patch(
+                "action_harness.pipeline.format_review_feedback",
+                wraps=format_review_feedback,
+            ) as mock_format,
+        ):
+            pr_result, manifest = run_pipeline(
+                "test-change", test_repo, max_retries=1, max_findings_per_retry=2
+            )
+
+        assert pr_result.success is True
+        # format_review_feedback should have been called with max_findings=2
+        assert mock_format.call_count >= 1
+        call_kwargs = mock_format.call_args[1]
+        assert call_kwargs["max_findings"] == 2
+
+    def test_default_max_findings_is_5(self, test_repo: Path) -> None:
+        """Pipeline without explicit flag uses max_findings=5."""
+        mock = _make_claude_mock(commits=True)
+
+        review_call_count = {"n": 0}
+
+        def review_side_effect(**kwargs: object) -> list[ReviewResult]:
+            review_call_count["n"] += 1
+            if review_call_count["n"] == 1:
+                return _high_severity_review_results()
+            return _no_findings_review_results()
+
+        with (
+            patch("action_harness.worker.subprocess.run", mock),
+            patch("action_harness.pipeline.run_eval", return_value=_passing_eval()),
+            patch("action_harness.pr.subprocess.run", mock),
+            patch("action_harness.pipeline.subprocess.run", mock),
+            patch(
+                "action_harness.pipeline.dispatch_review_agents",
+                side_effect=review_side_effect,
+            ),
+            patch(
+                "action_harness.pipeline.dispatch_openspec_review",
+                return_value=('{"result": "{}"}', 1.0),
+            ),
+            patch(
+                "action_harness.pipeline.parse_review_result",
+                return_value=_approved_review_result(),
+            ),
+            patch(
+                "action_harness.pipeline.push_archive_if_needed",
+                return_value=(False, None),
+            ),
+            patch(
+                "action_harness.pipeline.format_review_feedback",
+                wraps=format_review_feedback,
+            ) as mock_format,
+        ):
+            pr_result, manifest = run_pipeline("test-change", test_repo, max_retries=1)
+
+        assert pr_result.success is True
+        assert mock_format.call_count >= 1
+        call_kwargs = mock_format.call_args[1]
+        assert call_kwargs["max_findings"] == 5
+
+    def test_pr_comment_contains_all_findings(self, test_repo: Path) -> None:
+        """PR comment still contains all findings (not capped)."""
+        mock = _make_claude_mock(commits=True)
+
+        review_call_count = {"n": 0}
+
+        def review_side_effect(**kwargs: object) -> list[ReviewResult]:
+            review_call_count["n"] += 1
+            if review_call_count["n"] == 1:
+                return _high_severity_review_results()
+            return _no_findings_review_results()
+
+        with (
+            patch("action_harness.worker.subprocess.run", mock),
+            patch("action_harness.pipeline.run_eval", return_value=_passing_eval()),
+            patch("action_harness.pr.subprocess.run", mock),
+            patch("action_harness.pipeline.subprocess.run", mock) as mock_subprocess,
+            patch(
+                "action_harness.pipeline.dispatch_review_agents",
+                side_effect=review_side_effect,
+            ),
+            patch(
+                "action_harness.pipeline.dispatch_openspec_review",
+                return_value=('{"result": "{}"}', 1.0),
+            ),
+            patch(
+                "action_harness.pipeline.parse_review_result",
+                return_value=_approved_review_result(),
+            ),
+            patch(
+                "action_harness.pipeline.push_archive_if_needed",
+                return_value=(False, None),
+            ),
+        ):
+            pr_result, manifest = run_pipeline(
+                "test-change", test_repo, max_retries=1, max_findings_per_retry=1
+            )
+
+        assert pr_result.success is True
+
+        # Find gh pr comment calls — the review comment should include ALL findings
+        gh_calls = [
+            call
+            for call in mock_subprocess.call_args_list
+            if len(call[0][0]) > 2 and call[0][0][0] == "gh" and "comment" in call[0][0]
+        ]
+        # At least one comment should contain the finding title (unfiltered)
+        comment_bodies = []
+        for call in gh_calls:
+            cmd = call[0][0]
+            if "--body" in cmd:
+                body_idx = cmd.index("--body") + 1
+                comment_bodies.append(cmd[body_idx])
+        assert comment_bodies, "Expected at least one gh pr comment with --body"
+        assert any("Off-by-one error" in body for body in comment_bodies)
 
 
 class TestFlagPrNeedsHuman:

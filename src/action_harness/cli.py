@@ -158,6 +158,13 @@ def run(
         "--wait-for-ci",
         help="Wait for CI status checks before merging (requires --auto-merge)",
     ),
+    max_findings_per_retry: int = typer.Option(
+        5,
+        "--max-findings-per-retry",
+        min=0,
+        help="Maximum review findings sent to the fix-retry worker per round. "
+        "Higher-priority findings are selected first. 0 means no cap.",
+    ),
     review_cycle: str = typer.Option(
         "low,med,high",
         "--review-cycle",
@@ -185,6 +192,11 @@ def run(
     In all modes, the pipeline creates an isolated worktree, dispatches a
     Claude Code worker, runs eval (pytest, ruff, mypy), retries with
     structured feedback on failure, and opens a PR for human review.
+
+    Use `--max-findings-per-retry N` to cap how many review findings are
+    sent to the fix-retry worker per round (default 5). Findings are
+    prioritized by severity and cross-agent agreement; lower-priority
+    findings are deferred to the next round.
 
     With `--auto-merge`, the pipeline merges the PR when all quality gates
     pass (eval clean, no protected files, review agents clean, OpenSpec
@@ -337,6 +349,7 @@ def run(
         typer.echo("  eval commands:")
         for cmd in profile.eval_commands:
             typer.echo(f"    - {cmd}")
+        typer.echo(f"  max-findings-per-retry: {max_findings_per_retry}")
         cycle_str = ",".join(review_cycle_list)
         typer.echo(f"  review-cycle: {cycle_str} ({len(review_cycle_list)} round(s))")
         typer.echo(f"  pr title: [harness] {task_label}")
@@ -365,6 +378,7 @@ def run(
         prompt=prompt,
         issue_number=issue,
         review_cycle=review_cycle_list,
+        max_findings_per_retry=max_findings_per_retry,
     )
 
     if manifest.manifest_path:

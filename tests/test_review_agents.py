@@ -9,13 +9,16 @@ import pytest
 from action_harness.models import AcknowledgedFinding, ReviewFinding, ReviewResult
 from action_harness.review_agents import (
     REVIEW_AGENT_NAMES,
+    _titles_overlap,
     build_review_prompt,
+    compute_finding_priority,
     dispatch_review_agents,
     dispatch_single_review,
     filter_actionable_findings,
     format_review_feedback,
     match_findings,
     parse_review_findings,
+    select_top_findings,
     triage_findings,
 )
 
@@ -652,6 +655,175 @@ class TestMatchFindings:
         )
         matched = match_findings([prior], [current])
         assert len(matched) == 0
+
+
+class TestTitlesOverlap:
+    """Direct tests for _titles_overlap helper."""
+
+    def test_full_substring_match(self) -> None:
+        assert _titles_overlap("null check", "null check missing") is True
+
+    def test_bigram_overlap_reworded(self) -> None:
+        """Shared bigram 'null check' in different word order."""
+        assert _titles_overlap("null check missing in handler", "Missing null check") is True
+
+    def test_case_insensitive(self) -> None:
+        assert _titles_overlap("NULL CHECK", "null check missing") is True
+
+    def test_single_word_titles_no_bigram_match(self) -> None:
+        """Single-word titles cannot match via bigram path — only substring."""
+        # "Bug" is a substring of "Debug" so this returns True via substring path.
+        # But single-word vs multi-word with no substring overlap returns False.
+        assert _titles_overlap("Crash", "unused import detected") is False
+
+    def test_empty_strings(self) -> None:
+        # Empty string is a substring of everything, so this returns True
+        assert _titles_overlap("", "anything") is True
+        assert _titles_overlap("anything", "") is True
+
+    def test_no_shared_bigram(self) -> None:
+        """Titles share common words but not as a contiguous bigram."""
+        assert _titles_overlap("missing error handling", "error in missing module") is False
+
+    def test_completely_different_titles(self) -> None:
+        assert _titles_overlap("race condition in cache", "unused import os") is False
+
+    def test_identical_titles(self) -> None:
+        assert _titles_overlap("off by one", "off by one") is True
+
+
+class TestComputeFindingPriority:
+    """Task 1.3: priority scoring tests."""
+
+    def test_critical_outranks_medium_with_more_agents(self) -> None:
+        """(a) critical(cross=1) priority=31 > medium(cross=3) priority=13."""
+        critical = _make_finding("critical", title="Crash bug", file="f.py", agent="bug-hunter")
+        # medium finding flagged by 3 agents on the same file with overlapping title
+        med1 = _make_finding("medium", title="Null issue", file="g.py", agent="bug-hunter")
+        med2 = _make_finding(
+            "medium", title="Null issue found", file="g.py", agent="quality-reviewer"
+        )
+        med3 = _make_finding(
+            "medium", title="Null issue detected", file="g.py", agent="test-reviewer"
+        )
+        all_findings = [critical, med1, med2, med3]
+        assert compute_finding_priority(critical, all_findings) == 3 * 10 + 1  # 31
+        assert compute_finding_priority(med1, all_findings) == 1 * 10 + 3  # 13
+        assert compute_finding_priority(critical, all_findings) > compute_finding_priority(
+            med1, all_findings
+        )
+
+    def test_same_severity_more_agents_ranks_higher(self) -> None:
+        """(b) Two high findings: cross_agent_count=3 beats cross_agent_count=1."""
+        # All three agents flag "null check" variants on foo.py — each title
+        # is a substring of the next, so all three overlap with each other.
+        h1 = _make_finding("high", title="Null check", file="foo.py", agent="bug-hunter")
+        h1_overlap1 = _make_finding(
+            "high", title="Null check missing", file="foo.py", agent="quality-reviewer"
+        )
+        h1_overlap2 = _make_finding(
+            "high", title="Null check missing in handler", file="foo.py", agent="test-reviewer"
+        )
+        h2 = _make_finding("high", title="Race condition", file="bar.py", agent="bug-hunter")
+        all_findings = [h1, h1_overlap1, h1_overlap2, h2]
+        p1 = compute_finding_priority(h1, all_findings)
+        p2 = compute_finding_priority(h2, all_findings)
+        assert p1 == 2 * 10 + 3  # 23
+        assert p2 == 2 * 10 + 1  # 21
+        assert p1 > p2
+
+    def test_cross_agent_with_title_overlap(self) -> None:
+        """(c) Cross-agent detection: reworded titles with shared bigram overlap."""
+        # Spec scenario: "null check missing in handler" and "Missing null check"
+        # share the bigram "null check" — cross_agent_count should be 2 for both.
+        f1 = _make_finding(
+            "high",
+            title="null check missing in handler",
+            file="foo.py",
+            agent="bug-hunter",
+        )
+        f2 = _make_finding(
+            "high",
+            title="Missing null check",
+            file="foo.py",
+            agent="quality-reviewer",
+        )
+        all_findings = [f1, f2]
+        assert compute_finding_priority(f1, all_findings) == 2 * 10 + 2  # 22
+        assert compute_finding_priority(f2, all_findings) == 2 * 10 + 2  # 22
+
+    def test_no_title_overlap_no_cross_agent(self) -> None:
+        """(d) Different titles on same file → cross_agent_count=1 each."""
+        f1 = _make_finding("high", title="race condition", file="foo.py", agent="bug-hunter")
+        f2 = _make_finding("medium", title="unused import", file="foo.py", agent="quality-reviewer")
+        all_findings = [f1, f2]
+        assert compute_finding_priority(f1, all_findings) == 2 * 10 + 1  # 21
+        assert compute_finding_priority(f2, all_findings) == 1 * 10 + 1  # 11
+
+
+class TestSelectTopFindings:
+    """Task 1.3: selection tests."""
+
+    def test_max_findings_zero_returns_all(self) -> None:
+        """(e) max_findings=0 returns all as selected, empty deferred."""
+        findings = [_make_finding("high"), _make_finding("medium"), _make_finding("low")]
+        selected, deferred = select_top_findings(findings, max_findings=0)
+        assert len(selected) == 3
+        assert len(deferred) == 0
+
+    def test_fewer_than_cap(self) -> None:
+        """(f) max_findings=5 with 3 findings returns 3 selected, 0 deferred."""
+        findings = [_make_finding("high"), _make_finding("medium"), _make_finding("low")]
+        selected, deferred = select_top_findings(findings, max_findings=5)
+        assert len(selected) == 3
+        assert len(deferred) == 0
+
+    def test_more_than_cap(self) -> None:
+        """(g) max_findings=5 with 12 findings returns 5 selected, 7 deferred."""
+        findings = [_make_finding("medium", title=f"Finding {i}") for i in range(12)]
+        selected, deferred = select_top_findings(findings, max_findings=5)
+        assert len(selected) == 5
+        assert len(deferred) == 7
+
+
+class TestFormatReviewFeedbackMaxFindings:
+    """Task 2.2: test format_review_feedback with max_findings parameter."""
+
+    def test_max_findings_caps_output(self) -> None:
+        """max_findings=3 includes only 3 findings in output text."""
+        findings = [
+            _make_finding("critical", title=f"Finding {i}", agent=f"agent-{i}") for i in range(6)
+        ]
+        results = [
+            ReviewResult(success=True, agent_name=f"agent-{i}", findings=[f])
+            for i, f in enumerate(findings)
+        ]
+        feedback = format_review_feedback(results, max_findings=3)
+        # Count how many finding titles appear in the output
+        included = sum(1 for i in range(6) if f"Finding {i}" in feedback)
+        assert included == 3
+
+    def test_max_findings_zero_includes_all(self) -> None:
+        """max_findings=0 includes all findings (backward compatible)."""
+        findings = [_make_finding("high", title=f"Issue {i}", agent="a") for i in range(5)]
+        result = ReviewResult(success=True, agent_name="a", findings=findings)
+        feedback = format_review_feedback([result], max_findings=0)
+        for i in range(5):
+            assert f"Issue {i}" in feedback
+
+    def test_deferred_not_in_feedback(self) -> None:
+        """Deferred findings do NOT appear in the feedback text."""
+        findings = [
+            _make_finding("critical", title="Critical Bug", agent="a"),
+            _make_finding("low", title="Minor Nit", agent="b"),
+        ]
+        results = [
+            ReviewResult(success=True, agent_name="a", findings=[findings[0]]),
+            ReviewResult(success=True, agent_name="b", findings=[findings[1]]),
+        ]
+        feedback = format_review_feedback(results, max_findings=1)
+        assert "Critical Bug" in feedback
+        assert "Minor Nit" not in feedback
 
 
 class TestFormatReviewFeedbackEdgeCases:

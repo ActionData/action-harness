@@ -8,9 +8,9 @@
 
 ## 2. File Loading Infrastructure
 
-- [ ] 2.1 Create `src/action_harness/agents.py`. Add `parse_agent_file(path: Path) -> tuple[dict[str, str], str]`. Split content on `---` delimiters, parse YAML frontmatter via `yaml.safe_load`, return `(metadata, body)`. Handle: no frontmatter (return `({}, full_content)`), malformed YAML (return `({}, full_content)`, log warning via `typer.echo(..., err=True)`).
-- [ ] 2.2 Add `load_agent_prompt(agent_name: str, repo_path: Path, harness_agents_dir: Path) -> str` to `agents.py`. Check `<repo_path>/.harness/agents/<agent_name>.md` first, then `<harness_agents_dir>/<agent_name>.md`. Parse via `parse_agent_file`, return the body text (not metadata). Raise `FileNotFoundError(f"No agent definition found for '{agent_name}'")` if neither exists.
-- [ ] 2.3 Add `resolve_harness_agents_dir() -> Path` to `agents.py`. Try source checkout first: walk up from `Path(__file__)` to find `.harness/agents/` in the repo root. If not found (installed as package), use `importlib.resources.files("action_harness") / "default_agents"`. Log the resolved path via `typer.echo` at verbose level.
+- [x] 2.1 Create `src/action_harness/agents.py`. Add `parse_agent_file(path: Path) -> tuple[dict[str, str], str]`. Split content on `---` delimiters, parse YAML frontmatter via `yaml.safe_load`, return `(metadata, body)`. Handle: no frontmatter (return `({}, full_content)`), malformed YAML (return `({}, full_content)`, log warning via `typer.echo(..., err=True)`).
+- [x] 2.2 Add `load_agent_prompt(agent_name: str, repo_path: Path, harness_agents_dir: Path) -> str` to `agents.py`. Check `<repo_path>/.harness/agents/<agent_name>.md` first, then `<harness_agents_dir>/<agent_name>.md`. Parse via `parse_agent_file`, return the body text (not metadata). Raise `FileNotFoundError(f"No agent definition found for '{agent_name}'")` if neither exists.
+- [x] 2.3 Add `resolve_harness_agents_dir() -> Path` to `agents.py`. Try source checkout first: walk up from `Path(__file__)` to find `.harness/agents/` in the repo root. If not found (installed as package), use `importlib.resources.files("action_harness") / "default_agents"`. Log the resolved path via `typer.echo` at verbose level.
 
 ## 3. Wire Into Review Agents
 

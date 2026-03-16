@@ -4,6 +4,9 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+# Canonical severity sort order: high first. Imported by loader and renderer.
+SEVERITY_ORDER: dict[str, int] = {"high": 0, "medium": 1, "low": 2}
+
 
 class CatalogEntry(BaseModel):
     """A single entry in the agent knowledge catalog.

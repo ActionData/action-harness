@@ -1,12 +1,14 @@
 """Tests for catalog renderer — worker rules and reviewer checklists."""
 
+from typing import Literal
+
 from action_harness.catalog.models import CatalogEntry
 from action_harness.catalog.renderer import render_for_reviewer, render_for_worker
 
 
 def _make_entry(
     entry_id: str,
-    severity: str = "medium",
+    severity: Literal["high", "medium", "low"] = "medium",
     rule: str = "Test rule",
     checklist: list[str] | None = None,
     examples: dict[str, str] | None = None,
@@ -14,7 +16,7 @@ def _make_entry(
     return CatalogEntry(
         id=entry_id,
         entry_class="test",
-        severity=severity,  # type: ignore[arg-type]
+        severity=severity,
         ecosystems=["all"],
         worker_rule=rule,
         reviewer_checklist=checklist or ["Check something"],

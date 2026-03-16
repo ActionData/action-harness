@@ -324,6 +324,11 @@ def _run_pipeline_inner(
     worktree_path = wt_result.worktree_path
     branch = wt_result.branch
 
+    # Compute repo knowledge dir for frequency-boosted catalog rules
+    repo_knowledge_dir: Path | None = None
+    if harness_home is not None and repo_name is not None:
+        repo_knowledge_dir = harness_home / "repos" / repo_name / "knowledge"
+
     # Label issue as in-progress (best-effort)
     if issue_number is not None:
         from action_harness.issue_intake import comment_on_issue, label_issue
@@ -398,6 +403,7 @@ def _run_pipeline_inner(
             session_id=resume_session_id,
             prompt=prompt,
             ecosystem=ecosystem,
+            repo_knowledge_dir=repo_knowledge_dir,
         )
         stages.append(worker_result)
 
@@ -429,6 +435,7 @@ def _run_pipeline_inner(
                     session_id=None,
                     prompt=prompt,
                     ecosystem=ecosystem,
+                    repo_knowledge_dir=repo_knowledge_dir,
                 )
                 stages.append(worker_result)
 
@@ -725,6 +732,7 @@ def _run_pipeline_inner(
                 prompt=prompt,
                 max_findings_per_retry=max_findings_per_retry,
                 ecosystem=ecosystem,
+                repo_knowledge_dir=repo_knowledge_dir,
             )
             if not last_fix_succeeded:
                 typer.echo("[pipeline] review fix-retry failed", err=True)
@@ -771,10 +779,9 @@ def _run_pipeline_inner(
         typer.echo("[pipeline] skipping review agents (--skip-review)", err=True)
 
     # Update per-repo finding frequency after review rounds complete
-    if not skip_review and harness_home is not None and repo_name is not None:
+    if not skip_review and repo_knowledge_dir is not None:
         all_review_findings = [f for s in stages if isinstance(s, ReviewResult) for f in s.findings]
         if all_review_findings:
-            repo_knowledge_dir = harness_home / "repos" / repo_name / "knowledge"
             catalog_entries = load_catalog(ecosystem)
             update_frequency(repo_knowledge_dir, catalog_entries, all_review_findings)
 
@@ -1002,6 +1009,7 @@ def _run_review_fix_retry(
     prompt: str | None = None,
     max_findings_per_retry: int = 5,
     ecosystem: str = "unknown",
+    repo_knowledge_dir: Path | None = None,
 ) -> bool:
     """Re-dispatch worker with review feedback, re-run eval, push if passing.
 
@@ -1057,6 +1065,7 @@ def _run_review_fix_retry(
         session_id=fix_session_id,
         prompt=prompt,
         ecosystem=ecosystem,
+        repo_knowledge_dir=repo_knowledge_dir,
     )
     stages.append(worker_result)
 
@@ -1081,6 +1090,7 @@ def _run_review_fix_retry(
                 session_id=None,
                 prompt=prompt,
                 ecosystem=ecosystem,
+                repo_knowledge_dir=repo_knowledge_dir,
             )
             stages.append(worker_result)
 

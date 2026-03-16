@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+from typing import Literal
 
 from action_harness.catalog.frequency import (
     FREQUENCY_FILENAME,
@@ -17,12 +18,12 @@ from action_harness.models import ReviewFinding
 def _make_entry(
     entry_id: str,
     rule: str = "Test rule",
-    severity: str = "medium",
+    severity: Literal["high", "medium", "low"] = "medium",
 ) -> CatalogEntry:
     return CatalogEntry(
         id=entry_id,
         entry_class="test",
-        severity=severity,  # type: ignore[arg-type]
+        severity=severity,
         ecosystems=["all"],
         worker_rule=rule,
         reviewer_checklist=["Check something"],
@@ -68,6 +69,30 @@ class TestFindingMatchesEntry:
         )
         finding = _make_finding("Missing docstring on public function")
         assert _finding_matches_entry(finding, entry) is False
+
+    def test_keyword_match_with_backticks_in_rule(self) -> None:
+        """Backtick-formatted code in worker_rule should not taint keywords."""
+        entry = _make_entry(
+            "bare-assert-narrowing",
+            rule="Never use bare `assert x is not None` for type narrowing",
+        )
+        finding = _make_finding(
+            "Uses assert for type narrowing",
+            description="Found bare assert x is not None pattern",
+        )
+        assert _finding_matches_entry(finding, entry) is True
+
+    def test_keyword_match_with_hash_in_rule(self) -> None:
+        """Hash character in worker_rule should not taint keywords."""
+        entry = _make_entry(
+            "type-ignore-ban",
+            rule="Never use `# type: ignore` comments",
+        )
+        finding = _make_finding(
+            "type ignore comments found",
+            description="Found # type: ignore suppressing a real error",
+        )
+        assert _finding_matches_entry(finding, entry) is True
 
     def test_id_match_in_description(self) -> None:
         entry = _make_entry("bare-assert-narrowing")

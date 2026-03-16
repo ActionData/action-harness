@@ -127,7 +127,7 @@ def _extract_keywords(text: str) -> set[str]:
     """
     # Replace common punctuation with spaces for splitting
     normalized = text.lower()
-    for char in "()[]{}.,;:!?\"'/\\=-":
+    for char in "()[]{}.,;:!?\"'/\\=-`#@+*~^<>|":
         normalized = normalized.replace(char, " ")
     words = normalized.split()
     return {w for w in words if w not in _STOP_WORDS and len(w) >= 2}

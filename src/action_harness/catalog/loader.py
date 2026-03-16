@@ -6,10 +6,7 @@ import typer
 import yaml
 from pydantic import ValidationError
 
-from action_harness.catalog.models import CatalogEntry
-
-# Severity sort order: high first
-_SEVERITY_ORDER: dict[str, int] = {"high": 0, "medium": 1, "low": 2}
+from action_harness.catalog.models import SEVERITY_ORDER, CatalogEntry
 
 # Default entries directory relative to this file
 _DEFAULT_ENTRIES_DIR = Path(__file__).parent / "entries"
@@ -85,7 +82,7 @@ def load_catalog(
     filtered = [e for e in entries if ecosystem in e.ecosystems or "all" in e.ecosystems]
 
     # Sort by severity (high first)
-    filtered.sort(key=lambda e: _SEVERITY_ORDER.get(e.severity, 99))
+    filtered.sort(key=lambda e: SEVERITY_ORDER.get(e.severity, 99))
 
     typer.echo(
         f"[catalog] loaded {len(filtered)} entries (of {len(entries)} total) "

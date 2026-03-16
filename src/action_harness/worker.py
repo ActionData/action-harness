@@ -7,6 +7,7 @@ from pathlib import Path
 
 import typer
 
+from action_harness.catalog.frequency import get_boosted_entries
 from action_harness.catalog.loader import load_catalog
 from action_harness.catalog.renderer import render_for_worker
 from action_harness.models import WorkerResult
@@ -108,6 +109,7 @@ def dispatch_worker(
     session_id: str | None = None,
     prompt: str | None = None,
     ecosystem: str = "unknown",
+    repo_knowledge_dir: Path | None = None,
 ) -> WorkerResult:
     """Dispatch a Claude Code worker to implement a change.
 
@@ -181,7 +183,12 @@ def dispatch_worker(
 
         # Inject catalog worker rules into the system prompt
         catalog_entries = load_catalog(ecosystem)
-        catalog_section = render_for_worker(catalog_entries)
+        boosted = (
+            get_boosted_entries(repo_knowledge_dir, catalog_entries)
+            if repo_knowledge_dir is not None
+            else None
+        )
+        catalog_section = render_for_worker(catalog_entries, boosted=boosted)
         if catalog_section is not None:
             system_prompt = f"{system_prompt}\n\n{catalog_section}"
         if feedback:

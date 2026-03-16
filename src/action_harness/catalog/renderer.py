@@ -1,9 +1,6 @@
 """Catalog renderers — produce prompt sections for workers and reviewers."""
 
-from action_harness.catalog.models import CatalogEntry
-
-# Severity sort order: high first
-_SEVERITY_ORDER: dict[str, int] = {"high": 0, "medium": 1, "low": 2}
+from action_harness.catalog.models import SEVERITY_ORDER, CatalogEntry
 
 
 def render_for_worker(
@@ -23,7 +20,7 @@ def render_for_worker(
         return None
 
     # Sort by severity (high first)
-    sorted_entries = sorted(entries, key=lambda e: _SEVERITY_ORDER.get(e.severity, 99))
+    sorted_entries = sorted(entries, key=lambda e: SEVERITY_ORDER.get(e.severity, 99))
     selected = sorted_entries[:top_n]
 
     if not selected and not boosted:

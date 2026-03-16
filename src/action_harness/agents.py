@@ -105,5 +105,12 @@ def resolve_harness_agents_dir() -> Path:
     # Fallback: installed package
     pkg_path = importlib.resources.files("action_harness") / "default_agents"
     resolved = Path(str(pkg_path))
-    typer.echo(f"[agents] resolved harness agents dir (package): {resolved}", err=True)
+    if not resolved.is_dir():
+        typer.echo(
+            f"[agents] warning: package fallback agents dir does not exist: {resolved}. "
+            f"Agent definition files may be missing from the installation.",
+            err=True,
+        )
+    else:
+        typer.echo(f"[agents] resolved harness agents dir (package): {resolved}", err=True)
     return resolved

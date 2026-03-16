@@ -12,8 +12,9 @@ from action_harness.models import OpenSpecReviewResult
 from action_harness.parsing import extract_json_block
 from action_harness.worker import count_commits_ahead
 
-# JSON output block appended AFTER .format(change_name=...) is called on the
-# persona text. Uses literal braces (not escaped) because it has no placeholders.
+# JSON output block appended AFTER the persona text from openspec-reviewer.md.
+# Step number "5." continues from steps 1-4 defined in the agent file.
+# If the agent file's steps are renumbered, update the step number here.
 _OPENSPEC_JSON_SUFFIX = """
 
 5. Output a final JSON block with exactly these keys:
@@ -107,12 +108,14 @@ def dispatch_openspec_review(
         )
     except subprocess.TimeoutExpired:
         duration = time.monotonic() - start_time
-        typer.echo("[openspec-review] timed out after 7200s", err=True)
-        return "", duration
+        error_msg = "OpenSpec review timed out after 7200s"
+        typer.echo(f"[openspec-review] {error_msg}", err=True)
+        return f'{{"error": "{error_msg}"}}', duration
     except (FileNotFoundError, OSError) as e:
         duration = time.monotonic() - start_time
-        typer.echo(f"[openspec-review] failed to launch: {e}", err=True)
-        return "", duration
+        error_msg = f"Failed to launch openspec review: {e}"
+        typer.echo(f"[openspec-review] {error_msg}", err=True)
+        return f'{{"error": "{error_msg}"}}', duration
 
     duration = time.monotonic() - start_time
 
@@ -130,13 +133,22 @@ def parse_review_result(raw_output: str, duration: float) -> OpenSpecReviewResul
     """
     try:
         output_data = json.loads(raw_output)
-        result_text = output_data.get("result", "")
     except json.JSONDecodeError:
         return OpenSpecReviewResult(
             success=False,
             error="Failed to parse review output: invalid JSON from CLI",
             duration_seconds=duration,
         )
+
+    # Check for dispatch-level error (timeout, launch failure)
+    if "error" in output_data and "result" not in output_data:
+        return OpenSpecReviewResult(
+            success=False,
+            error=str(output_data["error"]),
+            duration_seconds=duration,
+        )
+
+    result_text = output_data.get("result", "")
 
     # Extract the JSON block from the result text
     review_data = extract_json_block(result_text)

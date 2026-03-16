@@ -944,6 +944,14 @@ def _run_review_agents_only(
     pr_number = int(pr_result.pr_url.rstrip("/").split("/")[-1])
 
     # Resolve paths for agent loading
+    # repo_path is the actual repo root (for agent override lookup).
+    # worktree_path is NOT a valid substitute — it's a temporary clone.
+    if repo_path is None:
+        typer.echo(
+            "[pipeline] warning: repo_path not provided for agent loading, "
+            "using worktree_path as fallback",
+            err=True,
+        )
     resolved_repo_path = repo_path if repo_path is not None else worktree_path
     resolved_agents_dir = (
         harness_agents_dir if harness_agents_dir is not None else resolve_harness_agents_dir()
@@ -1202,6 +1210,14 @@ def _run_openspec_review(
     typer.echo("[pipeline] running openspec review", err=True)
 
     # Resolve paths for agent loading
+    # repo_path is the actual repo root (for agent override lookup).
+    # worktree_path is NOT a valid substitute — it's a temporary clone.
+    if repo_path is None:
+        typer.echo(
+            "[pipeline] warning: repo_path not provided for agent loading, "
+            "using worktree_path as fallback",
+            err=True,
+        )
     resolved_repo_path = repo_path if repo_path is not None else worktree_path
     resolved_agents_dir = (
         harness_agents_dir if harness_agents_dir is not None else resolve_harness_agents_dir()

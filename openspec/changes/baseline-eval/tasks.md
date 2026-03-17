@@ -2,13 +2,13 @@ Prerequisites: implement `clean-eval-environment` first so VIRTUAL_ENV stripping
 
 ## 1. Baseline Eval
 
-- [ ] 1.1 In `evaluator.py`: add `run_baseline_eval(worktree_path, eval_commands, verbose) -> dict[str, bool]` that runs EACH eval command (does NOT stop on first failure — runs all commands) and records pass (True) / fail (False) per command. Use the same `clean_env` pattern from `run_eval` to strip VIRTUAL_ENV. Return a dict mapping command string to pass/fail. Log each result to stderr.
-- [ ] 1.2 In `models.py:RunManifest`: add `baseline_eval: dict[str, bool] = {}` field.
-- [ ] 1.3 In `models.py:EvalResult`: add `pre_existing_failures: list[str] = []` field.
+- [x] 1.1 In `evaluator.py`: add `run_baseline_eval(worktree_path, eval_commands, verbose) -> dict[str, bool]` that runs EACH eval command (does NOT stop on first failure — runs all commands) and records pass (True) / fail (False) per command. Use the same `clean_env` pattern from `run_eval` to strip VIRTUAL_ENV. Return a dict mapping command string to pass/fail. Log each result to stderr.
+- [x] 1.2 In `models.py:RunManifest`: add `baseline_eval: dict[str, bool] = {}` field.
+- [x] 1.3 In `models.py:EvalResult`: add `pre_existing_failures: list[str] = []` field.
 
 ## 2. Regression-Aware Eval
 
-- [ ] 2.1 In `evaluator.py:run_eval`: add optional `baseline: dict[str, bool] | None = None` parameter. Change the control flow: when `baseline` is provided and a command fails, check `baseline.get(cmd_str)`. If baseline shows the command was already failing (`False`), log "pre-existing failure (was already failing at baseline)" to stderr, add to `pre_existing_failures` list, and CONTINUE to the next command (do not return early). Only return `success=False` for regressions (commands that were passing at baseline but now fail). Set `failed_command` to the first regression command. Set `feedback_prompt` to formatted feedback for regression(s) only, not pre-existing failures.
+- [x] 2.1 In `evaluator.py:run_eval`: add optional `baseline: dict[str, bool] | None = None` parameter. Change the control flow: when `baseline` is provided and a command fails, check `baseline.get(cmd_str)`. If baseline shows the command was already failing (`False`), log "pre-existing failure (was already failing at baseline)" to stderr, add to `pre_existing_failures` list, and CONTINUE to the next command (do not return early). Only return `success=False` for regressions (commands that were passing at baseline but now fail). Set `failed_command` to the first regression command. Set `feedback_prompt` to formatted feedback for regression(s) only, not pre-existing failures.
 
 ## 3. Pipeline Integration
 

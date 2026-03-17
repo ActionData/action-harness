@@ -979,9 +979,7 @@ def show(
     # Check repo exists before calling
     repo_dir = resolved_home / "repos" / name
     if not repo_dir.is_dir():
-        typer.echo(
-            f"Repo '{name}' not found in {resolved_home}/repos/", err=True
-        )
+        typer.echo(f"Repo '{name}' not found in {resolved_home}/repos/", err=True)
         raise typer.Exit(code=1)
 
     try:
@@ -1108,9 +1106,7 @@ def _format_workspaces(ws_list: list[WorkspaceInfo]) -> None:
             current_repo = ws.repo_name
             typer.echo(current_repo)
         stale_mark = "  (stale)" if ws.stale else ""
-        typer.echo(
-            f"  {ws.change_name}  {ws.branch}  {ws.last_commit_age_days}d ago{stale_mark}"
-        )
+        typer.echo(f"  {ws.change_name}  {ws.branch}  {ws.last_commit_age_days}d ago{stale_mark}")
     typer.echo("")
     typer.echo("═" * 60)
 

@@ -6,8 +6,6 @@ import time
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 from action_harness.dashboard import (
     cross_repo_roadmap,
     list_repos,
@@ -133,9 +131,7 @@ def test_repo_detail_protected_patterns(tmp_path: Path) -> None:
 
     harness_dir = repo / ".harness"
     harness_dir.mkdir()
-    (harness_dir / "protected-paths.yml").write_text(
-        'protected: ["src/core/**", "*.toml"]\n'
-    )
+    (harness_dir / "protected-paths.yml").write_text('protected: ["src/core/**", "*.toml"]\n')
 
     detail = repo_detail(harness_home, "test-repo")
     assert detail.protected_patterns == ["src/core/**", "*.toml"]
@@ -249,9 +245,7 @@ def test_workspace_stale(tmp_path: Path) -> None:
         if "log" in cmd and "--format=%ct" in cmd:
             return subprocess.CompletedProcess(cmd, 0, stdout=old_ts + "\n", stderr="")
         if "rev-parse" in cmd and "--abbrev-ref" in cmd:
-            return subprocess.CompletedProcess(
-                cmd, 0, stdout="harness/old-change\n", stderr=""
-            )
+            return subprocess.CompletedProcess(cmd, 0, stdout="harness/old-change\n", stderr="")
         if "gh" in cmd[0] if cmd else False:
             # gh pr list returns empty list
             return subprocess.CompletedProcess(cmd, 0, stdout="[]\n", stderr="")
@@ -279,9 +273,7 @@ def test_workspace_not_stale_with_pr(tmp_path: Path) -> None:
         if "log" in cmd and "--format=%ct" in cmd:
             return subprocess.CompletedProcess(cmd, 0, stdout=old_ts + "\n", stderr="")
         if "rev-parse" in cmd and "--abbrev-ref" in cmd:
-            return subprocess.CompletedProcess(
-                cmd, 0, stdout="harness/old-change\n", stderr=""
-            )
+            return subprocess.CompletedProcess(cmd, 0, stdout="harness/old-change\n", stderr="")
         if cmd and cmd[0] == "gh":
             pr_json = json.dumps([{"number": 42}])
             return subprocess.CompletedProcess(cmd, 0, stdout=pr_json + "\n", stderr="")

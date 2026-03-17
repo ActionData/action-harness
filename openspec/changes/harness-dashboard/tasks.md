@@ -46,10 +46,10 @@
 
 ## 6. Self-Validation
 
-- [ ] 6.1 `uv run pytest tests/ -v` — all existing and new tests pass
-- [ ] 6.2 `uv run ruff check .` — no lint errors
-- [ ] 6.3 `uv run ruff format --check .` — formatting clean
-- [ ] 6.4 `uv run mypy src/` — no type errors
-- [ ] 6.5 Create a temp directory with `repos/test-repo/` initialized as a git repo. Run `HARNESS_HOME=<temp> uv run action-harness repos` and assert exit code 0 and output contains `test-repo`.
-- [ ] 6.6 `uv run action-harness workspaces --help` — shows help text
-- [ ] 6.7 `uv run action-harness roadmap --help` — shows help text
+- [x] 6.1 `uv run pytest tests/ -v` — all existing and new tests pass
+- [x] 6.2 `uv run ruff check .` — no lint errors
+- [x] 6.3 `uv run ruff format --check .` — formatting clean
+- [x] 6.4 `uv run mypy src/` — no type errors
+- [x] 6.5 Create a temp directory with `repos/test-repo/` initialized as a git repo. Run `HARNESS_HOME=<temp> uv run action-harness repos` and assert exit code 0 and output contains `test-repo`.
+- [x] 6.6 `uv run action-harness workspaces --help` — shows help text
+- [x] 6.7 `uv run action-harness roadmap --help` — shows help text

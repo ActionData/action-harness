@@ -116,9 +116,7 @@ def _get_remote_url(repo_path: Path) -> str | None:
         return None
 
 
-def _get_workspace_info(
-    ws_path: Path, repo_name: str, change_name: str
-) -> WorkspaceInfo | None:
+def _get_workspace_info(ws_path: Path, repo_name: str, change_name: str) -> WorkspaceInfo | None:
     """Build WorkspaceInfo for a single workspace directory."""
     typer.echo(f"[dashboard] inspecting workspace {repo_name}/{change_name}", err=True)
 
@@ -291,9 +289,7 @@ def repo_detail(harness_home: Path, repo_name: str) -> RepoDetail:
     typer.echo(f"[dashboard] reading detail for repo {repo_name}", err=True)
     repo_path = harness_home / "repos" / repo_name
     if not repo_path.is_dir():
-        raise FileNotFoundError(
-            f"Repo '{repo_name}' not found in {harness_home}/repos/"
-        )
+        raise FileNotFoundError(f"Repo '{repo_name}' not found in {harness_home}/repos/")
 
     # Build summary
     remote_url = _get_remote_url(repo_path)
@@ -306,9 +302,7 @@ def repo_detail(harness_home: Path, repo_name: str) -> RepoDetail:
         try:
             harness_md_content = (repo_path / "HARNESS.md").read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError) as e:
-            typer.echo(
-                f"[dashboard] warning: could not read HARNESS.md: {e}", err=True
-            )
+            typer.echo(f"[dashboard] warning: could not read HARNESS.md: {e}", err=True)
 
     # Protected patterns
     protected_patterns = load_protected_patterns(repo_path)

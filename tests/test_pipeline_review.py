@@ -2,10 +2,12 @@
 
 import json
 import subprocess
+from collections.abc import Generator
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+from helpers import cleanup_worktrees
 
 from action_harness.models import (
     EvalResult,
@@ -131,8 +133,11 @@ def _low_only_review_results() -> list[ReviewResult]:
 
 
 @pytest.fixture
-def test_repo(tmp_path: Path) -> Path:
-    """Create a temporary git repo for testing."""
+def test_repo(tmp_path: Path) -> Generator[Path]:
+    """Create a temporary git repo for testing.
+
+    Cleans up any worktrees created in /tmp/action-harness-* after the test.
+    """
     repo = tmp_path / "repo"
     repo.mkdir()
 
@@ -169,7 +174,9 @@ def test_repo(tmp_path: Path) -> Path:
         check=True,
     )
 
-    return repo
+    yield repo
+
+    cleanup_worktrees(repo)
 
 
 def _make_claude_mock(

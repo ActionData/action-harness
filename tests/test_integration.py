@@ -2,10 +2,12 @@
 
 import json
 import subprocess
+from collections.abc import Generator
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+from helpers import cleanup_worktrees
 
 from action_harness.models import EvalResult, OpenSpecReviewResult, RunManifest
 from action_harness.openspec_reviewer import parse_review_result
@@ -30,8 +32,11 @@ def _approved_review_result() -> OpenSpecReviewResult:
 
 
 @pytest.fixture
-def test_repo(tmp_path: Path) -> Path:
-    """Create a temporary git repo with pyproject.toml, a test, and an OpenSpec change."""
+def test_repo(tmp_path: Path) -> Generator[Path]:
+    """Create a temporary git repo with pyproject.toml, a test, and an OpenSpec change.
+
+    Cleans up any worktrees created in /tmp/action-harness-* after the test.
+    """
     repo = tmp_path / "repo"
     repo.mkdir()
 
@@ -75,7 +80,9 @@ def test_repo(tmp_path: Path) -> Path:
         check=True,
     )
 
-    return repo
+    yield repo
+
+    cleanup_worktrees(repo)
 
 
 def _make_claude_mock(
@@ -171,6 +178,48 @@ class TestPipelineSuccess:
         assert manifest.retries == 0
         assert manifest.pr_url == "https://github.com/test/repo/pull/1"
         assert manifest.error is None
+
+    def test_worktree_cleaned_up_on_success(self, test_repo: Path) -> None:
+        """Temp worktree is cleaned up after a successful pipeline run."""
+        mock = _make_claude_mock(commits=True)
+
+        with (
+            patch("action_harness.worker.subprocess.run", mock),
+            patch("action_harness.pipeline.run_eval", return_value=self._passing_eval()),
+            patch("action_harness.pr.subprocess.run", mock),
+            patch(
+                "action_harness.pipeline.dispatch_openspec_review",
+                return_value=('{"result": "{}"}', 1.0),
+            ),
+            patch(
+                "action_harness.pipeline.parse_review_result",
+                return_value=self._mock_review(),
+            ),
+            patch(
+                "action_harness.pipeline.push_archive_if_needed",
+                return_value=(False, None),
+            ),
+        ):
+            pr_result, _manifest = run_pipeline(
+                "test-change", test_repo, max_retries=1, skip_review=True
+            )
+
+        assert pr_result.success is True
+
+        # No lingering harness worktrees should remain
+        list_result = subprocess.run(
+            ["git", "worktree", "list", "--porcelain"],
+            cwd=test_repo,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        worktrees = [
+            line
+            for line in list_result.stdout.splitlines()
+            if line.startswith("worktree ") and "harness" in line
+        ]
+        assert len(worktrees) == 0
 
     def test_pipeline_creates_worktree(self, test_repo: Path) -> None:
         mock = _make_claude_mock(commits=True)

@@ -1,11 +1,11 @@
 """Tests for git worktree management."""
 
-import shutil
 import subprocess
 from collections.abc import Generator
 from pathlib import Path
 
 import pytest
+from helpers import cleanup_worktrees
 
 from action_harness.worktree import cleanup_worktree, create_worktree
 
@@ -41,26 +41,7 @@ def git_repo(tmp_path: Path) -> Generator[Path]:
 
     yield tmp_path
 
-    # Teardown: remove all worktrees registered with this repo
-    list_result = subprocess.run(
-        ["git", "worktree", "list", "--porcelain"],
-        cwd=tmp_path,
-        capture_output=True,
-        text=True,
-    )
-    for line in list_result.stdout.splitlines():
-        if line.startswith("worktree "):
-            wt_path = Path(line.split(" ", 1)[1])
-            if wt_path != tmp_path:
-                subprocess.run(
-                    ["git", "worktree", "remove", "--force", str(wt_path)],
-                    cwd=tmp_path,
-                    capture_output=True,
-                )
-                # Clean up parent temp directory
-                parent = wt_path.parent
-                if parent.name.startswith("action-harness-") and parent.exists():
-                    shutil.rmtree(parent, ignore_errors=True)
+    cleanup_worktrees(tmp_path)
 
 
 class TestCreateWorktree:

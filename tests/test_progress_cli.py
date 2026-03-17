@@ -41,9 +41,7 @@ class TestProgressNoLogs:
         runs_dir = tmp_path / ".action-harness" / "runs"
         runs_dir.mkdir(parents=True)
 
-        result = runner.invoke(
-            app, ["progress", "--repo", str(tmp_path), "--run", "nonexistent"]
-        )
+        result = runner.invoke(app, ["progress", "--repo", str(tmp_path), "--run", "nonexistent"])
         assert result.exit_code != 0
         combined = _strip_ansi(result.output + (result.stderr or ""))
         assert "Event log not found" in combined

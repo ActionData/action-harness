@@ -5,11 +5,11 @@
 
 ## 2. Checkpoint I/O [depends: 1]
 
-- [ ] 2.1 Create `src/action_harness/checkpoint.py` with `write_checkpoint(repo_path: Path, checkpoint: PipelineCheckpoint) -> None`. Writes to `.action-harness/checkpoints/<run_id>.json` using atomic write (temp file + `os.replace()`). Creates the checkpoints directory if needed. Log to stderr on write.
-- [ ] 2.2 Add `read_checkpoint(repo_path: Path, run_id: str) -> PipelineCheckpoint | None`. Returns None if file doesn't exist. Logs warning on parse error, returns None (never crashes).
-- [ ] 2.3 Add `find_latest_checkpoint(repo_path: Path, change_name: str) -> PipelineCheckpoint | None`. Reads EACH `.json` file in `.action-harness/checkpoints/`, parses it, and compares `checkpoint.change_name == change_name`. Returns the most recent by `timestamp`. Returns None if no match.
-- [ ] 2.4 Add `delete_checkpoint(repo_path: Path, run_id: str) -> None`. Deletes the checkpoint file. Logs warning if file doesn't exist (non-fatal).
-- [ ] 2.5 Add tests: write + read roundtrip, read nonexistent returns None, find_latest with multiple checkpoints returns most recent, find_latest filters by change_name, delete existing file, delete nonexistent logs warning. Verify atomic write pattern.
+- [x] 2.1 Create `src/action_harness/checkpoint.py` with `write_checkpoint(repo_path: Path, checkpoint: PipelineCheckpoint) -> None`. Writes to `.action-harness/checkpoints/<run_id>.json` using atomic write (temp file + `os.replace()`). Creates the checkpoints directory if needed. Log to stderr on write.
+- [x] 2.2 Add `read_checkpoint(repo_path: Path, run_id: str) -> PipelineCheckpoint | None`. Returns None if file doesn't exist. Logs warning on parse error, returns None (never crashes).
+- [x] 2.3 Add `find_latest_checkpoint(repo_path: Path, change_name: str) -> PipelineCheckpoint | None`. Reads EACH `.json` file in `.action-harness/checkpoints/`, parses it, and compares `checkpoint.change_name == change_name`. Returns the most recent by `timestamp`. Returns None if no match.
+- [x] 2.4 Add `delete_checkpoint(repo_path: Path, run_id: str) -> None`. Deletes the checkpoint file. Logs warning if file doesn't exist (non-fatal).
+- [x] 2.5 Add tests: write + read roundtrip, read nonexistent returns None, find_latest with multiple checkpoints returns most recent, find_latest filters by change_name, delete existing file, delete nonexistent logs warning. Verify atomic write pattern.
 
 ## 3. Pipeline Checkpoint Integration [depends: 2]
 

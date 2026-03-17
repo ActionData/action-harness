@@ -365,7 +365,7 @@ def dispatch_review_agents(
     return results
 
 
-def _titles_overlap(title_a: str, title_b: str) -> bool:
+def titles_overlap(title_a: str, title_b: str) -> bool:
     """Check whether two titles share a meaningful word overlap.
 
     Uses case-insensitive comparison. Two titles overlap when either full
@@ -423,7 +423,7 @@ def compute_finding_priority(finding: ReviewFinding, all_findings: list[ReviewFi
             continue
         if not other.title:
             continue
-        if _titles_overlap(finding_title, other.title):
+        if titles_overlap(finding_title, other.title):
             agents_with_overlap.add(other.agent)
     cross_agent_count = len(agents_with_overlap)
     return SEVERITY_RANK[finding.severity] * 10 + cross_agent_count
@@ -482,7 +482,7 @@ def match_findings(prior: list[ReviewFinding], current: list[ReviewFinding]) -> 
     (b) one finding's title is a case-insensitive substring of the other's.
 
     Uses strict substring matching (not bigram) to avoid false positives
-    in acknowledged-finding tracking. The broader ``_titles_overlap`` is
+    in acknowledged-finding tracking. The broader ``titles_overlap`` is
     used for priority scoring where false positives are less harmful.
 
     Returns the subset of *current* findings that match any prior finding.

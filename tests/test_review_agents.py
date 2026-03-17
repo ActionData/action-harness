@@ -13,7 +13,6 @@ from action_harness.review_agents import (
     _GENERIC_SEVERITY_SUFFIX,
     REVIEW_AGENT_NAMES,
     SPEC_COMPLIANCE_AGENT_NAME,
-    _titles_overlap,
     build_review_prompt,
     compute_finding_priority,
     dispatch_review_agents,
@@ -23,6 +22,7 @@ from action_harness.review_agents import (
     match_findings,
     parse_review_findings,
     select_top_findings,
+    titles_overlap,
     triage_findings,
 )
 
@@ -982,39 +982,39 @@ class TestMatchFindings:
 
 
 class TestTitlesOverlap:
-    """Direct tests for _titles_overlap helper."""
+    """Direct tests for titles_overlap helper."""
 
     def test_full_substring_match(self) -> None:
-        assert _titles_overlap("null check", "null check missing") is True
+        assert titles_overlap("null check", "null check missing") is True
 
     def test_bigram_overlap_reworded(self) -> None:
         """Shared bigram 'null check' in different word order."""
-        assert _titles_overlap("null check missing in handler", "Missing null check") is True
+        assert titles_overlap("null check missing in handler", "Missing null check") is True
 
     def test_case_insensitive(self) -> None:
-        assert _titles_overlap("NULL CHECK", "null check missing") is True
+        assert titles_overlap("NULL CHECK", "null check missing") is True
 
     def test_single_word_titles_no_bigram_match(self) -> None:
         """Single-word titles cannot match via bigram path — only substring."""
         # "Bug" is a substring of "Debug" so this returns True via substring path.
         # But single-word vs multi-word with no substring overlap returns False.
-        assert _titles_overlap("Crash", "unused import detected") is False
+        assert titles_overlap("Crash", "unused import detected") is False
 
     def test_empty_strings(self) -> None:
         # Empty titles return False to prevent false-positive matches
-        assert _titles_overlap("", "anything") is False
-        assert _titles_overlap("anything", "") is False
-        assert _titles_overlap("", "") is False
+        assert titles_overlap("", "anything") is False
+        assert titles_overlap("anything", "") is False
+        assert titles_overlap("", "") is False
 
     def test_no_shared_bigram(self) -> None:
         """Titles share common words but not as a contiguous bigram."""
-        assert _titles_overlap("missing error handling", "error in missing module") is False
+        assert titles_overlap("missing error handling", "error in missing module") is False
 
     def test_completely_different_titles(self) -> None:
-        assert _titles_overlap("race condition in cache", "unused import os") is False
+        assert titles_overlap("race condition in cache", "unused import os") is False
 
     def test_identical_titles(self) -> None:
-        assert _titles_overlap("off by one", "off by one") is True
+        assert titles_overlap("off by one", "off by one") is True
 
 
 class TestComputeFindingPriority:

@@ -14,12 +14,18 @@ from action_harness.lead import (
     IssueItem,
     LeadPlan,
     ProposalItem,
+    _gather_issues,
     dispatch_lead,
     gather_lead_context,
     parse_lead_plan,
 )
 
 runner = CliRunner()
+
+
+def _mock_gather_issues_none(*_args: object, **_kwargs: object) -> None:
+    """Replacement for _gather_issues that returns None (no gh available)."""
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -484,3 +490,166 @@ class TestLeadCLI:
         assert "nonexistent-change" in result.output
         # Should show failure in dispatch results
         assert "no tasks.md" in result.output
+
+
+# ---------------------------------------------------------------------------
+# Prior acknowledged: _gather_issues direct tests
+# ---------------------------------------------------------------------------
+
+
+class TestGatherIssues:
+    def test_normal_gh_output(self, tmp_path: Path) -> None:
+        """_gather_issues parses normal gh JSON output."""
+        gh_output = json.dumps(
+            [
+                {
+                    "title": "Bug: login fails",
+                    "body": "Login times out after 30s",
+                    "labels": [{"name": "bug"}],
+                },
+                {
+                    "title": "Feature request",
+                    "body": "Add dark mode",
+                    "labels": [{"name": "enhancement"}, {"name": "ui"}],
+                },
+            ]
+        )
+        mock_result = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout=gh_output, stderr=""
+        )
+        with patch("action_harness.lead.subprocess.run", return_value=mock_result):
+            result = _gather_issues(tmp_path, 3000)
+
+        assert result is not None
+        assert "Bug: login fails" in result
+        assert "[bug]" in result
+        assert "Feature request" in result
+        assert "enhancement" in result
+
+    def test_empty_issue_list(self, tmp_path: Path) -> None:
+        """Empty issue list returns None."""
+        mock_result = subprocess.CompletedProcess(args=[], returncode=0, stdout="[]", stderr="")
+        with patch("action_harness.lead.subprocess.run", return_value=mock_result):
+            result = _gather_issues(tmp_path, 3000)
+
+        assert result is None
+
+    def test_labels_as_strings(self, tmp_path: Path) -> None:
+        """Labels can be plain strings (not dicts)."""
+        gh_output = json.dumps(
+            [
+                {"title": "Test", "body": "", "labels": ["bug", "p1"]},
+            ]
+        )
+        mock_result = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout=gh_output, stderr=""
+        )
+        with patch("action_harness.lead.subprocess.run", return_value=mock_result):
+            result = _gather_issues(tmp_path, 3000)
+
+        assert result is not None
+        assert "[bug, p1]" in result
+
+    def test_body_truncation(self, tmp_path: Path) -> None:
+        """Issue bodies longer than 500 chars are truncated."""
+        long_body = "x" * 600
+        gh_output = json.dumps(
+            [
+                {"title": "Long issue", "body": long_body, "labels": []},
+            ]
+        )
+        mock_result = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout=gh_output, stderr=""
+        )
+        with patch("action_harness.lead.subprocess.run", return_value=mock_result):
+            result = _gather_issues(tmp_path, 3000)
+
+        assert result is not None
+        # Body should be truncated to 500 + "..."
+        assert "x" * 500 + "..." in result
+        assert "x" * 501 not in result
+
+    def test_gh_failure_returns_none(self, tmp_path: Path) -> None:
+        """Non-zero gh exit returns None."""
+        mock_result = subprocess.CompletedProcess(
+            args=[], returncode=1, stdout="", stderr="auth required"
+        )
+        with patch("action_harness.lead.subprocess.run", return_value=mock_result):
+            result = _gather_issues(tmp_path, 3000)
+
+        assert result is None
+
+    def test_malformed_entries_skipped(self, tmp_path: Path) -> None:
+        """Non-dict entries in the list are skipped."""
+        gh_output = json.dumps(
+            [
+                "not a dict",
+                {"title": "Valid issue", "body": "ok", "labels": []},
+            ]
+        )
+        mock_result = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout=gh_output, stderr=""
+        )
+        with patch("action_harness.lead.subprocess.run", return_value=mock_result):
+            result = _gather_issues(tmp_path, 3000)
+
+        assert result is not None
+        assert "Valid issue" in result
+
+    def test_cwd_is_repo_path(self, tmp_path: Path) -> None:
+        """gh is invoked with cwd=repo_path."""
+        mock_result = subprocess.CompletedProcess(args=[], returncode=0, stdout="[]", stderr="")
+        with patch("action_harness.lead.subprocess.run", return_value=mock_result) as mock_run:
+            _gather_issues(tmp_path, 3000)
+
+        assert mock_run.call_args.kwargs.get("cwd") == tmp_path
+
+
+# ---------------------------------------------------------------------------
+# Prior acknowledged: dispatch_lead non-zero exit
+# ---------------------------------------------------------------------------
+
+
+class TestDispatchLeadNonZeroExit:
+    def test_nonzero_exit_returns_error(self, tmp_path: Path) -> None:
+        """Claude CLI non-zero exit returns error JSON."""
+        repo_path = tmp_path / "repo"
+        repo_path.mkdir()
+        agents_dir = tmp_path / "agents"
+        agents_dir.mkdir()
+        (agents_dir / "lead.md").write_text("---\nname: lead\n---\nPersona")
+
+        mock_result = subprocess.CompletedProcess(
+            args=[], returncode=1, stdout="", stderr="model not found"
+        )
+        with patch("action_harness.lead.subprocess.run", return_value=mock_result):
+            output = dispatch_lead(
+                repo_path=repo_path,
+                prompt="test",
+                context="ctx",
+                harness_agents_dir=agents_dir,
+            )
+
+        data = json.loads(output)
+        assert "error" in data
+        assert "exit" in data["error"].lower()
+        assert "model not found" in data["error"]
+
+
+# ---------------------------------------------------------------------------
+# Prior acknowledged: parse_lead_plan with valid JSON but invalid schema
+# ---------------------------------------------------------------------------
+
+
+class TestParseLeadPlanInvalidSchema:
+    def test_valid_json_invalid_schema_returns_empty(self) -> None:
+        """JSON that's valid but doesn't match LeadPlan returns empty plan."""
+        # proposals should be a list of objects, not a string
+        bad_data = {"summary": "ok", "proposals": "not a list"}
+        raw = json.dumps({"result": json.dumps(bad_data)})
+
+        plan = parse_lead_plan(raw)
+
+        assert isinstance(plan, LeadPlan)
+        # Should fall back to empty plan since model_validate fails
+        assert plan.proposals == []

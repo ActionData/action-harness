@@ -72,7 +72,7 @@ def _read_file_section(path: Path, header: str, max_chars: int) -> str | None:
     return f"## {header}\n\n{truncated}"
 
 
-def _gather_issues(max_section_chars: int) -> str | None:
+def _gather_issues(repo_path: Path, max_section_chars: int) -> str | None:
     """Gather open GitHub issues via gh CLI. Returns None on failure."""
     typer.echo("[lead] gathering open issues via gh", err=True)
     try:
@@ -88,6 +88,7 @@ def _gather_issues(max_section_chars: int) -> str | None:
                 "--state",
                 "open",
             ],
+            cwd=repo_path,
             capture_output=True,
             text=True,
             timeout=120,
@@ -193,7 +194,11 @@ def _gather_assessment_scores(repo_path: Path, max_section_chars: int) -> str | 
         if len(section) > max_section_chars:
             section = section[:max_section_chars] + "\n\n... (truncated)"
         return section
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — broad catch intentional:
+        # Assessment calls 6+ scanner modules, branch protection (subprocess),
+        # and CI parsing. Any failure in this optional context section must not
+        # block the lead agent. Narrowing to specific exceptions would require
+        # auditing every scanner's failure modes and updating on each change.
         typer.echo(f"[lead] warning: assessment scan failed: {exc}", err=True)
         return None
 
@@ -247,9 +252,13 @@ def _gather_catalog_frequency(harness_home: Path | None, max_section_chars: int)
         return None
 
     # Sort by count descending, take top 5
+    def _get_count(entry: dict[str, str | int]) -> int:
+        count = entry.get("count", 0)
+        return count if isinstance(count, int) else 0
+
     entries = sorted(
         [(k, v) for k, v in data.items() if isinstance(v, dict)],
-        key=lambda t: t[1].get("count", 0) if isinstance(t[1].get("count"), int) else 0,
+        key=lambda t: _get_count(t[1]),
         reverse=True,
     )[:5]
 
@@ -312,7 +321,7 @@ def gather_lead_context(
         sections.append(harness_md)
 
     # (d) Open issues
-    issues = _gather_issues(max_section_chars)
+    issues = _gather_issues(repo_path, max_section_chars)
     if issues:
         sections.append(issues)
 
@@ -384,6 +393,11 @@ def dispatch_lead(
         "--max-turns",
         str(max_turns),
         "--permission-mode",
+        # Design decision: 'default' (not 'plan') lets the lead read the
+        # codebase and run read-only tools (gh issue list, openspec list)
+        # while prompting for approval on writes. Task 3.1 says 'default',
+        # task 3.2 says 'plan' — specs are inconsistent; the design doc
+        # rationale supports 'default' for information gathering.
         "default",
     ]
 
@@ -461,7 +475,10 @@ def parse_lead_plan(raw_output: str) -> LeadPlan:
 
     try:
         plan = LeadPlan.model_validate(plan_data)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — broad catch intentional:
+        # model_validate can raise ValidationError, but also TypeError or
+        # other exceptions from malformed agent output. The lead must never
+        # crash on bad plan data — return an empty plan and log.
         typer.echo(
             f"[lead] warning: could not validate plan data: {exc}",
             err=True,

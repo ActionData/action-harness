@@ -4,11 +4,11 @@ The `harness lead` command dispatches a one-shot Claude Code session (`claude -p
 
 ## What Changes
 
-- Add `--interactive` / `-i` flag to `harness lead` that spawns a conversational Claude Code session instead of the one-shot dispatch
+- Add `--interactive` flag to `harness lead` that spawns a conversational Claude Code session instead of the one-shot dispatch (note: `-i` shorthand omitted — typer's boolean flag pattern `--interactive/--no-interactive` doesn't support single-char aliases)
 - Interactive mode writes a temporary system prompt file containing the lead persona + gathered context, then runs `claude` (without `-p`) so the human can interact naturally
 - The initial user prompt is passed via `--initial-prompt` so the conversation starts with the user's request while remaining interactive
 - Plan parsing and `--dispatch` are skipped in interactive mode — the human drives the session
-- Make interactive the default mode (no flag needed), with `--non-interactive` for the existing one-shot behavior
+- Make interactive the default mode (no flag needed), with `--no-interactive` for the existing one-shot behavior
 
 ## Capabilities
 
@@ -16,7 +16,7 @@ The `harness lead` command dispatches a one-shot Claude Code session (`claude -p
 - `lead-interactive`: Interactive lead session with pre-gathered repo context and conversational Claude Code dispatch
 
 ### Modified Capabilities
-- `repo-lead`: Default mode changes from one-shot to interactive. Existing non-interactive behavior preserved via `--non-interactive` flag.
+- `repo-lead`: Default mode changes from one-shot to interactive. Existing non-interactive behavior preserved via `--no-interactive` flag.
 
 ## Impact
 

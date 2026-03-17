@@ -9,7 +9,7 @@ Claude Code supports interactive sessions natively — `claude` without `-p` sta
 **Goals:**
 - Make `harness lead` spawn an interactive Claude Code session by default
 - Pre-load the session with gathered repo context (roadmap, issues, assessment, etc.)
-- Preserve the existing non-interactive behavior behind a `--non-interactive` flag
+- Preserve the existing non-interactive behavior behind a `--no-interactive` flag
 - Keep the interactive session as a simple `subprocess.run` of `claude` (no PTY tricks)
 
 **Non-Goals:**
@@ -34,11 +34,11 @@ Use `--system-prompt` for the lead persona (from `.harness/agents/lead.md`) and 
 
 **Alternative considered**: Concatenate persona + context into a single `--system-prompt`. Rejected — `--append-system-prompt` provides cleaner separation and the persona serves as the base identity.
 
-### Decision 3: Interactive as default, `--non-interactive` for one-shot
+### Decision 3: Interactive as default, `--no-interactive` for one-shot
 
-The primary use case is human-in-the-loop planning. Making interactive the default means `harness lead --repo .` does the right thing. The `--non-interactive` flag preserves the existing JSON-plan-and-dispatch behavior for automation.
+The primary use case is human-in-the-loop planning. Making interactive the default means `harness lead --repo .` does the right thing. The `--no-interactive` flag preserves the existing JSON-plan-and-dispatch behavior for automation.
 
-**Alternative considered**: Keep non-interactive as default, add `--interactive`/`-i`. Rejected — the interactive use case is the more common one; automation callers can specify `--non-interactive`.
+**Alternative considered**: Keep non-interactive as default, add `--interactive`/`-i`. Rejected — the interactive use case is the more common one; automation callers can specify `--no-interactive`.
 
 ### Decision 4: No `--dispatch` in interactive mode
 
@@ -52,6 +52,6 @@ Interactive sessions need real terminal access. Use `subprocess.run` without `ca
 
 ## Risks / Trade-offs
 
-- [Interactive sessions can't produce structured output] → Accepted. Interactive mode is for human use; structured output remains available via `--non-interactive`.
-- [Default behavior change is breaking for scripts] → Mitigated by `--non-interactive` flag. Any script calling `harness lead` for JSON parsing needs to add `--non-interactive`. Document in CLI help.
+- [Interactive sessions can't produce structured output] → Accepted. Interactive mode is for human use; structured output remains available via `--no-interactive`.
+- [Default behavior change is breaking for scripts] → Mitigated by `--no-interactive` flag. Any script calling `harness lead` for JSON parsing needs to add `--no-interactive`. Document in CLI help.
 - [System prompt + append-system-prompt may hit length limits] → Mitigated by existing 3000-char truncation per section in `gather_lead_context`.

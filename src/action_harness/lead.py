@@ -425,7 +425,10 @@ def dispatch_lead_interactive(
         typer.echo(f"[lead] agent file not found: {exc}", err=True)
         return 1
 
-    # Guard against empty prompt — would pass an empty positional arg to claude
+    # Guard against empty prompt — would pass an empty positional arg to claude.
+    # Currently unreachable from the CLI (typer provides a non-empty default),
+    # but guards against programmatic callers. dispatch_lead doesn't have this
+    # guard because it concatenates the prompt into a larger user_prompt string.
     if not prompt.strip():
         typer.echo("[lead] error: prompt must not be empty", err=True)
         return 1

@@ -674,11 +674,13 @@ class TestLeadCLI:
                 "action_harness.lead.dispatch_lead_interactive",
                 return_value=0,
             ) as mock_interactive,
+            # Verify one-shot path is NOT called (routes are mutually exclusive)
+            patch("action_harness.lead.dispatch_lead") as mock_oneshot,
         ):
             result = runner.invoke(app, ["lead", "--repo", str(repo)])
 
-        # Should call interactive dispatch, not one-shot
         assert mock_interactive.called
+        mock_oneshot.assert_not_called()
         assert result.exit_code == 0
 
     def test_no_interactive_uses_one_shot(self, tmp_path: Path) -> None:
@@ -702,10 +704,13 @@ class TestLeadCLI:
                 "action_harness.lead.dispatch_lead",
                 return_value=mock_output,
             ) as mock_dispatch,
+            # Verify interactive path is NOT called (routes are mutually exclusive)
+            patch("action_harness.lead.dispatch_lead_interactive") as mock_interactive,
         ):
             result = runner.invoke(app, ["lead", "--repo", str(repo), "--no-interactive"])
 
         assert mock_dispatch.called
+        mock_interactive.assert_not_called()
         assert result.exit_code == 0
         assert "Non-interactive plan" in result.output
 
@@ -730,11 +735,14 @@ class TestLeadCLI:
                 "action_harness.lead.dispatch_lead",
                 return_value=mock_output,
             ) as mock_dispatch,
+            # Verify interactive path is NOT called (routes are mutually exclusive)
+            patch("action_harness.lead.dispatch_lead_interactive") as mock_interactive,
         ):
             result = runner.invoke(app, ["lead", "--repo", str(repo), "--dispatch"])
 
         # Should use one-shot dispatch, not interactive
         assert mock_dispatch.called
+        mock_interactive.assert_not_called()
         assert result.exit_code == 0
 
     def test_interactive_and_dispatch_errors(self, tmp_path: Path) -> None:

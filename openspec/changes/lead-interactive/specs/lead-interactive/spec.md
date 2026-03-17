@@ -16,10 +16,10 @@ The `harness lead --repo <path>` command SHALL spawn an interactive Claude Code 
 - **THEN** the subprocess SHALL inherit stdin, stdout, and stderr so the human can interact naturally with the Claude Code session
 
 ### Requirement: Non-interactive mode preserves existing behavior
-The `--non-interactive` flag SHALL trigger the existing one-shot dispatch that produces a JSON plan.
+The `--no-interactive` flag SHALL trigger the existing one-shot dispatch that produces a JSON plan.
 
 #### Scenario: Non-interactive dispatch
-- **WHEN** the user runs `harness lead --repo ./my-repo --non-interactive`
+- **WHEN** the user runs `harness lead --repo ./my-repo --no-interactive`
 - **THEN** the harness SHALL dispatch via `claude -p` and parse the JSON plan output (existing behavior)
 
 #### Scenario: Dispatch requires non-interactive

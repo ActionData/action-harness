@@ -246,10 +246,10 @@ def test_workspace_stale(tmp_path: Path) -> None:
             return subprocess.CompletedProcess(cmd, 0, stdout=old_ts + "\n", stderr="")
         if "rev-parse" in cmd and "--abbrev-ref" in cmd:
             return subprocess.CompletedProcess(cmd, 0, stdout="harness/old-change\n", stderr="")
-        if "gh" in cmd[0] if cmd else False:
+        if cmd and cmd[0] == "gh":
             # gh pr list returns empty list
             return subprocess.CompletedProcess(cmd, 0, stdout="[]\n", stderr="")
-        return subprocess.run(cmd, **kwargs)  # type: ignore[arg-type]
+        raise ValueError(f"Unexpected subprocess call: {cmd}")
 
     with patch("action_harness.dashboard.subprocess.run", side_effect=mock_run):
         workspaces = list_workspaces(harness_home)
@@ -277,7 +277,7 @@ def test_workspace_not_stale_with_pr(tmp_path: Path) -> None:
         if cmd and cmd[0] == "gh":
             pr_json = json.dumps([{"number": 42}])
             return subprocess.CompletedProcess(cmd, 0, stdout=pr_json + "\n", stderr="")
-        return subprocess.run(cmd, **kwargs)  # type: ignore[arg-type]
+        raise ValueError(f"Unexpected subprocess call: {cmd}")
 
     with patch("action_harness.dashboard.subprocess.run", side_effect=mock_run):
         workspaces = list_workspaces(harness_home)

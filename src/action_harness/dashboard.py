@@ -247,17 +247,18 @@ def list_repos(harness_home: Path) -> list[RepoSummary]:
         has_harness_md = (entry / "HARNESS.md").is_file()
         has_protected_paths = (entry / ".harness" / "protected-paths.yml").is_file()
 
-        # Count workspaces for this repo
+        # Count workspaces for this repo (only valid git worktrees)
         ws_dir = harness_home / "workspaces" / entry.name
         workspace_count = 0
         stale_workspace_count = 0
         if ws_dir.is_dir():
             for ws in ws_dir.iterdir():
                 if ws.is_dir():
-                    workspace_count += 1
                     info = _get_workspace_info(ws, entry.name, ws.name)
-                    if info is not None and info.stale:
-                        stale_workspace_count += 1
+                    if info is not None:
+                        workspace_count += 1
+                        if info.stale:
+                            stale_workspace_count += 1
 
         # Count OpenSpec changes
         active_changes_list, completed_changes = read_openspec_changes(entry)

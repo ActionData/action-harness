@@ -532,23 +532,30 @@ def _run_pipeline_inner(
         branch = checkpoint.branch or f"harness/{change_name}"
         typer.echo(f"[pipeline] skipping worktree stage (resumed: {worktree_path})", err=True)
 
-    # Run baseline eval before worker dispatch
-    actual_eval_commands = eval_commands or list(BOOTSTRAP_EVAL_COMMANDS)
-    logger.emit(
-        "baseline_eval.started",
-        command_count=len(actual_eval_commands),
-    )
-    baseline = run_baseline_eval(worktree_path, actual_eval_commands, verbose=verbose)
-    pass_count = sum(1 for v in baseline.values() if v)
-    fail_count = len(baseline) - pass_count
-    logger.emit(
-        "baseline_eval.completed",
-        command_count=len(baseline),
-        pass_count=pass_count,
-        fail_count=fail_count,
-    )
-    if baseline_eval_out is not None:
-        baseline_eval_out.update(baseline)
+    # Run baseline eval before worker dispatch (only on fresh worktree).
+    # On checkpoint resume the worktree already has worker commits, so
+    # re-running baseline would measure the wrong state and silently
+    # reclassify regressions as pre-existing.
+    baseline: dict[str, bool] | None = None
+    if _should_run_stage("worker_eval", checkpoint):
+        actual_eval_commands = eval_commands or list(BOOTSTRAP_EVAL_COMMANDS)
+        logger.emit(
+            "baseline_eval.started",
+            command_count=len(actual_eval_commands),
+        )
+        baseline = run_baseline_eval(worktree_path, actual_eval_commands, verbose=verbose)
+        pass_count = sum(1 for v in baseline.values() if v)
+        fail_count = len(baseline) - pass_count
+        logger.emit(
+            "baseline_eval.completed",
+            command_count=len(baseline),
+            pass_count=pass_count,
+            fail_count=fail_count,
+        )
+        if baseline_eval_out is not None:
+            baseline_eval_out.update(baseline)
+    else:
+        typer.echo("[pipeline] skipping baseline eval (resumed past worktree)", err=True)
 
     # Compute repo knowledge dir for frequency-boosted catalog rules
     repo_knowledge_dir: Path | None = None

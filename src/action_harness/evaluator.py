@@ -21,6 +21,23 @@ __all__ = ["BOOTSTRAP_EVAL_COMMANDS", "run_eval", "run_baseline_eval", "format_f
 _STRIPPED_ENV_VARS = ("VIRTUAL_ENV", "VIRTUAL_ENV_PROMPT")
 
 
+def _build_clean_env() -> dict[str, str]:
+    """Build a subprocess environment with VIRTUAL_ENV stripped.
+
+    Removes VIRTUAL_ENV and VIRTUAL_ENV_PROMPT from the environment and
+    strips the venv bin directory from PATH so eval commands use the
+    system Python, not the harness's own venv.
+    """
+    venv_dir = os.environ.get("VIRTUAL_ENV")
+    clean_env = {k: v for k, v in os.environ.items() if k not in _STRIPPED_ENV_VARS}
+    if venv_dir and "PATH" in clean_env:
+        venv_bin = venv_dir + "/bin"
+        clean_env["PATH"] = os.pathsep.join(
+            seg for seg in clean_env["PATH"].split(os.pathsep) if seg != venv_bin
+        )
+    return clean_env
+
+
 def format_feedback(command: str, exit_code: int, output: str) -> str:
     """Format structured feedback for a failed eval command."""
     return (
@@ -48,13 +65,7 @@ def run_baseline_eval(
         err=True,
     )
 
-    venv_dir = os.environ.get("VIRTUAL_ENV")
-    clean_env = {k: v for k, v in os.environ.items() if k not in _STRIPPED_ENV_VARS}
-    if venv_dir and "PATH" in clean_env:
-        venv_bin = venv_dir + "/bin"
-        clean_env["PATH"] = os.pathsep.join(
-            seg for seg in clean_env["PATH"].split(os.pathsep) if seg != venv_bin
-        )
+    clean_env = _build_clean_env()
 
     results: dict[str, bool] = {}
 
@@ -108,13 +119,7 @@ def run_eval(
     commands = eval_commands or BOOTSTRAP_EVAL_COMMANDS
     typer.echo(f"[eval] running {len(commands)} eval command(s)", err=True)
 
-    venv_dir = os.environ.get("VIRTUAL_ENV")
-    clean_env = {k: v for k, v in os.environ.items() if k not in _STRIPPED_ENV_VARS}
-    if venv_dir and "PATH" in clean_env:
-        venv_bin = venv_dir + "/bin"
-        clean_env["PATH"] = os.pathsep.join(
-            seg for seg in clean_env["PATH"].split(os.pathsep) if seg != venv_bin
-        )
+    clean_env = _build_clean_env()
 
     commands_passed = 0
     pre_existing_failures: list[str] = []

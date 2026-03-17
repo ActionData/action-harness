@@ -1164,3 +1164,97 @@ def _format_roadmap(roadmaps: list[RepoRoadmap]) -> None:
         typer.echo("")
 
     typer.echo("═" * 60)
+
+
+# ── Progress: live event feed ────────────────────────────────────────
+
+
+@app.command()
+def progress(
+    repo: Path = typer.Option(
+        ...,
+        help="Path to the repository to follow",
+    ),
+    run: str | None = typer.Option(
+        None,
+        "--run",
+        help="Follow a specific run ID instead of the latest",
+    ),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        help="Output raw JSON events (one per line) instead of formatted text",
+    ),
+) -> None:
+    """Follow live pipeline progress by tailing the event log.
+
+    Tails the most recent `.events.jsonl` file and displays human-readable
+    pipeline progress: stage names, elapsed time, worker status, eval
+    results, review findings, and cost.
+
+    Use `--run <run-id>` to follow a specific run instead of the latest.
+    Use `--json` for machine-readable streaming output (one JSON event per
+    line, suitable for piping to `jq`).
+
+    Exits automatically when a `run.completed` or `pipeline.error` event
+    is received.
+
+    Examples:
+
+        action-harness progress --repo .
+
+        action-harness progress --repo . --run 2026-03-17T01-00-00-my-change
+
+        action-harness progress --repo . --json
+    """
+    from datetime import datetime
+
+    from action_harness.event_log import PipelineEvent
+    from action_harness.progress_feed import (
+        find_event_log_by_run_id,
+        find_latest_event_log,
+        format_event,
+        tail_event_log,
+    )
+
+    repo = repo.resolve()
+    if not repo.exists():
+        typer.echo(f"Error: repository path does not exist: {repo}", err=True)
+        raise typer.Exit(code=1)
+
+    # Resolve the event log path
+    if run is not None:
+        log_path = find_event_log_by_run_id(repo, run)
+        if log_path is None:
+            typer.echo(f"Event log not found for run: {run}", err=True)
+            raise typer.Exit(code=1)
+    else:
+        log_path = find_latest_event_log(repo)
+        if log_path is None:
+            typer.echo("No event logs found", err=True)
+            raise typer.Exit(code=1)
+
+    # Mutable state for the callback closure
+    start_time_holder: list[datetime | None] = [None]
+
+    def _on_event(event: PipelineEvent) -> bool:
+        """Process each event: format and print, track start time."""
+        # Track start_time from run.started
+        if event.event == "run.started" and start_time_holder[0] is None:
+            start_time_holder[0] = datetime.fromisoformat(event.timestamp)
+
+        if json_output:
+            typer.echo(event.model_dump_json())
+        else:
+            formatted = format_event(event, start_time_holder[0])
+            typer.echo(formatted)
+
+        # Exit on terminal events
+        if event.event == "run.completed":
+            return False
+        if event.event == "pipeline.error":
+            raise typer.Exit(code=1)
+
+        return True
+
+    tail_event_log(log_path, _on_event)

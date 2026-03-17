@@ -12,10 +12,10 @@
 
 ## 3. CLI Command [depends: 1, 2]
 
-- [ ] 3.1 Add `harness progress` command to `cli.py` with `--repo` (required Path), `--run` (optional str), `--json` (flag). Resolve the event log path via `find_latest_event_log` or `find_event_log_by_run_id`. If not found, print error and exit. Call `tail_event_log` with a callback that either prints formatted events or raw JSON lines.
-- [ ] 3.2 The callback tracks `start_time` (from `run.started` event timestamp). On `run.completed` or `pipeline.error`, print summary and return `False` to exit the tail loop.
-- [ ] 3.3 Update CLI docstring for the `progress` command.
-- [ ] 3.4 Add tests: `--help` shows progress command. Command with no event logs prints "No event logs found". Command with `--run nonexistent` prints "Event log not found". `--json` test: write a 3-event test log file (`run.started`, `worker.completed`, `run.completed`), run progress with `--json`, assert stdout has exactly 3 lines, parse each as `PipelineEvent` via `model_validate_json()`, assert first event is `run.started` and last is `run.completed`.
+- [x] 3.1 Add `harness progress` command to `cli.py` with `--repo` (required Path), `--run` (optional str), `--json` (flag). Resolve the event log path via `find_latest_event_log` or `find_event_log_by_run_id`. If not found, print error and exit. Call `tail_event_log` with a callback that either prints formatted events or raw JSON lines.
+- [x] 3.2 The callback tracks `start_time` (from `run.started` event timestamp). On `run.completed` or `pipeline.error`, print summary and return `False` to exit the tail loop.
+- [x] 3.3 Update CLI docstring for the `progress` command.
+- [x] 3.4 Add tests: `--help` shows progress command. Command with no event logs prints "No event logs found". Command with `--run nonexistent` prints "Event log not found". `--json` test: write a 3-event test log file (`run.started`, `worker.completed`, `run.completed`), run progress with `--json`, assert stdout has exactly 3 lines, parse each as `PipelineEvent` via `model_validate_json()`, assert first event is `run.started` and last is `run.completed`.
 
 ## 4. Validation [depends: all]
 

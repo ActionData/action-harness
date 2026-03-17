@@ -397,6 +397,70 @@ def gather_lead_context(
 # ---------------------------------------------------------------------------
 
 
+def dispatch_lead_interactive(
+    repo_path: Path,
+    prompt: str,
+    context: str,
+    harness_agents_dir: Path,
+) -> int:
+    """Dispatch the lead agent as an interactive Claude Code session.
+
+    Spawns `claude` (without `-p`) with the lead persona as `--system-prompt`
+    and gathered repo context as `--append-system-prompt`. The user prompt is
+    passed as a positional argument so the conversation starts with that message.
+
+    Uses subprocess.run with inherited stdio (no capture_output) so the human
+    can interact naturally with the Claude Code session.
+
+    Returns the exit code from the Claude Code process.
+    """
+    typer.echo(
+        f"[lead] dispatching interactive lead session (repo={repo_path})",
+        err=True,
+    )
+
+    try:
+        persona = load_agent_prompt("lead", repo_path, harness_agents_dir)
+    except FileNotFoundError as exc:
+        typer.echo(f"[lead] agent file not found: {exc}", err=True)
+        return 1
+
+    cmd = [
+        "claude",
+        prompt,
+        "--system-prompt",
+        persona,
+        "--append-system-prompt",
+        context,
+    ]
+
+    start_time = time.monotonic()
+
+    try:
+        result = subprocess.run(
+            cmd,
+            cwd=repo_path,
+            timeout=7200,
+        )
+    except subprocess.TimeoutExpired:
+        duration = time.monotonic() - start_time
+        typer.echo(
+            f"[lead] interactive session timed out after 7200s ({duration:.0f}s)",
+            err=True,
+        )
+        return 1
+    except (FileNotFoundError, OSError) as exc:
+        typer.echo(f"[lead] failed to launch claude CLI: {exc}", err=True)
+        return 1
+
+    duration = time.monotonic() - start_time
+    typer.echo(
+        f"[lead] interactive session ended (exit={result.returncode}) in {duration:.1f}s",
+        err=True,
+    )
+    return result.returncode
+
+
 def dispatch_lead(
     repo_path: Path,
     prompt: str,

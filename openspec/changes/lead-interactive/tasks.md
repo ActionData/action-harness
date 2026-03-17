@@ -1,11 +1,11 @@
 ## 1. Interactive Dispatch Function
 
-- [ ] 1.1 Add `dispatch_lead_interactive()` to `lead.py` — spawns `claude` (without `-p`) with `--system-prompt` for the lead persona and `--append-system-prompt` for gathered context. Passes the user prompt as a positional argument. Uses `subprocess.run` with inherited stdio (no `capture_output`). Returns the exit code. Includes timeout (7200s) and error handling matching `dispatch_lead`.
+- [x] 1.1 Add `dispatch_lead_interactive()` to `lead.py` — spawns `claude` (without `-p`) with `--system-prompt` for the lead persona and `--append-system-prompt` for gathered context. Passes the user prompt as a positional argument. Uses `subprocess.run` with inherited stdio (no `capture_output`). Returns the exit code. Includes timeout (7200s) and error handling matching `dispatch_lead`.
 
 ## 2. CLI Changes
 
-- [ ] 2.1 Add `--interactive / --no-interactive` flag to the `lead` command (default: True). When `--dispatch` is provided, automatically set interactive to False. If both `--interactive` and `--dispatch` are explicitly provided, exit with error: "--interactive and --dispatch are mutually exclusive".
-- [ ] 2.2 Route the `lead` command: when interactive mode is active, call `dispatch_lead_interactive()` and skip plan parsing / display / dispatch logic. When non-interactive, use existing `dispatch_lead()` + `parse_lead_plan()` path.
+- [x] 2.1 Add `--interactive / --no-interactive` flag to the `lead` command (default: True). When `--dispatch` is provided, automatically set interactive to False. If both `--interactive` and `--dispatch` are explicitly provided, exit with error: "--interactive and --dispatch are mutually exclusive".
+- [x] 2.2 Route the `lead` command: when interactive mode is active, call `dispatch_lead_interactive()` and skip plan parsing / display / dispatch logic. When non-interactive, use existing `dispatch_lead()` + `parse_lead_plan()` path.
 
 ## 3. Tests
 

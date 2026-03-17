@@ -1516,10 +1516,15 @@ def lead(
         ...,
         help="Path to the target repository",
     ),
+    interactive: bool = typer.Option(
+        True,
+        "--interactive/--no-interactive",
+        help="Spawn an interactive Claude Code session (default). Use --no-interactive for one-shot JSON plan.",
+    ),
     dispatch: bool = typer.Option(
         False,
         "--dispatch",
-        help="Auto-dispatch recommended changes via harness run",
+        help="Auto-dispatch recommended changes via harness run (implies --no-interactive)",
     ),
     harness_home: Path | None = typer.Option(
         None,
@@ -1533,13 +1538,15 @@ def lead(
 ) -> None:
     """Spawn a repo lead agent to review state and plan next actions.
 
-    The lead agent reads repo context (roadmap, issues, assessment, recent
-    runs) and produces a structured plan with proposals, issues, and dispatch
-    recommendations.
+    By default, spawns an interactive Claude Code session pre-loaded with
+    the lead persona and gathered repo context. The human can explore ideas,
+    ask follow-ups, and refine proposals conversationally.
 
-    Without `--dispatch`, the plan is displayed but not executed.
+    With `--no-interactive`, produces a structured JSON plan.
     With `--dispatch`, recommended changes that have OpenSpec tasks are
-    dispatched sequentially via `harness run`.
+    dispatched sequentially via `harness run` (implies `--no-interactive`).
+
+    `--interactive` and `--dispatch` are mutually exclusive.
 
     Examples:
 
@@ -1547,15 +1554,33 @@ def lead(
 
         action-harness lead --repo . "Focus on test coverage gaps"
 
+        action-harness lead --repo . --no-interactive
+
         action-harness lead --repo . --dispatch
     """
 
     from action_harness.agents import resolve_harness_agents_dir
     from action_harness.lead import (
         dispatch_lead,
+        dispatch_lead_interactive,
         gather_lead_context,
         parse_lead_plan,
     )
+
+    # Detect if --interactive was explicitly provided via click context
+    ctx = click.get_current_context()
+    interactive_explicit = "interactive" in (ctx.params or {}) and ctx.get_parameter_source(
+        "interactive"
+    ) not in (None, click.core.ParameterSource.DEFAULT)
+
+    # --interactive and --dispatch are mutually exclusive
+    if dispatch and interactive_explicit and interactive:
+        typer.echo("Error: --interactive and --dispatch are mutually exclusive", err=True)
+        raise typer.Exit(code=1)
+
+    # --dispatch implies non-interactive
+    if dispatch:
+        interactive = False
 
     repo = repo.resolve()
     try:
@@ -1572,6 +1597,18 @@ def lead(
     typer.echo("Gathering repo context...", err=True)
     context = gather_lead_context(repo, harness_home=resolved_home)
 
+    # Interactive mode: spawn conversational session and return
+    if interactive:
+        typer.echo("Spawning interactive lead session...", err=True)
+        exit_code = dispatch_lead_interactive(
+            repo_path=repo,
+            prompt=prompt,
+            context=context,
+            harness_agents_dir=harness_agents_dir,
+        )
+        raise typer.Exit(code=exit_code)
+
+    # Non-interactive mode: one-shot dispatch + plan parsing
     # 2. Dispatch lead agent
     typer.echo("Dispatching lead agent...", err=True)
     raw_output = dispatch_lead(

@@ -13,7 +13,6 @@ from action_harness.review_agents import (
     _GENERIC_SEVERITY_SUFFIX,
     REVIEW_AGENT_NAMES,
     SPEC_COMPLIANCE_AGENT_NAME,
-    titles_overlap,
     build_review_prompt,
     compute_finding_priority,
     dispatch_review_agents,
@@ -23,6 +22,7 @@ from action_harness.review_agents import (
     match_findings,
     parse_review_findings,
     select_top_findings,
+    titles_overlap,
     triage_findings,
 )
 

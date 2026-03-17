@@ -25,6 +25,6 @@
 
 ## 5. Validation [depends: all]
 
-- [ ] 5.1 Run `uv run pytest -v` — all tests pass
-- [ ] 5.2 Run `uv run ruff check .` and `uv run mypy src/` — clean
-- [ ] 5.3 Run `harness report --repo .` and verify output shows data from actual runs in this repo
+- [x] 5.1 Run `uv run pytest -v` — all tests pass
+- [x] 5.2 Run `uv run ruff check .` and `uv run mypy src/` — clean
+- [x] 5.3 Run `harness report --repo .` and verify output shows data from actual runs in this repo

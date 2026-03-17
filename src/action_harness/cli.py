@@ -815,7 +815,7 @@ def report(
 def _print_report(report_data: RunReport, since: str | None = None) -> None:
     """Format and print a human-readable report to stdout."""
 
-    typer.echo(f"Harness Report")
+    typer.echo("Harness Report")
     period = f"since {since}" if since else "all time"
     typer.echo(f"Period: {period} ({report_data.total_runs} runs)")
     typer.echo("")
@@ -874,9 +874,5 @@ def _print_report(report_data: RunReport, since: str | None = None) -> None:
         for run in report_data.recent_runs:
             status = "✓" if run.success else "✗"
             cost_str = f"${run.cost_usd:.2f}" if run.cost_usd is not None else "N/A"
-            dur_str = (
-                f"{run.duration_seconds / 60.0:.0f}m" if run.duration_seconds else "N/A"
-            )
-            typer.echo(
-                f"  {run.date} {run.change_name}  {status}  {cost_str}  {dur_str}"
-            )
+            dur_str = f"{run.duration_seconds / 60.0:.0f}m" if run.duration_seconds else "N/A"
+            typer.echo(f"  {run.date} {run.change_name}  {status}  {cost_str}  {dur_str}")

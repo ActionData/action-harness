@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-import pytest
+from typer.testing import CliRunner
 
+from action_harness.cli import app
 from action_harness.models import (
     EvalResult,
-    PrResult,
     ReviewFinding,
     ReviewResult,
     RunManifest,
@@ -18,15 +19,14 @@ from action_harness.models import (
     WorktreeResult,
 )
 from action_harness.reporting import (
-    RecurringFinding,
     RecentRunSummary,
+    RecurringFinding,
     RunReport,
     aggregate_report,
     group_recurring_findings,
     load_manifests,
     parse_since,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -196,7 +196,7 @@ class TestLoadManifests:
         result = load_manifests(tmp_path)
         assert result == []
 
-    def test_malformed_json_skipped(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_malformed_json_skipped(self, tmp_path: Path) -> None:
         runs_dir = tmp_path / ".action-harness" / "runs"
         runs_dir.mkdir(parents=True)
         (runs_dir / "bad.json").write_text("{invalid json", encoding="utf-8")
@@ -418,12 +418,6 @@ class TestGroupRecurringFindings:
 # 4.5 — CLI tests
 # ---------------------------------------------------------------------------
 
-import re
-
-from typer.testing import CliRunner
-
-from action_harness.cli import app
-
 _runner = CliRunner()
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
@@ -480,9 +474,7 @@ class TestReportCLI:
         (runs_dir / "old.json").write_text(old.model_dump_json(), encoding="utf-8")
         (runs_dir / "recent.json").write_text(recent.model_dump_json(), encoding="utf-8")
 
-        result = _runner.invoke(
-            app, ["report", "--repo", str(tmp_path), "--since", "7d", "--json"]
-        )
+        result = _runner.invoke(app, ["report", "--repo", str(tmp_path), "--since", "7d", "--json"])
         assert result.exit_code == 0
         parsed = _extract_json(result.output)
         assert parsed["total_runs"] == 1

@@ -235,7 +235,9 @@ def aggregate_report(
     total_cost: float | None = sum(costs) if costs else None
 
     # Duration aggregation
-    durations: list[float] = [m.total_duration_seconds for m in manifests if m.total_duration_seconds > 0]
+    durations: list[float] = [
+        m.total_duration_seconds for m in manifests if m.total_duration_seconds > 0
+    ]
     avg_duration: float | None = (sum(durations) / len(durations)) if durations else None
 
     # Recent runs (last 10, most recent first)

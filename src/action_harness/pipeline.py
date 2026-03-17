@@ -110,6 +110,7 @@ def _save_checkpoint(
     auto_merge: bool = False,
     skip_review: bool = False,
     review_cycle: list[str] | None = None,
+    baseline_eval: dict[str, bool] | None = None,
 ) -> None:
     """Build and write a pipeline checkpoint. Never raises.
 
@@ -139,6 +140,7 @@ def _save_checkpoint(
             auto_merge=auto_merge,
             skip_review=skip_review,
             review_cycle=review_cycle,
+            baseline_eval=baseline_eval,
         )
         write_checkpoint(repo, checkpoint)
     except Exception as e:
@@ -534,8 +536,8 @@ def _run_pipeline_inner(
 
     # Run baseline eval before worker dispatch (only on fresh worktree).
     # On checkpoint resume the worktree already has worker commits, so
-    # re-running baseline would measure the wrong state and silently
-    # reclassify regressions as pre-existing.
+    # re-running baseline would measure the wrong state. Instead, restore
+    # baseline from the checkpoint to preserve regression awareness.
     baseline: dict[str, bool] | None = None
     if _should_run_stage("worker_eval", checkpoint):
         actual_eval_commands = eval_commands or list(BOOTSTRAP_EVAL_COMMANDS)
@@ -555,7 +557,21 @@ def _run_pipeline_inner(
         if baseline_eval_out is not None:
             baseline_eval_out.update(baseline)
     else:
-        typer.echo("[pipeline] skipping baseline eval (resumed past worktree)", err=True)
+        # Restore baseline from checkpoint so review fix-retry eval
+        # retains regression awareness for pre-existing failures.
+        if checkpoint is not None and checkpoint.baseline_eval is not None:
+            baseline = checkpoint.baseline_eval
+            if baseline_eval_out is not None:
+                baseline_eval_out.update(baseline)
+            typer.echo(
+                f"[pipeline] restored baseline eval from checkpoint ({len(baseline)} command(s))",
+                err=True,
+            )
+        else:
+            typer.echo(
+                "[pipeline] skipping baseline eval (resumed, no baseline in checkpoint)",
+                err=True,
+            )
 
     # Compute repo knowledge dir for frequency-boosted catalog rules
     repo_knowledge_dir: Path | None = None
@@ -830,6 +846,7 @@ def _run_pipeline_inner(
             auto_merge=auto_merge,
             skip_review=skip_review,
             review_cycle=review_cycle,
+            baseline_eval=baseline,
         )
 
     # Stage 4: Create PR
@@ -888,6 +905,7 @@ def _run_pipeline_inner(
             auto_merge=auto_merge,
             skip_review=skip_review,
             review_cycle=review_cycle,
+            baseline_eval=baseline,
         )
 
         # Label issue with PR-created status and comment with PR URL (best-effort)
@@ -1147,6 +1165,7 @@ def _run_pipeline_inner(
         auto_merge=auto_merge,
         skip_review=skip_review,
         review_cycle=review_cycle,
+        baseline_eval=baseline,
     )
 
     # Stage 6: OpenSpec review (skipped in prompt mode — no OpenSpec artifacts)
@@ -1215,6 +1234,7 @@ def _run_pipeline_inner(
         auto_merge=auto_merge,
         skip_review=skip_review,
         review_cycle=review_cycle,
+        baseline_eval=baseline,
     )
 
     # Stage 7: Auto-merge (optional)

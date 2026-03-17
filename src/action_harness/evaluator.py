@@ -187,10 +187,18 @@ def run_eval(
 
             if baseline is not None:
                 # With baseline: record first regression but continue to find
-                # all pre-existing failures
+                # all pre-existing failures. Only the first regression's feedback
+                # is sent to the worker; additional regressions are logged for
+                # debugging but will surface in subsequent retry rounds.
                 if first_regression_command is None:
                     first_regression_command = cmd_str
                     first_regression_feedback = feedback
+                else:
+                    typer.echo(
+                        f"[eval] additional regression: {cmd_str} "
+                        f"(feedback for first regression only)",
+                        err=True,
+                    )
                 continue
 
             # Without baseline: stop on first failure (original behavior)

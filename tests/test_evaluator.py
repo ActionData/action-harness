@@ -383,3 +383,26 @@ class TestRunEvalWithBaseline:
         assert result.failed_command == "cmd2"
         # Should have stopped after cmd2 — cmd3 never ran
         assert mock.call_count == 2
+
+    def test_multiple_regressions_only_first_feedback_captured(self) -> None:
+        """When multiple commands regress, only the first regression's feedback is used."""
+        commands = ["cmd1", "cmd2", "cmd3"]
+        baseline = {"cmd1": True, "cmd2": True, "cmd3": True}
+        results = [
+            (1, "fail1", "err1"),  # cmd1 regresses
+            (1, "fail2", "err2"),  # cmd2 also regresses
+            (0, "ok", ""),  # cmd3 passes
+        ]
+        mock = self._make_mock(results)
+
+        with patch("action_harness.evaluator.subprocess.run", mock):
+            result = run_eval(Path("/fake/worktree"), eval_commands=commands, baseline=baseline)
+
+        assert result.success is False
+        # First regression reported
+        assert result.failed_command == "cmd1"
+        assert result.feedback_prompt is not None
+        assert "cmd1" in result.feedback_prompt
+        # All commands still ran (baseline mode continues to find pre-existing)
+        assert mock.call_count == 3
+        assert result.commands_passed == 1

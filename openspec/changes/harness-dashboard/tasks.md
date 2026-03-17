@@ -32,17 +32,17 @@
 
 ## 5. Tests
 
-- [ ] 5.1 Test `list_repos` with a mock harness home containing 2 repo dirs (one with HARNESS.md, one without), each initialized as a git repo. Assert returns 2 `RepoSummary` with correct `has_harness_md` values. Also create `workspaces/repo1/change1/` and `openspec/changes/active1/` in one repo. Assert `workspace_count=1` and `active_changes=1`.
-- [ ] 5.2 Test `list_repos` skips non-git directories. Create a plain directory (no `.git`) in `repos/`. Assert it is not included in the returned list.
-- [ ] 5.3 Test `repo_detail` reads HARNESS.md content correctly. Create a temp repo dir with a 5-line HARNESS.md. Assert `harness_md_content` matches file content.
-- [ ] 5.4 Test `repo_detail` reads protected patterns. Create `.harness/protected-paths.yml` with `protected: ["src/core/**", "*.toml"]`. Assert `protected_patterns == ["src/core/**", "*.toml"]`.
-- [ ] 5.5 Test `read_openspec_changes` with a mock `openspec/changes/` dir containing a change with `tasks.md` that has 3 `- [x]` and 2 `- [ ]` lines. Assert `task_count=5`, `tasks_complete=3`, `progress_pct=60.0`. Also create `archive/` with 2 subdirectories. Assert `completed_count=2`.
-- [ ] 5.6 Test `read_openspec_changes` with no `openspec/` dir. Assert returns empty list and `completed_count=0`.
-- [ ] 5.7 Test `read_roadmap` with an existing `openspec/ROADMAP.md`. Assert returns file content. Test with no file. Assert returns None.
-- [ ] 5.8 Test `cross_repo_roadmap` with 2 mock repos (one with OpenSpec, one without). Assert returns 2 `RepoRoadmap` objects, one with changes and roadmap content, one with `roadmap_content=None` and empty changes.
-- [ ] 5.9 Test workspace staleness: create a mock workspace, mock `git log -1 --format=%ct` to return a timestamp 10 days ago, mock `gh pr list` to return empty list. Assert `stale=True`.
-- [ ] 5.10 Test workspace not stale with open PR: same as 5.9 but mock `gh pr list` to return `[{"number": 42}]`. Assert `stale=False`.
-- [ ] 5.11 Test `list_repos` with empty `repos/` dir. Assert returns empty list.
+- [x] 5.1 Test `list_repos` with a mock harness home containing 2 repo dirs (one with HARNESS.md, one without), each initialized as a git repo. Assert returns 2 `RepoSummary` with correct `has_harness_md` values. Also create `workspaces/repo1/change1/` and `openspec/changes/active1/` in one repo. Assert `workspace_count=1` and `active_changes=1`.
+- [x] 5.2 Test `list_repos` skips non-git directories. Create a plain directory (no `.git`) in `repos/`. Assert it is not included in the returned list.
+- [x] 5.3 Test `repo_detail` reads HARNESS.md content correctly. Create a temp repo dir with a 5-line HARNESS.md. Assert `harness_md_content` matches file content.
+- [x] 5.4 Test `repo_detail` reads protected patterns. Create `.harness/protected-paths.yml` with `protected: ["src/core/**", "*.toml"]`. Assert `protected_patterns == ["src/core/**", "*.toml"]`.
+- [x] 5.5 Test `read_openspec_changes` with a mock `openspec/changes/` dir containing a change with `tasks.md` that has 3 `- [x]` and 2 `- [ ]` lines. Assert `task_count=5`, `tasks_complete=3`, `progress_pct=60.0`. Also create `archive/` with 2 subdirectories. Assert `completed_count=2`.
+- [x] 5.6 Test `read_openspec_changes` with no `openspec/` dir. Assert returns empty list and `completed_count=0`.
+- [x] 5.7 Test `read_roadmap` with an existing `openspec/ROADMAP.md`. Assert returns file content. Test with no file. Assert returns None.
+- [x] 5.8 Test `cross_repo_roadmap` with 2 mock repos (one with OpenSpec, one without). Assert returns 2 `RepoRoadmap` objects, one with changes and roadmap content, one with `roadmap_content=None` and empty changes.
+- [x] 5.9 Test workspace staleness: create a mock workspace, mock `git log -1 --format=%ct` to return a timestamp 10 days ago, mock `gh pr list` to return empty list. Assert `stale=True`.
+- [x] 5.10 Test workspace not stale with open PR: same as 5.9 but mock `gh pr list` to return `[{"number": 42}]`. Assert `stale=False`.
+- [x] 5.11 Test `list_repos` with empty `repos/` dir. Assert returns empty list.
 
 ## 6. Self-Validation
 

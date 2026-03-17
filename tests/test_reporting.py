@@ -412,3 +412,99 @@ class TestGroupRecurringFindings:
         manifests = [_make_manifest()]
         result = group_recurring_findings(manifests)
         assert result == []
+
+
+# ---------------------------------------------------------------------------
+# 4.5 — CLI tests
+# ---------------------------------------------------------------------------
+
+import re
+
+from typer.testing import CliRunner
+
+from action_harness.cli import app
+
+_runner = CliRunner()
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _strip_ansi(text: str) -> str:
+    return _ANSI_RE.sub("", text)
+
+
+def _extract_json(output: str) -> dict[str, object]:
+    """Extract JSON block from CliRunner output (which mixes stdout/stderr)."""
+    json_start = output.find("{\n")
+    if json_start < 0:
+        raise ValueError(f"No JSON found in output: {output[:200]}")
+    json_end = output.rfind("}") + 1
+    return json.loads(output[json_start:json_end])
+
+
+class TestReportCLI:
+    def test_help_shows_report(self) -> None:
+        result = _runner.invoke(app, ["report", "--help"])
+        assert result.exit_code == 0
+        assert "report" in _strip_ansi(result.output).lower()
+
+    def test_report_with_manifests(self, tmp_path: Path) -> None:
+        runs_dir = tmp_path / ".action-harness" / "runs"
+        runs_dir.mkdir(parents=True)
+        m = _make_manifest(success=True, cost_usd=1.50, duration=120.0)
+        (runs_dir / "run-1.json").write_text(m.model_dump_json(), encoding="utf-8")
+
+        result = _runner.invoke(app, ["report", "--repo", str(tmp_path)])
+        output = _strip_ansi(result.output)
+        assert "Success Rate" in output
+        assert "1/1" in output
+
+    def test_report_json_output(self, tmp_path: Path) -> None:
+        runs_dir = tmp_path / ".action-harness" / "runs"
+        runs_dir.mkdir(parents=True)
+        m = _make_manifest(success=True)
+        (runs_dir / "run-1.json").write_text(m.model_dump_json(), encoding="utf-8")
+
+        result = _runner.invoke(app, ["report", "--repo", str(tmp_path), "--json"])
+        assert result.exit_code == 0
+        parsed = _extract_json(result.output)
+        assert parsed["total_runs"] == 1
+        assert parsed["successful_runs"] == 1
+        assert "success_rate" in parsed
+
+    def test_since_filters(self, tmp_path: Path) -> None:
+        runs_dir = tmp_path / ".action-harness" / "runs"
+        runs_dir.mkdir(parents=True)
+        old = _make_manifest(started_at="2020-01-01T00:00:00+00:00")
+        recent = _make_manifest(started_at="2026-03-16T10:00:00+00:00")
+        (runs_dir / "old.json").write_text(old.model_dump_json(), encoding="utf-8")
+        (runs_dir / "recent.json").write_text(recent.model_dump_json(), encoding="utf-8")
+
+        result = _runner.invoke(
+            app, ["report", "--repo", str(tmp_path), "--since", "7d", "--json"]
+        )
+        assert result.exit_code == 0
+        parsed = _extract_json(result.output)
+        assert parsed["total_runs"] == 1
+
+    def test_no_manifests(self, tmp_path: Path) -> None:
+        result = _runner.invoke(app, ["report", "--repo", str(tmp_path)])
+        output = _strip_ansi(result.output)
+        assert "No runs found" in output
+
+    def test_no_harness_home_omits_catalog(self, tmp_path: Path) -> None:
+        runs_dir = tmp_path / ".action-harness" / "runs"
+        runs_dir.mkdir(parents=True)
+        m = _make_manifest()
+        (runs_dir / "run.json").write_text(m.model_dump_json(), encoding="utf-8")
+
+        fake_home = tmp_path / "fake-harness-home"
+        fake_home.mkdir()
+
+        result = _runner.invoke(
+            app,
+            ["report", "--repo", str(tmp_path), "--json", "--harness-home", str(fake_home)],
+        )
+        assert result.exit_code == 0
+        parsed = _extract_json(result.output)
+        assert parsed["catalog_frequency"] == {}

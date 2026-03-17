@@ -17,11 +17,11 @@
 
 ## 4. CLI Command [depends: 3]
 
-- [ ] 4.1 Add `harness report` command to `cli.py` with `--repo` (required Path), `--since` (optional str), `--json` (flag), `--harness-home` (optional Path). Load manifests from `repo_path / ".action-harness" / "runs"`. Load catalog frequency from harness home: resolve via `_resolve_harness_home(harness_home)`, determine `repo_name` from repo path (use `repo_path.name` for local repos), read `harness_home / "repos" / repo_name / "knowledge" / "findings-frequency.json"` if it exists. The frequency file has nested structure `{entry_id: {"count": int, "last_seen": str}}` — extract `{entry_id: entry["count"]}` into a flat `dict[str, int]` before passing to `aggregate_report`. If the path doesn't exist (non-managed repo), pass `catalog_frequency=None`.
-- [ ] 4.2 Terminal output: formatted summary with sections for success rate, failure stages, recurring findings, catalog frequency, recent runs. Use the format from the design doc.
-- [ ] 4.3 `--json` output: `report.model_dump_json(indent=2)` to stdout, diagnostics to stderr.
-- [ ] 4.4 Update CLI docstring for the `report` command.
-- [ ] 4.5 Add tests: `--help` shows report command. Report with manifests produces output. `--json` produces valid JSON. `--since 7d` filters correctly. No manifests outputs "No runs found". Report with no harness home omits catalog section gracefully.
+- [x] 4.1 Add `harness report` command to `cli.py` with `--repo` (required Path), `--since` (optional str), `--json` (flag), `--harness-home` (optional Path). Load manifests from `repo_path / ".action-harness" / "runs"`. Load catalog frequency from harness home: resolve via `_resolve_harness_home(harness_home)`, determine `repo_name` from repo path (use `repo_path.name` for local repos), read `harness_home / "repos" / repo_name / "knowledge" / "findings-frequency.json"` if it exists. The frequency file has nested structure `{entry_id: {"count": int, "last_seen": str}}` — extract `{entry_id: entry["count"]}` into a flat `dict[str, int]` before passing to `aggregate_report`. If the path doesn't exist (non-managed repo), pass `catalog_frequency=None`.
+- [x] 4.2 Terminal output: formatted summary with sections for success rate, failure stages, recurring findings, catalog frequency, recent runs. Use the format from the design doc.
+- [x] 4.3 `--json` output: `report.model_dump_json(indent=2)` to stdout, diagnostics to stderr.
+- [x] 4.4 Update CLI docstring for the `report` command.
+- [x] 4.5 Add tests: `--help` shows report command. Report with manifests produces output. `--json` produces valid JSON. `--since 7d` filters correctly. No manifests outputs "No runs found". Report with no harness home omits catalog section gracefully.
 
 ## 5. Validation [depends: all]
 

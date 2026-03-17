@@ -1,12 +1,18 @@
 """CLI entrypoint for action-harness."""
 
+from __future__ import annotations
+
 import os
 import shutil
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import click
 import typer
+
+if TYPE_CHECKING:
+    from action_harness.reporting import RunReport
 
 from action_harness import __version__
 from action_harness.models import ValidationError
@@ -709,3 +715,168 @@ def _clean_all_workspaces(workspaces_root: Path, harness_home: Path) -> None:
         if clone_dir and clone_dir.exists():
             _prune_worktrees(clone_dir)
     typer.echo("[clean] all workspaces removed", err=True)
+
+
+@app.command()
+def report(
+    repo: Path = typer.Option(
+        ...,
+        help="Path to the repository to report on",
+    ),
+    since: str | None = typer.Option(
+        None,
+        "--since",
+        help="Filter runs: relative (7d, 24h) or absolute (2026-03-15)",
+    ),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        help="Output full report JSON to stdout",
+    ),
+    harness_home: Path | None = typer.Option(
+        None,
+        "--harness-home",
+        help="Harness home directory (default: HARNESS_HOME env or ~/harness/)",
+    ),
+) -> None:
+    """Aggregate run manifests into a failure report.
+
+    Reads all run manifests from `.action-harness/runs/` in the target
+    repo and produces an aggregate report with success rates, failure
+    stage distribution, recurring review findings, catalog rule frequency,
+    and cost/duration trends.
+
+    Use `--since` to limit the report window (e.g., `--since 7d` for the
+    last 7 days, `--since 2026-03-15` for runs since a specific date).
+
+    Use `--json` for machine-readable output to stdout. All diagnostic
+    output goes to stderr.
+
+    Examples:
+
+        action-harness report --repo .
+
+        action-harness report --repo . --since 30d
+
+        action-harness report --repo . --json
+    """
+    import json as json_mod
+
+    from action_harness.reporting import aggregate_report, load_manifests
+
+    repo = repo.resolve()
+    typer.echo(f"[report] starting report for {repo}", err=True)
+
+    # Load manifests
+    manifests = load_manifests(repo, since=since)
+    if not manifests:
+        if json_output:
+            typer.echo('{"error": "No runs found"}')
+        else:
+            typer.echo("No runs found.")
+        return
+
+    # Load catalog frequency from harness home
+    catalog_frequency: dict[str, int] | None = None
+    resolved_home = _resolve_harness_home(harness_home)
+    repo_name = repo.name
+    freq_path = resolved_home / "repos" / repo_name / "knowledge" / "findings-frequency.json"
+    typer.echo(f"[report] checking catalog frequency at {freq_path}", err=True)
+
+    if freq_path.is_file():
+        try:
+            raw = freq_path.read_text(encoding="utf-8")
+            freq_data = json_mod.loads(raw)
+            # Nested structure: {entry_id: {"count": int, "last_seen": str}}
+            catalog_frequency = {}
+            for entry_id, entry in freq_data.items():
+                if isinstance(entry, dict) and "count" in entry:
+                    catalog_frequency[entry_id] = entry["count"]
+            typer.echo(
+                f"[report] loaded {len(catalog_frequency)} catalog entries",
+                err=True,
+            )
+        except (OSError, UnicodeDecodeError, json_mod.JSONDecodeError) as e:
+            typer.echo(f"[report] warning: could not read frequency data: {e}", err=True)
+    else:
+        typer.echo("[report] no catalog frequency data found", err=True)
+
+    # Aggregate
+    report_data = aggregate_report(manifests, catalog_frequency=catalog_frequency)
+
+    if json_output:
+        typer.echo(report_data.model_dump_json(indent=2))
+    else:
+        _print_report(report_data, since=since)
+
+    typer.echo("[report] complete", err=True)
+
+
+def _print_report(report_data: RunReport, since: str | None = None) -> None:
+    """Format and print a human-readable report to stdout."""
+
+    typer.echo(f"Harness Report")
+    period = f"since {since}" if since else "all time"
+    typer.echo(f"Period: {period} ({report_data.total_runs} runs)")
+    typer.echo("")
+
+    # Success rate
+    typer.echo(
+        f"Success Rate:  {report_data.successful_runs}/{report_data.total_runs} "
+        f"({report_data.success_rate:.0f}%)"
+    )
+
+    # Cost
+    if report_data.total_cost_usd is not None:
+        typer.echo(f"Total Cost:    ${report_data.total_cost_usd:.2f}")
+    else:
+        typer.echo("Total Cost:    N/A")
+
+    # Duration
+    if report_data.avg_duration_seconds is not None:
+        avg_min = report_data.avg_duration_seconds / 60.0
+        typer.echo(f"Avg Duration:  {avg_min:.0f}m")
+    else:
+        typer.echo("Avg Duration:  N/A")
+
+    typer.echo("")
+
+    # Failure stages
+    if report_data.failures_by_stage:
+        typer.echo("Top Failure Stages:")
+        for stage, count in sorted(
+            report_data.failures_by_stage.items(), key=lambda x: x[1], reverse=True
+        ):
+            label = "failure" if count == 1 else "failures"
+            typer.echo(f"  {stage}:  {count} {label}")
+        typer.echo("")
+
+    # Recurring findings
+    if report_data.recurring_findings:
+        typer.echo("Top Recurring Findings:")
+        for finding in report_data.recurring_findings[:10]:
+            typer.echo(f'  "{finding.title}" — {finding.count} run(s)')
+        typer.echo("")
+
+    # Catalog frequency
+    if report_data.catalog_frequency:
+        typer.echo("Catalog Rule Frequency:")
+        sorted_freq = sorted(
+            report_data.catalog_frequency.items(), key=lambda x: x[1], reverse=True
+        )
+        for entry_id, count in sorted_freq[:10]:
+            typer.echo(f"  {entry_id}:  count={count}")
+        typer.echo("")
+
+    # Recent runs
+    if report_data.recent_runs:
+        typer.echo("Recent Runs:")
+        for run in report_data.recent_runs:
+            status = "✓" if run.success else "✗"
+            cost_str = f"${run.cost_usd:.2f}" if run.cost_usd is not None else "N/A"
+            dur_str = (
+                f"{run.duration_seconds / 60.0:.0f}m" if run.duration_seconds else "N/A"
+            )
+            typer.echo(
+                f"  {run.date} {run.change_name}  {status}  {cost_str}  {dur_str}"
+            )

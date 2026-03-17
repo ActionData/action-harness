@@ -1,13 +1,13 @@
 """Integration tests for the review agents pipeline stage."""
 
 import json
-import shutil
 import subprocess
 from collections.abc import Generator
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+from helpers import cleanup_worktrees
 
 from action_harness.models import (
     EvalResult,
@@ -176,35 +176,7 @@ def test_repo(tmp_path: Path) -> Generator[Path]:
 
     yield repo
 
-    # Teardown: remove all worktrees registered with this repo
-    subprocess.run(
-        ["git", "worktree", "prune"],
-        cwd=repo,
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
-    list_result = subprocess.run(
-        ["git", "worktree", "list", "--porcelain"],
-        cwd=repo,
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
-    for line in list_result.stdout.splitlines():
-        if line.startswith("worktree "):
-            wt_path = Path(line.split(" ", 1)[1])
-            if wt_path != repo:
-                subprocess.run(
-                    ["git", "worktree", "remove", "--force", str(wt_path)],
-                    cwd=repo,
-                    capture_output=True,
-                    timeout=30,
-                )
-                # Clean up parent temp directory
-                parent = wt_path.parent
-                if parent.name.startswith("action-harness-") and parent.exists():
-                    shutil.rmtree(parent, ignore_errors=True)
+    cleanup_worktrees(repo)
 
 
 def _make_claude_mock(

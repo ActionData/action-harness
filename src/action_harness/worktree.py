@@ -17,6 +17,7 @@ def _get_default_branch(repo: Path) -> str:
         cwd=repo,
         capture_output=True,
         text=True,
+        timeout=120,
     )
     if result.returncode == 0:
         # refs/remotes/origin/main -> main
@@ -28,6 +29,7 @@ def _get_default_branch(repo: Path) -> str:
             cwd=repo,
             capture_output=True,
             text=True,
+            timeout=120,
         )
         if check.returncode == 0:
             return branch
@@ -42,6 +44,7 @@ def _cleanup_existing_branch(repo: Path, branch: str, verbose: bool = False) -> 
         cwd=repo,
         capture_output=True,
         text=True,
+        timeout=120,
     )
 
     # Remove worktree if it exists
@@ -50,6 +53,7 @@ def _cleanup_existing_branch(repo: Path, branch: str, verbose: bool = False) -> 
         cwd=repo,
         capture_output=True,
         text=True,
+        timeout=120,
     )
     for line in list_result.stdout.splitlines():
         if line.startswith("worktree "):
@@ -60,6 +64,7 @@ def _cleanup_existing_branch(repo: Path, branch: str, verbose: bool = False) -> 
                 cwd=wt_path,
                 capture_output=True,
                 text=True,
+                timeout=120,
             )
             if check.returncode == 0 and check.stdout.strip() == branch:
                 if verbose:
@@ -69,6 +74,7 @@ def _cleanup_existing_branch(repo: Path, branch: str, verbose: bool = False) -> 
                     cwd=repo,
                     capture_output=True,
                     text=True,
+                    timeout=120,
                 )
                 if rm_result.returncode != 0:
                     typer.echo(
@@ -83,6 +89,7 @@ def _cleanup_existing_branch(repo: Path, branch: str, verbose: bool = False) -> 
         cwd=repo,
         capture_output=True,
         text=True,
+        timeout=120,
     )
     if check.returncode == 0:
         if verbose:
@@ -92,6 +99,7 @@ def _cleanup_existing_branch(repo: Path, branch: str, verbose: bool = False) -> 
             cwd=repo,
             capture_output=True,
             text=True,
+            timeout=120,
         )
         if del_result.returncode != 0:
             typer.echo(
@@ -141,6 +149,7 @@ def create_worktree(
         cwd=repo,
         capture_output=True,
         text=True,
+        timeout=120,
     )
 
     if result.returncode != 0:
@@ -184,6 +193,7 @@ def cleanup_worktree(
         cwd=repo,
         capture_output=True,
         text=True,
+        timeout=120,
     )
     if result.returncode != 0:
         typer.echo(
@@ -206,6 +216,7 @@ def cleanup_worktree(
             cwd=repo,
             capture_output=True,
             text=True,
+            timeout=120,
         )
         if del_result.returncode != 0:
             typer.echo(

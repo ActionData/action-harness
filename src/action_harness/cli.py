@@ -59,13 +59,18 @@ def main(
     """
 
 
-def _validate_common(repo: Path) -> None:
-    """Shared validation: repo exists, is git repo, required CLIs in PATH."""
+def _validate_repo(repo: Path) -> None:
+    """Validate repo exists and is a git repository."""
     if not repo.exists():
         raise ValidationError(f"Repository path does not exist: {repo}")
 
     if not (repo / ".git").exists():
         raise ValidationError(f"Not a git repository: {repo}")
+
+
+def _validate_common(repo: Path) -> None:
+    """Shared validation: repo exists, is git repo, required CLIs in PATH."""
+    _validate_repo(repo)
 
     if shutil.which("claude") is None:
         raise ValidationError("claude CLI not found in PATH")
@@ -1297,7 +1302,7 @@ def tag_shipped_cmd(
     from action_harness.tags import tag_shipped
 
     repo = repo.resolve()
-    _validate_common(repo)
+    _validate_repo(repo)
 
     if not pr.strip():
         typer.echo("Error: --pr must not be empty", err=True)
@@ -1339,7 +1344,7 @@ def rollback(
     from action_harness.tags import get_latest_tag
 
     repo = repo.resolve()
-    _validate_common(repo)
+    _validate_repo(repo)
 
     # Check for dirty working tree
     try:
@@ -1442,7 +1447,7 @@ def history(
     from action_harness.tags import list_tags
 
     repo = repo.resolve()
-    _validate_common(repo)
+    _validate_repo(repo)
 
     tags = list_tags(repo, "harness/shipped/*")
 
@@ -1600,12 +1605,18 @@ def lead(
 
     # Interactive mode: spawn conversational session and return
     if interactive:
+        # Detect if user explicitly provided a prompt (not the default)
+        prompt_source = ctx.get_parameter_source("prompt")
+        explicit_prompt = prompt_source not in (None, click.core.ParameterSource.DEFAULT)
+        interactive_prompt = prompt if explicit_prompt else None
+
         typer.echo("Spawning interactive lead session...", err=True)
         exit_code = dispatch_lead_interactive(
             repo_path=repo,
-            prompt=prompt,
+            prompt=interactive_prompt,
             context=context,
             harness_agents_dir=harness_agents_dir,
+            permission_mode=permission_mode,
         )
         raise typer.Exit(code=exit_code)
 
@@ -1617,6 +1628,7 @@ def lead(
         prompt=prompt,
         context=context,
         harness_agents_dir=harness_agents_dir,
+        permission_mode=permission_mode,
     )
 
     # 3. Parse plan

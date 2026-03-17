@@ -122,7 +122,7 @@ def _save_checkpoint(
         checkpoint = PipelineCheckpoint(
             run_id=run_id,
             change_name=change_name,
-            repo_path=str(repo),
+            repo_path=str(repo.resolve()),
             completed_stage=completed_stage,
             worktree_path=str(worktree_path) if worktree_path is not None else None,
             branch=branch,
@@ -924,9 +924,12 @@ def _run_pipeline_inner(
             )
 
             # Tag each result with the tolerance level used for this round.
-            # tolerance is validated at CLI entry; cast for Literal type.
+            # tolerance is validated at CLI entry as one of "low"/"med"/"high".
+            from typing import cast
+
+            validated_tolerance = cast('Literal["low", "med", "high"]', tolerance)
             for rr in latest_review_results:
-                rr.tolerance = tolerance  # type: ignore[assignment]
+                rr.tolerance = validated_tolerance
 
             # After getting this round's review results, match against prior
             # round's pre-fix actionable findings to detect what persisted.

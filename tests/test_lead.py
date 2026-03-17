@@ -5,7 +5,6 @@ import subprocess
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
 from typer.testing import CliRunner
 
 from action_harness.agents import parse_agent_file
@@ -177,9 +176,7 @@ class TestDispatchLead:
         agents_dir.mkdir()
         (agents_dir / "lead.md").write_text("---\nname: lead\n---\nCustom persona text")
 
-        mock_result = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="{}", stderr=""
-        )
+        mock_result = subprocess.CompletedProcess(args=[], returncode=0, stdout="{}", stderr="")
 
         with patch("action_harness.lead.subprocess.run", return_value=mock_result) as mock_run:
             dispatch_lead(
@@ -250,9 +247,7 @@ class TestDispatchLead:
         agents_dir.mkdir()
         (agents_dir / "lead.md").write_text("---\nname: lead\n---\nPersona")
 
-        mock_result = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="{}", stderr=""
-        )
+        mock_result = subprocess.CompletedProcess(args=[], returncode=0, stdout="{}", stderr="")
 
         with patch("action_harness.lead.subprocess.run", return_value=mock_result) as mock_run:
             dispatch_lead(
@@ -394,7 +389,9 @@ class TestLeadCLI:
 
         plan_data = {
             "summary": "Test plan summary",
-            "proposals": [{"name": "improve-tests", "description": "More tests", "priority": "high"}],
+            "proposals": [
+                {"name": "improve-tests", "description": "More tests", "priority": "high"}
+            ],
             "issues": [],
             "dispatches": [],
         }
@@ -431,9 +428,7 @@ class TestLeadCLI:
         }
         mock_output = json.dumps({"result": json.dumps(plan_data)})
 
-        dispatch_result = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="", stderr=""
-        )
+        dispatch_result = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
 
         with (
             patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"),

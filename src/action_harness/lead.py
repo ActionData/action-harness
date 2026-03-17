@@ -11,7 +11,6 @@ from pydantic import BaseModel
 from action_harness.agents import load_agent_prompt
 from action_harness.parsing import extract_json_block
 
-
 # ---------------------------------------------------------------------------
 # Pydantic models for the lead plan
 # ---------------------------------------------------------------------------
@@ -160,9 +159,7 @@ def _gather_recent_runs(repo_path: Path, max_section_chars: int) -> str | None:
     lines = ["## Recent Harness Runs", ""]
     for m in recent:
         status = "success" if m.success else "failure"
-        duration = (
-            f"{m.total_duration_seconds:.0f}s" if m.total_duration_seconds else "?"
-        )
+        duration = f"{m.total_duration_seconds:.0f}s" if m.total_duration_seconds else "?"
         lines.append(f"- **{m.change_name}**: {status} ({duration})")
     lines.append("")
 
@@ -172,9 +169,7 @@ def _gather_recent_runs(repo_path: Path, max_section_chars: int) -> str | None:
     return section
 
 
-def _gather_catalog_frequency(
-    harness_home: Path | None, max_section_chars: int
-) -> str | None:
+def _gather_catalog_frequency(harness_home: Path | None, max_section_chars: int) -> str | None:
     """Gather top catalog frequency entries from harness home knowledge store."""
     if harness_home is None:
         return None
@@ -191,9 +186,7 @@ def _gather_catalog_frequency(
         raw = frequency_path.read_text(encoding="utf-8")
         data = json.loads(raw)
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-        typer.echo(
-            f"[lead] warning: could not read frequency file: {exc}", err=True
-        )
+        typer.echo(f"[lead] warning: could not read frequency file: {exc}", err=True)
         return None
 
     if not isinstance(data, dict) or not data:
@@ -280,10 +273,17 @@ def gather_lead_context(
 
     if not sections:
         typer.echo("[lead] no context found — repo may need bootstrapping", err=True)
-        return "# Repo Context\n\nNo context files found. This repo may need initial setup (ROADMAP.md, CLAUDE.md)."
+        return (
+            "# Repo Context\n\n"
+            "No context files found. "
+            "This repo may need initial setup (ROADMAP.md, CLAUDE.md)."
+        )
 
     context = "# Repo Context\n\n" + "\n\n".join(sections)
-    typer.echo(f"[lead] gathered {len(sections)} context section(s) ({len(context)} chars)", err=True)
+    typer.echo(
+        f"[lead] gathered {len(sections)} context section(s) ({len(context)} chars)",
+        err=True,
+    )
     return context
 
 
@@ -339,8 +339,9 @@ def dispatch_lead(
         )
     except subprocess.TimeoutExpired:
         duration = time.monotonic() - start_time
-        typer.echo(f"[lead] timed out after 7200s", err=True)
-        return json.dumps({"error": f"Claude CLI timed out after 7200s (duration: {duration:.0f}s)"})
+        typer.echo("[lead] timed out after 7200s", err=True)
+        msg = f"Claude CLI timed out after 7200s (duration: {duration:.0f}s)"
+        return json.dumps({"error": msg})
     except (FileNotFoundError, OSError) as exc:
         duration = time.monotonic() - start_time
         typer.echo(f"[lead] failed to launch claude CLI: {exc}", err=True)
@@ -353,9 +354,9 @@ def dispatch_lead(
             f"[lead] claude CLI exited with code {result.returncode} in {duration:.1f}s",
             err=True,
         )
-        return json.dumps({
-            "error": f"Claude CLI exited with code {result.returncode}: {result.stderr[:500]}"
-        })
+        return json.dumps(
+            {"error": f"Claude CLI exited with code {result.returncode}: {result.stderr[:500]}"}
+        )
 
     typer.echo(f"[lead] dispatch completed in {duration:.1f}s", err=True)
     return result.stdout

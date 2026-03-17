@@ -27,5 +27,5 @@
 
 ## 6. Validation [depends: all]
 
-- [ ] 6.1 Run `uv run pytest -v` — all tests pass
-- [ ] 6.2 Run `uv run ruff check .` and `uv run mypy src/` — clean
+- [x] 6.1 Run `uv run pytest -v` — all tests pass
+- [x] 6.2 Run `uv run ruff check .` and `uv run mypy src/` — clean

@@ -16,6 +16,7 @@ from action_harness.lead import (
     ProposalItem,
     _gather_issues,
     dispatch_lead,
+    dispatch_lead_interactive,
     gather_lead_context,
     parse_lead_plan,
 )
@@ -269,6 +270,204 @@ class TestDispatchLead:
 
 
 # ---------------------------------------------------------------------------
+# dispatch_lead_interactive tests
+# ---------------------------------------------------------------------------
+
+
+class TestDispatchLeadInteractive:
+    def test_command_has_no_dash_p(self, tmp_path: Path) -> None:
+        """Interactive dispatch uses `claude` without `-p`."""
+        repo_path = tmp_path / "repo"
+        repo_path.mkdir()
+        agents_dir = tmp_path / "agents"
+        agents_dir.mkdir()
+        (agents_dir / "lead.md").write_text("---\nname: lead\n---\nYou are a lead.")
+
+        mock_result = subprocess.CompletedProcess(args=[], returncode=0)
+
+        with patch("action_harness.lead.subprocess.run", return_value=mock_result) as mock_run:
+            exit_code = dispatch_lead_interactive(
+                repo_path=repo_path,
+                prompt="What next?",
+                context="# Context\n\nRepo context here",
+                harness_agents_dir=agents_dir,
+            )
+
+        assert exit_code == 0
+        cmd = mock_run.call_args[0][0]
+        assert cmd[0] == "claude"
+        assert "-p" not in cmd
+
+    def test_command_uses_system_prompt_and_append(self, tmp_path: Path) -> None:
+        """Interactive dispatch uses --system-prompt and --append-system-prompt."""
+        repo_path = tmp_path / "repo"
+        repo_path.mkdir()
+        agents_dir = tmp_path / "agents"
+        agents_dir.mkdir()
+        (agents_dir / "lead.md").write_text("---\nname: lead\n---\nCustom persona")
+
+        mock_result = subprocess.CompletedProcess(args=[], returncode=0)
+
+        with patch("action_harness.lead.subprocess.run", return_value=mock_result) as mock_run:
+            dispatch_lead_interactive(
+                repo_path=repo_path,
+                prompt="Focus on tests",
+                context="# Repo Context\n\nTest info",
+                harness_agents_dir=agents_dir,
+            )
+
+        cmd = mock_run.call_args[0][0]
+
+        # --system-prompt has the persona
+        sp_idx = cmd.index("--system-prompt")
+        assert "Custom persona" in cmd[sp_idx + 1]
+
+        # --append-system-prompt has the context
+        asp_idx = cmd.index("--append-system-prompt")
+        assert "Repo Context" in cmd[asp_idx + 1]
+
+    def test_prompt_passed_as_positional(self, tmp_path: Path) -> None:
+        """User prompt is passed as a positional argument (second element after 'claude')."""
+        repo_path = tmp_path / "repo"
+        repo_path.mkdir()
+        agents_dir = tmp_path / "agents"
+        agents_dir.mkdir()
+        (agents_dir / "lead.md").write_text("---\nname: lead\n---\nPersona")
+
+        mock_result = subprocess.CompletedProcess(args=[], returncode=0)
+
+        with patch("action_harness.lead.subprocess.run", return_value=mock_result) as mock_run:
+            dispatch_lead_interactive(
+                repo_path=repo_path,
+                prompt="My specific question",
+                context="ctx",
+                harness_agents_dir=agents_dir,
+            )
+
+        cmd = mock_run.call_args[0][0]
+        assert cmd[1] == "My specific question"
+
+    def test_no_capture_output(self, tmp_path: Path) -> None:
+        """Interactive dispatch does NOT use capture_output (inherited stdio)."""
+        repo_path = tmp_path / "repo"
+        repo_path.mkdir()
+        agents_dir = tmp_path / "agents"
+        agents_dir.mkdir()
+        (agents_dir / "lead.md").write_text("---\nname: lead\n---\nPersona")
+
+        mock_result = subprocess.CompletedProcess(args=[], returncode=0)
+
+        with patch("action_harness.lead.subprocess.run", return_value=mock_result) as mock_run:
+            dispatch_lead_interactive(
+                repo_path=repo_path,
+                prompt="test",
+                context="ctx",
+                harness_agents_dir=agents_dir,
+            )
+
+        kwargs = mock_run.call_args[1]
+        assert "capture_output" not in kwargs or kwargs["capture_output"] is False
+
+    def test_returns_exit_code(self, tmp_path: Path) -> None:
+        """Returns the subprocess exit code."""
+        repo_path = tmp_path / "repo"
+        repo_path.mkdir()
+        agents_dir = tmp_path / "agents"
+        agents_dir.mkdir()
+        (agents_dir / "lead.md").write_text("---\nname: lead\n---\nPersona")
+
+        mock_result = subprocess.CompletedProcess(args=[], returncode=42)
+
+        with patch("action_harness.lead.subprocess.run", return_value=mock_result):
+            exit_code = dispatch_lead_interactive(
+                repo_path=repo_path,
+                prompt="test",
+                context="ctx",
+                harness_agents_dir=agents_dir,
+            )
+
+        assert exit_code == 42
+
+    def test_timeout_returns_error_code(self, tmp_path: Path) -> None:
+        """Timeout returns exit code 1."""
+        repo_path = tmp_path / "repo"
+        repo_path.mkdir()
+        agents_dir = tmp_path / "agents"
+        agents_dir.mkdir()
+        (agents_dir / "lead.md").write_text("---\nname: lead\n---\nPersona")
+
+        with patch(
+            "action_harness.lead.subprocess.run",
+            side_effect=subprocess.TimeoutExpired(cmd="claude", timeout=7200),
+        ):
+            exit_code = dispatch_lead_interactive(
+                repo_path=repo_path,
+                prompt="test",
+                context="ctx",
+                harness_agents_dir=agents_dir,
+            )
+
+        assert exit_code == 1
+
+    def test_file_not_found_returns_error_code(self, tmp_path: Path) -> None:
+        """FileNotFoundError returns exit code 1."""
+        repo_path = tmp_path / "repo"
+        repo_path.mkdir()
+        agents_dir = tmp_path / "agents"
+        agents_dir.mkdir()
+        (agents_dir / "lead.md").write_text("---\nname: lead\n---\nPersona")
+
+        with patch(
+            "action_harness.lead.subprocess.run",
+            side_effect=FileNotFoundError("claude not found"),
+        ):
+            exit_code = dispatch_lead_interactive(
+                repo_path=repo_path,
+                prompt="test",
+                context="ctx",
+                harness_agents_dir=agents_dir,
+            )
+
+        assert exit_code == 1
+
+    def test_missing_agent_file_returns_error_code(self, tmp_path: Path) -> None:
+        """Missing lead.md returns exit code 1."""
+        repo_path = tmp_path / "repo"
+        repo_path.mkdir()
+        agents_dir = tmp_path / "agents"
+        agents_dir.mkdir()
+        # No lead.md
+
+        exit_code = dispatch_lead_interactive(
+            repo_path=repo_path,
+            prompt="test",
+            context="ctx",
+            harness_agents_dir=agents_dir,
+        )
+
+        assert exit_code == 1
+
+    def test_empty_prompt_returns_error_code(self, tmp_path: Path) -> None:
+        """Empty prompt returns exit code 1 without spawning subprocess."""
+        repo_path = tmp_path / "repo"
+        repo_path.mkdir()
+        agents_dir = tmp_path / "agents"
+        agents_dir.mkdir()
+        (agents_dir / "lead.md").write_text("---\nname: lead\n---\nPersona")
+
+        with patch("action_harness.lead.subprocess.run") as mock_run:
+            exit_code = dispatch_lead_interactive(
+                repo_path=repo_path,
+                prompt="",
+                context="ctx",
+                harness_agents_dir=agents_dir,
+            )
+
+        assert exit_code == 1
+        mock_run.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
 # Task 4.2: Plan parsing tests
 # ---------------------------------------------------------------------------
 
@@ -380,15 +579,16 @@ class TestParseLeadPlan:
 
 class TestLeadCLI:
     def test_help_shows_lead_command(self) -> None:
-        """--help includes the lead command."""
+        """--help includes the lead command with interactive flag."""
         result = runner.invoke(app, ["lead", "--help"])
         assert result.exit_code == 0
         assert "lead" in result.output.lower()
         assert "--repo" in result.output
         assert "--dispatch" in result.output
+        assert "--interactive" in result.output
 
     def test_lead_with_mock_dispatch(self, tmp_path: Path) -> None:
-        """Lead command with mock dispatch returns formatted plan."""
+        """Lead command with --no-interactive returns formatted plan."""
         repo = tmp_path / "repo"
         repo.mkdir()
         (repo / ".git").mkdir()
@@ -411,7 +611,7 @@ class TestLeadCLI:
             ),
             patch("action_harness.lead._gather_issues", return_value=None),
         ):
-            result = runner.invoke(app, ["lead", "--repo", str(repo)])
+            result = runner.invoke(app, ["lead", "--repo", str(repo), "--no-interactive"])
 
         assert result.exit_code == 0
         assert "Test plan summary" in result.output
@@ -460,6 +660,119 @@ class TestLeadCLI:
         assert "run" in call_cmd
         assert "--change" in call_cmd
         assert "my-change" in call_cmd
+
+    def test_interactive_is_default(self, tmp_path: Path) -> None:
+        """Default mode (no flags) dispatches interactively."""
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        (repo / ".git").mkdir()
+
+        with (
+            patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"),
+            patch("action_harness.lead._gather_issues", return_value=None),
+            patch(
+                "action_harness.lead.dispatch_lead_interactive",
+                return_value=0,
+            ) as mock_interactive,
+            # Verify one-shot path is NOT called (routes are mutually exclusive)
+            patch("action_harness.lead.dispatch_lead") as mock_oneshot,
+        ):
+            result = runner.invoke(app, ["lead", "--repo", str(repo)])
+
+        assert mock_interactive.called
+        mock_oneshot.assert_not_called()
+        assert result.exit_code == 0
+
+    def test_no_interactive_uses_one_shot(self, tmp_path: Path) -> None:
+        """--no-interactive dispatches via one-shot mode."""
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        (repo / ".git").mkdir()
+
+        plan_data = {
+            "summary": "Non-interactive plan",
+            "proposals": [],
+            "issues": [],
+            "dispatches": [],
+        }
+        mock_output = json.dumps({"result": json.dumps(plan_data)})
+
+        with (
+            patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"),
+            patch("action_harness.lead._gather_issues", return_value=None),
+            patch(
+                "action_harness.lead.dispatch_lead",
+                return_value=mock_output,
+            ) as mock_dispatch,
+            # Verify interactive path is NOT called (routes are mutually exclusive)
+            patch("action_harness.lead.dispatch_lead_interactive") as mock_interactive,
+        ):
+            result = runner.invoke(app, ["lead", "--repo", str(repo), "--no-interactive"])
+
+        assert mock_dispatch.called
+        mock_interactive.assert_not_called()
+        assert result.exit_code == 0
+        assert "Non-interactive plan" in result.output
+
+    def test_dispatch_implies_no_interactive(self, tmp_path: Path) -> None:
+        """--dispatch automatically sets non-interactive mode."""
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        (repo / ".git").mkdir()
+
+        plan_data = {
+            "summary": "Dispatch test",
+            "proposals": [],
+            "issues": [],
+            "dispatches": [],
+        }
+        mock_output = json.dumps({"result": json.dumps(plan_data)})
+
+        with (
+            patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"),
+            patch("action_harness.lead._gather_issues", return_value=None),
+            patch(
+                "action_harness.lead.dispatch_lead",
+                return_value=mock_output,
+            ) as mock_dispatch,
+            # Verify interactive path is NOT called (routes are mutually exclusive)
+            patch("action_harness.lead.dispatch_lead_interactive") as mock_interactive,
+        ):
+            result = runner.invoke(app, ["lead", "--repo", str(repo), "--dispatch"])
+
+        # Should use one-shot dispatch, not interactive
+        assert mock_dispatch.called
+        mock_interactive.assert_not_called()
+        assert result.exit_code == 0
+
+    def test_interactive_and_dispatch_errors(self, tmp_path: Path) -> None:
+        """--interactive and --dispatch together produce an error."""
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        (repo / ".git").mkdir()
+
+        result = runner.invoke(app, ["lead", "--repo", str(repo), "--interactive", "--dispatch"])
+
+        assert result.exit_code == 1
+        assert "--interactive and --dispatch are mutually exclusive" in result.output
+
+    def test_interactive_nonzero_exit_propagates(self, tmp_path: Path) -> None:
+        """Non-zero exit code from interactive session propagates through CLI."""
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        (repo / ".git").mkdir()
+
+        with (
+            patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"),
+            patch("action_harness.lead._gather_issues", return_value=None),
+            patch(
+                "action_harness.lead.dispatch_lead_interactive",
+                return_value=1,
+            ),
+        ):
+            result = runner.invoke(app, ["lead", "--repo", str(repo)])
+
+        assert result.exit_code == 1
 
     def test_dispatch_with_nonexistent_change_skips(self, tmp_path: Path) -> None:
         """--dispatch with nonexistent change logs warning and skips."""

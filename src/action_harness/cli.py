@@ -516,6 +516,7 @@ def _remove_workspace(ws_path: Path, repo_path: Path) -> None:
         cwd=repo_path,
         capture_output=True,
         text=True,
+        timeout=120,
     )
     if result.returncode != 0:
         typer.echo(
@@ -533,6 +534,7 @@ def _prune_worktrees(repo_path: Path) -> None:
         cwd=repo_path,
         capture_output=True,
         text=True,
+        timeout=120,
     )
     typer.echo(f"[clean] pruned worktrees in {repo_path}", err=True)
 

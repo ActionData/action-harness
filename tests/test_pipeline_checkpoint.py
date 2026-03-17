@@ -193,11 +193,9 @@ class TestCheckpointWriteDuringPipeline:
 
         # Checkpoint should be cleaned up on success
         checkpoints_dir = test_repo / ".action-harness" / "checkpoints"
-        if checkpoints_dir.exists():
-            checkpoint_files = list(checkpoints_dir.glob("*.json"))
-            assert len(checkpoint_files) == 0, (
-                f"Expected no checkpoint files after success, found: {checkpoint_files}"
-            )
+        assert not checkpoints_dir.exists() or len(list(checkpoints_dir.glob("*.json"))) == 0, (
+            "Expected no checkpoint files after successful pipeline"
+        )
 
     def test_failed_pipeline_preserves_checkpoint(self, test_repo: Path) -> None:
         mock = _make_claude_mock(commits=False)
@@ -209,9 +207,9 @@ class TestCheckpointWriteDuringPipeline:
 
         # Checkpoint should exist (worktree checkpoint at minimum)
         checkpoints_dir = test_repo / ".action-harness" / "checkpoints"
-        if checkpoints_dir.exists():
-            checkpoint_files = list(checkpoints_dir.glob("*.json"))
-            assert len(checkpoint_files) >= 1
+        assert checkpoints_dir.exists(), "Checkpoints directory should exist after failed pipeline"
+        checkpoint_files = list(checkpoints_dir.glob("*.json"))
+        assert len(checkpoint_files) >= 1, "At least one checkpoint file should be preserved"
 
     def test_checkpoint_written_at_each_stage(self, test_repo: Path) -> None:
         mock = _make_claude_mock(commits=True)

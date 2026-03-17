@@ -1240,6 +1240,12 @@ def _run_pipeline_inner(
     delete_checkpoint(repo, run_id)
 
     typer.echo("[pipeline] complete (success)", err=True)
+
+    # Clean up temp-dir worktrees on success. Managed workspaces (workspace_dir
+    # is not None) are preserved — cleaned via `action-harness clean`.
+    if workspace_dir is None:
+        cleanup_worktree(repo, worktree_path, branch, verbose=verbose)
+
     return pr_result
 
 

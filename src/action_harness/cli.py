@@ -1506,13 +1506,13 @@ def lead(
     )
 
     repo = repo.resolve()
-    _validate_common(repo)
+    try:
+        _validate_common(repo)
+    except ValidationError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=1) from None
 
-    resolved_home = harness_home
-    if resolved_home is None:
-        env_home = os.environ.get("HARNESS_HOME")
-        if env_home:
-            resolved_home = Path(env_home)
+    resolved_home = _resolve_harness_home(harness_home)
 
     harness_agents_dir = resolve_harness_agents_dir()
 

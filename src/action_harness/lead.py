@@ -144,6 +144,60 @@ def _gather_issues(max_section_chars: int) -> str | None:
     return section
 
 
+def _gather_assessment_scores(repo_path: Path, max_section_chars: int) -> str | None:
+    """Gather assessment scores via a quick base scan.
+
+    Runs the mechanical scanners (no LLM) to produce category scores.
+    Returns None on failure so assessment issues never block the lead.
+    """
+    typer.echo("[lead] gathering assessment scores (base scan)", err=True)
+    try:
+        from action_harness.assessment import CategoryScore
+        from action_harness.branch_protection import check_branch_protection
+        from action_harness.ci_parser import parse_github_actions
+        from action_harness.profiler import profile_repo
+        from action_harness.scanner import (
+            analyze_test_structure,
+            detect_context_signals,
+            detect_isolation_signals,
+            detect_observability_signals,
+            detect_tooling_signals,
+        )
+        from action_harness.scoring import compute_overall, score_all_categories
+
+        profile = profile_repo(repo_path)
+        bp = check_branch_protection(repo_path)
+        ci_signals = parse_github_actions(repo_path, branch_protection=bp)
+        testability_signals = analyze_test_structure(repo_path, profile.ecosystem)
+        context_signals = detect_context_signals(repo_path)
+        tooling_signals = detect_tooling_signals(repo_path)
+        observability_signals = detect_observability_signals(repo_path)
+        isolation_signals = detect_isolation_signals(repo_path)
+
+        categories: dict[str, CategoryScore] = score_all_categories(
+            ci_signals=ci_signals,
+            testability_signals=testability_signals,
+            context_signals=context_signals,
+            tooling_signals=tooling_signals,
+            observability_signals=observability_signals,
+            isolation_signals=isolation_signals,
+        )
+        overall = compute_overall(categories)
+
+        lines = ["## Assessment Scores", "", f"**Overall: {overall}/100**", ""]
+        for name, cat in categories.items():
+            lines.append(f"- **{name}**: {cat.score}/100")
+        lines.append("")
+
+        section = "\n".join(lines)
+        if len(section) > max_section_chars:
+            section = section[:max_section_chars] + "\n\n... (truncated)"
+        return section
+    except Exception as exc:
+        typer.echo(f"[lead] warning: assessment scan failed: {exc}", err=True)
+        return None
+
+
 def _gather_recent_runs(repo_path: Path, max_section_chars: int) -> str | None:
     """Gather recent run summary from manifests."""
     typer.echo("[lead] gathering recent run data", err=True)
@@ -223,7 +277,8 @@ def gather_lead_context(
 
     Reads and assembles context sections, truncating each to max_section_chars:
     (a) ROADMAP.md, (b) CLAUDE.md, (c) HARNESS.md, (d) open issues,
-    (e) recent run summary, (f) catalog frequency top entries.
+    (e) assessment scores (quick base scan), (f) recent run summary,
+    (g) catalog frequency top entries.
 
     Returns the assembled context string.
     """
@@ -261,12 +316,17 @@ def gather_lead_context(
     if issues:
         sections.append(issues)
 
-    # (e) Recent run summary
+    # (e) Assessment scores
+    assessment = _gather_assessment_scores(repo_path, max_section_chars)
+    if assessment:
+        sections.append(assessment)
+
+    # (f) Recent run summary
     runs = _gather_recent_runs(repo_path, max_section_chars)
     if runs:
         sections.append(runs)
 
-    # (f) Catalog frequency
+    # (g) Catalog frequency
     freq = _gather_catalog_frequency(harness_home, max_section_chars)
     if freq:
         sections.append(freq)

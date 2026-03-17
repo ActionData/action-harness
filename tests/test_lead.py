@@ -447,8 +447,8 @@ class TestDispatchLeadInteractive:
 
         assert exit_code == 1
 
-    def test_empty_prompt_returns_error_code(self, tmp_path: Path) -> None:
-        """Empty prompt returns exit code 1 without spawning subprocess."""
+    def test_none_prompt_omits_positional_arg(self, tmp_path: Path) -> None:
+        """None prompt starts session without a positional argument."""
         repo_path = tmp_path / "repo"
         repo_path.mkdir()
         agents_dir = tmp_path / "agents"
@@ -456,15 +456,19 @@ class TestDispatchLeadInteractive:
         (agents_dir / "lead.md").write_text("---\nname: lead\n---\nPersona")
 
         with patch("action_harness.lead.subprocess.run") as mock_run:
-            exit_code = dispatch_lead_interactive(
+            mock_run.return_value.returncode = 0
+            dispatch_lead_interactive(
                 repo_path=repo_path,
-                prompt="",
+                prompt=None,
                 context="ctx",
                 harness_agents_dir=agents_dir,
             )
 
-        assert exit_code == 1
-        mock_run.assert_not_called()
+        mock_run.assert_called_once()
+        cmd = mock_run.call_args[0][0]
+        # No positional prompt arg — command starts with 'claude --system-prompt ...'
+        assert cmd[0] == "claude"
+        assert cmd[1] == "--system-prompt"
 
 
 # ---------------------------------------------------------------------------

@@ -399,15 +399,19 @@ def gather_lead_context(
 
 def dispatch_lead_interactive(
     repo_path: Path,
-    prompt: str,
+    prompt: str | None,
     context: str,
     harness_agents_dir: Path,
+    permission_mode: str = "default",
 ) -> int:
     """Dispatch the lead agent as an interactive Claude Code session.
 
-    Spawns `claude` (without `-p`) with the lead persona as `--system-prompt`
-    and gathered repo context as `--append-system-prompt`. The user prompt is
-    passed as a positional argument so the conversation starts with that message.
+    Spawns ``claude`` with the lead persona as ``--system-prompt``
+    and gathered repo context as ``--append-system-prompt``.
+
+    When *prompt* is provided, it is passed as a positional argument so the
+    conversation starts with that message. When *prompt* is ``None``, the
+    session starts with the agent greeting (defined in the lead persona).
 
     Uses subprocess.run with inherited stdio (no capture_output) so the human
     can interact naturally with the Claude Code session.
@@ -425,25 +429,25 @@ def dispatch_lead_interactive(
         typer.echo(f"[lead] agent file not found: {exc}", err=True)
         return 1
 
-    # Guard against empty prompt — would pass an empty positional arg to claude.
-    # Currently unreachable from the CLI (typer provides a non-empty default),
-    # but guards against programmatic callers. dispatch_lead doesn't have this
-    # guard because it concatenates the prompt into a larger user_prompt string.
-    if not prompt.strip():
-        typer.echo("[lead] error: prompt must not be empty", err=True)
-        return 1
-
     cmd = [
         "claude",
-        prompt,
         "--system-prompt",
         persona,
         "--append-system-prompt",
         context,
+        "--permission-mode",
+        permission_mode,
     ]
 
+    # Only pass the prompt as a positional arg if the user explicitly provided one.
+    # Without a prompt, the agent greets based on its persona instructions.
+    if prompt is not None and prompt.strip():
+        cmd.insert(1, prompt)
+
+    prompt_label = "<prompt> " if prompt else ""
     typer.echo(
-        "[lead] cmd: claude <prompt> --system-prompt <persona> --append-system-prompt <context>",
+        f"[lead] cmd: claude {prompt_label}--system-prompt <persona>"
+        f" --append-system-prompt <context> --permission-mode {permission_mode}",
         err=True,
     )
 
@@ -480,6 +484,7 @@ def dispatch_lead(
     context: str,
     harness_agents_dir: Path,
     max_turns: int = 50,
+    permission_mode: str = "default",
 ) -> str:
     """Dispatch the lead agent via Claude Code CLI.
 
@@ -510,12 +515,7 @@ def dispatch_lead(
         "--max-turns",
         str(max_turns),
         "--permission-mode",
-        # Design decision: 'default' (not 'plan') lets the lead read the
-        # codebase and run read-only tools (gh issue list, openspec list)
-        # while prompting for approval on writes. Task 3.1 says 'default',
-        # task 3.2 says 'plan' — specs are inconsistent; the design doc
-        # rationale supports 'default' for information gathering.
-        "default",
+        permission_mode,
     ]
 
     start_time = time.monotonic()

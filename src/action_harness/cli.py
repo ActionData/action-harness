@@ -1532,6 +1532,11 @@ def lead(
         "--dispatch",
         help="Auto-dispatch recommended changes via harness run (implies --no-interactive)",
     ),
+    permission_mode: str = typer.Option(
+        "default",
+        "--permission-mode",
+        help="Claude Code permission mode (default, plan, bypassPermissions)",
+    ),
     harness_home: Path | None = typer.Option(
         None,
         "--harness-home",

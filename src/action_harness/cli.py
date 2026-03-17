@@ -1234,31 +1234,32 @@ def progress(
             typer.echo("No event logs found", err=True)
             raise typer.Exit(code=1)
 
-    # Mutable state for the callback closure
-    start_time_holder: list[datetime | None] = [None]
-    saw_error: list[bool] = [False]
+    start_time: datetime | None = None
+    saw_error = False
 
     def _on_event(event: PipelineEvent) -> bool:
         """Process each event: format and print, track start time."""
+        nonlocal start_time, saw_error
+
         # Track start_time from run.started
-        if event.event == "run.started" and start_time_holder[0] is None:
-            start_time_holder[0] = datetime.fromisoformat(event.timestamp)
+        if event.event == "run.started" and start_time is None:
+            start_time = datetime.fromisoformat(event.timestamp)
 
         if json_output:
             typer.echo(event.model_dump_json())
         else:
-            formatted = format_event(event, start_time_holder[0])
+            formatted = format_event(event, start_time)
             typer.echo(formatted)
 
         # Exit on terminal events
         if event.event in ("run.completed", "pipeline.error"):
             if event.event == "pipeline.error":
-                saw_error[0] = True
+                saw_error = True
             return False
 
         return True
 
-    tail_event_log(log_path, _on_event)
+    completed_normally = tail_event_log(log_path, _on_event)
 
-    if saw_error[0]:
+    if saw_error or not completed_normally:
         raise typer.Exit(code=1)

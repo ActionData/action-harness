@@ -19,7 +19,8 @@ def tail_event_log(
     log_path: Path,
     callback: Callable[[PipelineEvent], bool],
     poll_interval: float = 1.0,
-) -> None:
+    idle_timeout: float = 5.0,
+) -> bool:
     """Tail an event log file, calling ``callback`` for each parsed event.
 
     Opens the file, reads existing lines, then polls for new lines every
@@ -30,22 +31,41 @@ def tail_event_log(
     The callback receives each event and returns ``True`` to continue or
     ``False`` to stop (used for clean exit on ``run.completed``).
 
+    If no new data appears for ``idle_timeout`` seconds after the initial
+    read-through, the function exits — this prevents hanging indefinitely
+    on completed runs that lack a terminal event.
+
+    Returns ``True`` if the callback signalled stop (normal exit), ``False``
+    if the tail ended due to I/O error, interrupt, or idle timeout.
+
     Handles ``KeyboardInterrupt`` for Ctrl+C.
     """
     typer.echo(f"[progress] tailing {log_path}", err=True)
     try:
         with open(log_path) as fh:
+            idle_elapsed = 0.0
+            saw_any_data = False
             while True:
                 line = fh.readline()
                 if not line:
-                    # No more data — poll for new lines
+                    # No more data — poll for new lines, but respect idle_timeout
+                    # to avoid hanging on completed runs without terminal events.
                     time.sleep(poll_interval)
+                    idle_elapsed += poll_interval
+                    if saw_any_data and idle_elapsed >= idle_timeout:
+                        typer.echo(
+                            f"[progress] no new events for {idle_timeout:.0f}s, exiting",
+                            err=True,
+                        )
+                        return False
                     continue
 
+                idle_elapsed = 0.0
                 line = line.strip()
                 if not line:
                     continue
 
+                saw_any_data = True
                 try:
                     event = PipelineEvent.model_validate_json(line)
                 except (json.JSONDecodeError, ValidationError) as exc:
@@ -57,11 +77,13 @@ def tail_event_log(
 
                 should_continue = callback(event)
                 if not should_continue:
-                    return
+                    return True
     except KeyboardInterrupt:
         typer.echo("\n[progress] interrupted", err=True)
+        return False
     except OSError as exc:
         typer.echo(f"[progress] error reading {log_path}: {exc}", err=True)
+        return False
 
 
 def find_latest_event_log(repo_path: Path) -> Path | None:
@@ -82,7 +104,15 @@ def find_latest_event_log(repo_path: Path) -> Path | None:
         typer.echo("[progress] no event log files found", err=True)
         return None
 
-    latest = max(log_files, key=lambda p: p.stat().st_mtime)
+    # stat() can race if a file is deleted between glob and stat; tolerate
+    # FileNotFoundError by falling back to mtime=0 for vanished files.
+    def _safe_mtime(p: Path) -> float:
+        try:
+            return p.stat().st_mtime
+        except FileNotFoundError:
+            return 0.0
+
+    latest = max(log_files, key=_safe_mtime)
     typer.echo(f"[progress] found latest: {latest.name}", err=True)
     return latest
 
@@ -175,6 +205,11 @@ def _extract_details(event: PipelineEvent) -> str:
         finding_count = meta.get("finding_count")
         if finding_count is not None:
             parts.append(f"{finding_count} finding(s)")
+
+    elif event.event == "pipeline.error":
+        error = meta.get("error")
+        if error is not None:
+            parts.append(str(error))
 
     elif event.event == "run.completed":
         success = event.success if event.success is not None else meta.get("success")

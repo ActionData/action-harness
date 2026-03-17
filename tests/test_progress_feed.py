@@ -1,6 +1,6 @@
 """Tests for the live progress feed module."""
 
-import time
+import os
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -18,13 +18,14 @@ class TestFindLatestEventLog:
         runs_dir = tmp_path / ".action-harness" / "runs"
         runs_dir.mkdir(parents=True)
 
-        # Create two log files with different modification times
+        # Create two log files with different modification times.
+        # Uses explicit mtime to avoid sleep-based flakiness.
         older = runs_dir / "old-run.events.jsonl"
         newer = runs_dir / "new-run.events.jsonl"
         older.write_text('{"event": "old"}\n')
-        # Ensure different mtime
-        time.sleep(0.05)
         newer.write_text('{"event": "new"}\n')
+        os.utime(older, (1000.0, 1000.0))
+        os.utime(newer, (2000.0, 2000.0))
 
         result = find_latest_event_log(tmp_path)
         if result is None:
@@ -89,11 +90,11 @@ class TestTailEventLog:
 
         def collect(event: PipelineEvent) -> bool:
             events.append(event)
-            # Stop after run.completed
             return event.event != "run.completed"
 
-        tail_event_log(log_path, collect, poll_interval=0.01)
+        result = tail_event_log(log_path, collect, poll_interval=0.01, idle_timeout=0.5)
 
+        assert result is True
         assert len(events) == 3
         assert events[0].event == "run.started"
         assert events[1].event == "worker.completed"
@@ -117,10 +118,44 @@ class TestTailEventLog:
             events.append(ev)
             return ev.event != "run.completed"
 
-        tail_event_log(log_path, collect, poll_interval=0.01)
+        tail_event_log(log_path, collect, poll_interval=0.01, idle_timeout=0.5)
 
         assert len(events) == 1
         assert events[0].event == "run.completed"
+
+    def test_returns_true_on_callback_stop(self, tmp_path: Path) -> None:
+        """Callback returning False means normal exit → returns True."""
+        log_path = tmp_path / "test.events.jsonl"
+        logger = EventLogger(log_path, "test-run")
+        logger.emit("run.completed", success=True)
+        logger.close()
+
+        result = tail_event_log(
+            log_path,
+            lambda ev: False,
+            poll_interval=0.01,
+            idle_timeout=0.5,
+        )
+        assert result is True
+
+    def test_returns_false_on_idle_timeout(self, tmp_path: Path) -> None:
+        """No terminal event → idle timeout → returns False."""
+        log_path = tmp_path / "test.events.jsonl"
+        logger = EventLogger(log_path, "test-run")
+        logger.emit("run.started", change_name="test")
+        logger.close()
+
+        events: list[PipelineEvent] = []
+        result = tail_event_log(
+            log_path,
+            lambda ev: events.append(ev) is None,  # always returns True
+            poll_interval=0.05,
+            idle_timeout=0.15,
+        )
+
+        assert result is False
+        assert len(events) == 1
+        assert events[0].event == "run.started"
 
 
 class TestFormatEvent:
@@ -163,7 +198,22 @@ class TestFormatEvent:
         result = format_event(event, start_time)
 
         assert "success" in result
+        assert "151s" in result
         assert "[02:31]" in result
+
+    def test_run_completed_failure(self) -> None:
+        event = PipelineEvent(
+            timestamp="2026-03-16T10:02:31+00:00",
+            event="run.completed",
+            run_id="test-run",
+            success=False,
+            duration_seconds=90.0,
+        )
+        start_time = datetime(2026, 3, 16, 10, 0, 0, tzinfo=UTC)
+        result = format_event(event, start_time)
+
+        assert "failed" in result
+        assert "90s" in result
 
     def test_fallback_to_wall_clock_when_no_start_time(self) -> None:
         event = PipelineEvent(
@@ -190,6 +240,44 @@ class TestFormatEvent:
 
         assert "https://github.com/org/repo/pull/44" in result
 
+    def test_review_completed_shows_finding_count(self) -> None:
+        event = PipelineEvent(
+            timestamp="2026-03-16T10:01:15+00:00",
+            event="review.completed",
+            run_id="test-run",
+            metadata={"finding_count": 17},
+        )
+        start_time = datetime(2026, 3, 16, 10, 0, 0, tzinfo=UTC)
+        result = format_event(event, start_time)
+
+        assert "17 finding(s)" in result
+        assert "[01:15]" in result
+
+    def test_review_round_completed_shows_finding_count(self) -> None:
+        event = PipelineEvent(
+            timestamp="2026-03-16T10:01:45+00:00",
+            event="review_round.completed",
+            run_id="test-run",
+            metadata={"finding_count": 12},
+        )
+        start_time = datetime(2026, 3, 16, 10, 0, 0, tzinfo=UTC)
+        result = format_event(event, start_time)
+
+        assert "12 finding(s)" in result
+
+    def test_pipeline_error_shows_error_message(self) -> None:
+        event = PipelineEvent(
+            timestamp="2026-03-16T10:00:45+00:00",
+            event="pipeline.error",
+            run_id="test-run",
+            metadata={"error": "eval timed out"},
+        )
+        start_time = datetime(2026, 3, 16, 10, 0, 0, tzinfo=UTC)
+        result = format_event(event, start_time)
+
+        assert "eval timed out" in result
+        assert "pipeline.error" in result
+
     def test_run_started_shows_change_name(self) -> None:
         event = PipelineEvent(
             timestamp="2026-03-16T10:00:00+00:00",
@@ -202,6 +290,19 @@ class TestFormatEvent:
 
         assert "my-change" in result
         assert "repo: /tmp/repo" in result
+
+    def test_unknown_event_type_shows_name_only(self) -> None:
+        event = PipelineEvent(
+            timestamp="2026-03-16T10:00:10+00:00",
+            event="some.future.event",
+            run_id="test-run",
+            metadata={"key": "value"},
+        )
+        start_time = datetime(2026, 3, 16, 10, 0, 0, tzinfo=UTC)
+        result = format_event(event, start_time)
+
+        assert "[00:10] some.future.event" == result
+        assert "—" not in result
 
     def test_negative_elapsed_time_clamped_to_zero(self) -> None:
         """Events before start_time show [00:00] instead of negative time."""

@@ -1459,6 +1459,58 @@ def history(
 
 
 @app.command()
+def ready(
+    repo: Path = typer.Option(
+        ...,
+        help="Path to the repository to check for ready changes",
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """List OpenSpec changes that are ready to implement.
+
+    Scans active changes in openspec/changes/, reads their prerequisites
+    from .openspec.yaml, and checks whether each prerequisite is satisfied
+    (archived or has a main spec).
+
+    Changes with all prerequisites met are listed as ready. Changes with
+    unmet prerequisites are listed as blocked.
+
+    Examples:
+
+        action-harness ready --repo .
+
+        action-harness ready --repo . --json
+    """
+    import json as json_mod
+
+    from action_harness.prerequisites import compute_readiness
+
+    repo = repo.resolve()
+    ready_names, blocked_list = compute_readiness(repo)
+
+    if json_output:
+        typer.echo(json_mod.dumps({"ready": ready_names, "blocked": blocked_list}, indent=2))
+        return
+
+    if not ready_names and not blocked_list:
+        typer.echo("No active changes found")
+        return
+
+    if ready_names:
+        typer.echo("Ready to implement:")
+        for name in ready_names:
+            typer.echo(f"  {name}")
+        typer.echo("")
+
+    if blocked_list:
+        typer.echo("Blocked:")
+        for item in blocked_list:
+            unmet = item["unmet_prerequisites"]
+            unmet_str = ", ".join(str(u) for u in unmet) if isinstance(unmet, list) else str(unmet)
+            typer.echo(f"  {item['name']}  (unmet: {unmet_str})")
+
+
+@app.command()
 def lead(
     repo: Path = typer.Option(
         ...,

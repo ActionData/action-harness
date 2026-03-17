@@ -49,6 +49,7 @@ from action_harness.review_agents import (
     match_findings,
     triage_findings,
 )
+from action_harness.tags import tag_pre_merge
 from action_harness.worker import count_commits_ahead, dispatch_worker
 from action_harness.worktree import cleanup_worktree, create_worktree
 
@@ -797,6 +798,13 @@ def _run_pipeline_inner(
         if eval_result is None:
             raise ValueError("eval_result is None at PR stage")
         base_branch = _get_worktree_base(repo)
+
+        # Tag pre-merge rollback point on the base branch HEAD
+        try:
+            tag_pre_merge(repo, label=change_name, base_branch=base_branch)
+        except (RuntimeError, subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
+            typer.echo(f"[pipeline] warning: pre-merge tagging failed: {e}", err=True)
+
         pr_result = create_pr(
             change_name,
             worktree_path,

@@ -255,7 +255,21 @@ class TestPipelineIssueLabeling:
         repo = _setup_fake_repo(tmp_path)
         mock = _make_subprocess_mock(eval_pass=False)
 
-        with patch("subprocess.run", mock):
+        # Baseline must show all-passing so post-worker failures are regressions
+        all_passing_baseline = {
+            "uv run pytest -v": True,
+            "uv run ruff check .": True,
+            "uv run ruff format --check .": True,
+            "uv run mypy src/": True,
+        }
+
+        with (
+            patch("subprocess.run", mock),
+            patch(
+                "action_harness.pipeline.run_baseline_eval",
+                return_value=all_passing_baseline,
+            ),
+        ):
             pr_result, _ = run_pipeline(
                 change_name="test-change",
                 repo=repo,

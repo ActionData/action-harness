@@ -163,7 +163,9 @@ def group_recurring_findings(
     if not all_findings:
         return []
 
-    # Group by title similarity
+    # Group by title similarity. O(n²) pairwise comparison — acceptable for
+    # typical manifest counts (hundreds of findings). If this becomes a
+    # bottleneck, consider pre-bucketing by normalized title tokens.
     groups: list[list[ReviewFinding]] = []
     assigned: list[bool] = [False] * len(all_findings)
 
@@ -234,14 +236,25 @@ def aggregate_report(
             costs.append(m.total_cost_usd)
     total_cost: float | None = sum(costs) if costs else None
 
-    # Duration aggregation
+    # Duration aggregation — excludes zero-duration manifests (which indicate
+    # incomplete or instantly-failed runs) to avoid skewing the average.
     durations: list[float] = [
         m.total_duration_seconds for m in manifests if m.total_duration_seconds > 0
     ]
     avg_duration: float | None = (sum(durations) / len(durations)) if durations else None
 
-    # Recent runs (last 10, most recent first)
-    sorted_manifests = sorted(manifests, key=lambda m: m.started_at, reverse=True)
+    # Recent runs (last 10, most recent first).
+    # Parse to datetime for correct ordering across timezone offsets.
+    def _parse_started_at(m: RunManifest) -> datetime:
+        try:
+            dt = datetime.fromisoformat(m.started_at)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=UTC)
+            return dt
+        except ValueError:
+            return datetime.min.replace(tzinfo=UTC)
+
+    sorted_manifests = sorted(manifests, key=_parse_started_at, reverse=True)
     recent: list[RecentRunSummary] = []
     for m in sorted_manifests[:10]:
         # Extract date from started_at

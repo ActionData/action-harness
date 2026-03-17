@@ -257,6 +257,9 @@ class TestAggregateReport:
         assert report.failed_runs == 2
         assert report.success_rate == 60.0
         assert report.failures_by_stage == {"eval": 2}
+        assert report.avg_duration_seconds is not None
+        expected_avg = (100.0 + 200.0 + 300.0 + 50.0 + 80.0) / 5
+        assert report.avg_duration_seconds == expected_avg
 
     def test_failures_at_different_stages(self) -> None:
         manifests = [
@@ -409,6 +412,41 @@ class TestGroupRecurringFindings:
         assert len(result) == 1
         assert result[0].count == 3
 
+    def test_distinct_titles_not_grouped(self) -> None:
+        manifests = [
+            _make_manifest(
+                stages=[
+                    WorktreeResult(success=True, worktree_path=Path("/tmp/wt")),
+                    ReviewResult(
+                        success=True,
+                        agent_name="bug-hunter",
+                        findings=[
+                            ReviewFinding(
+                                title="subprocess.run missing timeout",
+                                file="a.py",
+                                severity="high",
+                                description="desc",
+                                agent="bug-hunter",
+                            ),
+                            ReviewFinding(
+                                title="SQL injection in query builder",
+                                file="b.py",
+                                severity="critical",
+                                description="desc",
+                                agent="bug-hunter",
+                            ),
+                        ],
+                    ),
+                ],
+            ),
+        ]
+
+        result = group_recurring_findings(manifests)
+        assert len(result) == 2
+        titles = {r.title for r in result}
+        assert "subprocess.run missing timeout" in titles
+        assert "SQL injection in query builder" in titles
+
     def test_no_findings(self) -> None:
         manifests = [_make_manifest()]
         result = group_recurring_findings(manifests)
@@ -493,6 +531,36 @@ class TestReportCLI:
         result = _runner.invoke(app, ["report", "--repo", str(tmp_path)])
         output = _strip_ansi(result.output)
         assert "No runs found" in output
+
+    def test_non_git_repo_exits_with_error(self, tmp_path: Path) -> None:
+        result = _runner.invoke(app, ["report", "--repo", str(tmp_path)])
+        assert result.exit_code == 1
+        assert "not a git repository" in _strip_ansi(result.output).lower()
+
+    def test_catalog_frequency_loaded(self, tmp_path: Path) -> None:
+        _init_git_repo(tmp_path)
+        runs_dir = tmp_path / ".action-harness" / "runs"
+        runs_dir.mkdir(parents=True)
+        m = _make_manifest()
+        (runs_dir / "run.json").write_text(m.model_dump_json(), encoding="utf-8")
+
+        fake_home = tmp_path / "fake-harness-home"
+        repo_name = tmp_path.name
+        freq_dir = fake_home / "repos" / repo_name / "knowledge"
+        freq_dir.mkdir(parents=True)
+        freq_data = {
+            "subprocess-timeout": {"count": 8, "last_seen": "2026-03-16"},
+            "bare-assert": {"count": 4, "last_seen": "2026-03-15"},
+        }
+        (freq_dir / "findings-frequency.json").write_text(json.dumps(freq_data), encoding="utf-8")
+
+        result = _runner.invoke(
+            app,
+            ["report", "--repo", str(tmp_path), "--json", "--harness-home", str(fake_home)],
+        )
+        assert result.exit_code == 0
+        parsed = _extract_json(result.output)
+        assert parsed["catalog_frequency"] == {"subprocess-timeout": 8, "bare-assert": 4}
 
     def test_no_harness_home_omits_catalog(self, tmp_path: Path) -> None:
         _init_git_repo(tmp_path)

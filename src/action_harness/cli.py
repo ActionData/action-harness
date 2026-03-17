@@ -785,6 +785,11 @@ def report(
     # Load catalog frequency from harness home
     catalog_frequency: dict[str, int] | None = None
     resolved_home = _resolve_harness_home(harness_home)
+    # For local repos, repo.name is the directory name. For managed repos
+    # (cloned to harness_home/repos/), the directory name matches what
+    # resolve_repo produced. This won't find catalog data if the user passes
+    # a local path that differs from the managed repo directory name — that's
+    # acceptable since catalog frequency is best-effort context, not required.
     repo_name = repo.name
     freq_path = resolved_home / "repos" / repo_name / "knowledge" / "findings-frequency.json"
     typer.echo(f"[report] checking catalog frequency at {freq_path}", err=True)
@@ -819,8 +824,13 @@ def report(
 
 
 def _print_report(report_data: RunReport, since: str | None = None) -> None:
-    """Format and print a human-readable report to stdout."""
+    """Format and print a human-readable report to stdout.
 
+    The design doc shows a repo name in the header (``Harness Report — owner/repo``)
+    and failure-stage annotations on recent runs. Both omitted here because the
+    report command takes a local path, not an owner/repo identifier, and stage
+    info isn't in RecentRunSummary. Acceptable for v1 — can be added if needed.
+    """
     typer.echo("Harness Report")
     period = f"since {since}" if since else "all time"
     typer.echo(f"Period: {period} ({report_data.total_runs} runs)")

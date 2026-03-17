@@ -425,6 +425,11 @@ def dispatch_lead_interactive(
         typer.echo(f"[lead] agent file not found: {exc}", err=True)
         return 1
 
+    # Guard against empty prompt — would pass an empty positional arg to claude
+    if not prompt.strip():
+        typer.echo("[lead] error: prompt must not be empty", err=True)
+        return 1
+
     cmd = [
         "claude",
         prompt,
@@ -433,6 +438,11 @@ def dispatch_lead_interactive(
         "--append-system-prompt",
         context,
     ]
+
+    typer.echo(
+        "[lead] cmd: claude <prompt> --system-prompt <persona> --append-system-prompt <context>",
+        err=True,
+    )
 
     start_time = time.monotonic()
 

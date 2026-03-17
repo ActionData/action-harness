@@ -447,6 +447,25 @@ class TestDispatchLeadInteractive:
 
         assert exit_code == 1
 
+    def test_empty_prompt_returns_error_code(self, tmp_path: Path) -> None:
+        """Empty prompt returns exit code 1 without spawning subprocess."""
+        repo_path = tmp_path / "repo"
+        repo_path.mkdir()
+        agents_dir = tmp_path / "agents"
+        agents_dir.mkdir()
+        (agents_dir / "lead.md").write_text("---\nname: lead\n---\nPersona")
+
+        with patch("action_harness.lead.subprocess.run") as mock_run:
+            exit_code = dispatch_lead_interactive(
+                repo_path=repo_path,
+                prompt="",
+                context="ctx",
+                harness_agents_dir=agents_dir,
+            )
+
+        assert exit_code == 1
+        mock_run.assert_not_called()
+
 
 # ---------------------------------------------------------------------------
 # Task 4.2: Plan parsing tests
@@ -725,6 +744,25 @@ class TestLeadCLI:
         (repo / ".git").mkdir()
 
         result = runner.invoke(app, ["lead", "--repo", str(repo), "--interactive", "--dispatch"])
+
+        assert result.exit_code == 1
+        assert "--interactive and --dispatch are mutually exclusive" in result.output
+
+    def test_interactive_nonzero_exit_propagates(self, tmp_path: Path) -> None:
+        """Non-zero exit code from interactive session propagates through CLI."""
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        (repo / ".git").mkdir()
+
+        with (
+            patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"),
+            patch("action_harness.lead._gather_issues", return_value=None),
+            patch(
+                "action_harness.lead.dispatch_lead_interactive",
+                return_value=1,
+            ),
+        ):
+            result = runner.invoke(app, ["lead", "--repo", str(repo)])
 
         assert result.exit_code == 1
 

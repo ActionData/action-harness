@@ -1265,3 +1265,194 @@ def progress(
 
     if saw_error or not completed_normally:
         raise typer.Exit(code=1)
+
+
+# ── Tag management commands ──────────────────────────────────────────
+
+
+@app.command("tag-shipped")
+def tag_shipped_cmd(
+    repo: Path = typer.Option(
+        ...,
+        help="Path to the repository",
+    ),
+    pr: str = typer.Option(
+        ...,
+        help="PR URL to check merge status",
+    ),
+    label: str = typer.Option(
+        ...,
+        help="Label for the shipped tag (change name or prompt slug)",
+    ),
+) -> None:
+    """Tag the merge commit of a shipped PR.
+
+    Checks if the PR is merged via `gh pr view`, creates
+    `harness/shipped/{label}` on the merge commit, and pushes the tag.
+
+    Examples:
+
+        action-harness tag-shipped --repo . --pr https://github.com/o/r/pull/1 --label add-logging
+    """
+    from action_harness.tags import tag_shipped
+
+    repo = repo.resolve()
+    _validate_common(repo)
+
+    if not pr.strip():
+        typer.echo("Error: --pr must not be empty", err=True)
+        raise typer.Exit(code=1)
+
+    result = tag_shipped(repo, label=label, pr_url=pr)
+    if result:
+        typer.echo(f"Tagged merge commit as harness/shipped/{label}", err=True)
+    else:
+        typer.echo("PR is not merged yet", err=True)
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def rollback(
+    repo: Path = typer.Option(
+        ...,
+        help="Path to the repository",
+    ),
+    to: str | None = typer.Option(
+        None,
+        "--to",
+        help="Specific tag to roll back to (default: latest harness/pre-merge/* tag)",
+    ),
+) -> None:
+    """Roll back the repo to a pre-merge tag.
+
+    Creates a single forward commit that sets the working tree to match
+    the tagged state. Does NOT force-push or rewrite history.
+
+    If `--to` is not provided, uses the most recent `harness/pre-merge/*` tag.
+
+    Examples:
+
+        action-harness rollback --repo .
+
+        action-harness rollback --repo . --to harness/pre-merge/add-logging
+    """
+    from action_harness.tags import get_latest_tag
+
+    repo = repo.resolve()
+    _validate_common(repo)
+
+    # Check for dirty working tree
+    try:
+        status_result = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
+        typer.echo(f"Error: git status failed: {e}", err=True)
+        raise typer.Exit(code=1) from None
+
+    if status_result.stdout.strip():
+        typer.echo(
+            "Working tree has uncommitted changes. Commit or stash before rolling back.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    # Resolve tag
+    tag = to
+    if tag is None:
+        tag = get_latest_tag(repo, "harness/pre-merge/*")
+        if tag is None:
+            typer.echo("No rollback points found", err=True)
+            raise typer.Exit(code=1)
+
+    typer.echo(f"[rollback] rolling back to {tag}", err=True)
+
+    # git read-tree -m -u {tag} to update index and working tree
+    try:
+        rt_result = subprocess.run(
+            ["git", "read-tree", "-m", "-u", tag],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
+        typer.echo(f"Error: git read-tree failed: {e}", err=True)
+        raise typer.Exit(code=1) from None
+
+    if rt_result.returncode != 0:
+        typer.echo(
+            f"Error: git read-tree failed: {rt_result.stderr.strip()}",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    # Commit the rollback
+    try:
+        commit_result = subprocess.run(
+            ["git", "commit", "-m", f"Rollback to {tag}"],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
+        typer.echo(f"Error: git commit failed: {e}", err=True)
+        raise typer.Exit(code=1) from None
+
+    if commit_result.returncode != 0:
+        typer.echo(
+            f"Error: git commit failed: {commit_result.stderr.strip()}",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    typer.echo(f"[rollback] rolled back to {tag}", err=True)
+
+
+@app.command()
+def history(
+    repo: Path = typer.Option(
+        ...,
+        help="Path to the repository",
+    ),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        help="Output as JSON array",
+    ),
+) -> None:
+    """List harness-shipped features.
+
+    Shows all `harness/shipped/*` tags with date, commit hash, and label,
+    ordered by date descending.
+
+    Examples:
+
+        action-harness history --repo .
+
+        action-harness history --repo . --json
+    """
+    import json as json_mod
+
+    from action_harness.tags import list_tags
+
+    repo = repo.resolve()
+    _validate_common(repo)
+
+    tags = list_tags(repo, "harness/shipped/*")
+
+    if json_output:
+        typer.echo(json_mod.dumps(tags, indent=2))
+        return
+
+    if not tags:
+        typer.echo("No harness-shipped features found")
+        return
+
+    for t in tags:
+        typer.echo(f"  {t['date']}  {t['commit']}  {t['label']}")

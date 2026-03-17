@@ -182,12 +182,14 @@ def test_repo(tmp_path: Path) -> Generator[Path]:
         cwd=repo,
         capture_output=True,
         text=True,
+        timeout=30,
     )
     list_result = subprocess.run(
         ["git", "worktree", "list", "--porcelain"],
         cwd=repo,
         capture_output=True,
         text=True,
+        timeout=30,
     )
     for line in list_result.stdout.splitlines():
         if line.startswith("worktree "):
@@ -197,6 +199,7 @@ def test_repo(tmp_path: Path) -> Generator[Path]:
                     ["git", "worktree", "remove", "--force", str(wt_path)],
                     cwd=repo,
                     capture_output=True,
+                    timeout=30,
                 )
                 # Clean up parent temp directory
                 parent = wt_path.parent

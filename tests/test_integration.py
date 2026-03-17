@@ -88,12 +88,14 @@ def test_repo(tmp_path: Path) -> Generator[Path]:
         cwd=repo,
         capture_output=True,
         text=True,
+        timeout=30,
     )
     list_result = subprocess.run(
         ["git", "worktree", "list", "--porcelain"],
         cwd=repo,
         capture_output=True,
         text=True,
+        timeout=30,
     )
     for line in list_result.stdout.splitlines():
         if line.startswith("worktree "):
@@ -103,6 +105,7 @@ def test_repo(tmp_path: Path) -> Generator[Path]:
                     ["git", "worktree", "remove", "--force", str(wt_path)],
                     cwd=repo,
                     capture_output=True,
+                    timeout=30,
                 )
                 # Clean up parent temp directory
                 parent = wt_path.parent
@@ -203,6 +206,48 @@ class TestPipelineSuccess:
         assert manifest.retries == 0
         assert manifest.pr_url == "https://github.com/test/repo/pull/1"
         assert manifest.error is None
+
+    def test_worktree_cleaned_up_on_success(self, test_repo: Path) -> None:
+        """Temp worktree is cleaned up after a successful pipeline run."""
+        mock = _make_claude_mock(commits=True)
+
+        with (
+            patch("action_harness.worker.subprocess.run", mock),
+            patch("action_harness.pipeline.run_eval", return_value=self._passing_eval()),
+            patch("action_harness.pr.subprocess.run", mock),
+            patch(
+                "action_harness.pipeline.dispatch_openspec_review",
+                return_value=('{"result": "{}"}', 1.0),
+            ),
+            patch(
+                "action_harness.pipeline.parse_review_result",
+                return_value=self._mock_review(),
+            ),
+            patch(
+                "action_harness.pipeline.push_archive_if_needed",
+                return_value=(False, None),
+            ),
+        ):
+            pr_result, _manifest = run_pipeline(
+                "test-change", test_repo, max_retries=1, skip_review=True
+            )
+
+        assert pr_result.success is True
+
+        # No lingering harness worktrees should remain
+        list_result = subprocess.run(
+            ["git", "worktree", "list", "--porcelain"],
+            cwd=test_repo,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        worktrees = [
+            line
+            for line in list_result.stdout.splitlines()
+            if line.startswith("worktree ") and "harness" in line
+        ]
+        assert len(worktrees) == 0
 
     def test_pipeline_creates_worktree(self, test_repo: Path) -> None:
         mock = _make_claude_mock(commits=True)

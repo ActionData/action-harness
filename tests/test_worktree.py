@@ -47,6 +47,7 @@ def git_repo(tmp_path: Path) -> Generator[Path]:
         cwd=tmp_path,
         capture_output=True,
         text=True,
+        timeout=30,
     )
     for line in list_result.stdout.splitlines():
         if line.startswith("worktree "):
@@ -56,6 +57,7 @@ def git_repo(tmp_path: Path) -> Generator[Path]:
                     ["git", "worktree", "remove", "--force", str(wt_path)],
                     cwd=tmp_path,
                     capture_output=True,
+                    timeout=30,
                 )
                 # Clean up parent temp directory
                 parent = wt_path.parent

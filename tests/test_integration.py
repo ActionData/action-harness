@@ -840,3 +840,102 @@ class TestProtectedPathsIntegration:
 
         assert pr_result.success is True
         assert manifest.protected_files == []
+
+
+class TestBaselineEvalIntegration:
+    def _passing_eval(self) -> EvalResult:
+        return EvalResult(success=True, stage="eval", commands_run=4, commands_passed=4)
+
+    def test_pre_existing_failure_does_not_trigger_retry(self, test_repo: Path) -> None:
+        """Pipeline succeeds when eval has only pre-existing failures (no regressions)."""
+        mock = _make_claude_mock(commits=True)
+
+        # Baseline shows lint was already failing
+        baseline = {"echo pass": True, "false": False}
+
+        # Post-worker eval: echo pass still passes, false still fails (pre-existing)
+        eval_with_preexisting = EvalResult(
+            success=True,
+            stage="eval",
+            commands_run=2,
+            commands_passed=1,
+            pre_existing_failures=["false"],
+        )
+
+        with (
+            patch("action_harness.worker.subprocess.run", mock),
+            patch("action_harness.pipeline.run_baseline_eval", return_value=baseline),
+            patch("action_harness.pipeline.run_eval", return_value=eval_with_preexisting),
+            patch("action_harness.pr.subprocess.run", mock),
+            patch(
+                "action_harness.pipeline.dispatch_openspec_review",
+                return_value=('{"result": "{}"}', 1.0),
+            ),
+            patch(
+                "action_harness.pipeline.parse_review_result",
+                return_value=_approved_review_result(),
+            ),
+            patch(
+                "action_harness.pipeline.push_archive_if_needed",
+                return_value=(False, None),
+            ),
+        ):
+            pr_result, manifest = run_pipeline(
+                "test-change", test_repo, max_retries=1, skip_review=True
+            )
+
+        # Pipeline should succeed — pre-existing failures don't block
+        assert pr_result.success is True
+        assert manifest.success is True
+        assert manifest.retries == 0
+        assert manifest.baseline_eval == baseline
+
+    def test_regression_triggers_retry(self, test_repo: Path) -> None:
+        """Pipeline retries when eval detects a regression (was passing, now failing)."""
+        mock = _make_claude_mock(commits=True)
+
+        baseline = {"echo pass": True, "echo lint": True}
+
+        # First eval: regression on lint
+        regression_eval = EvalResult(
+            success=False,
+            stage="eval",
+            error="Eval failed: echo lint",
+            commands_run=2,
+            commands_passed=1,
+            failed_command="echo lint",
+            feedback_prompt="## Eval Failure\n\n### Command: echo lint\n...",
+        )
+        # Pre-work eval also fails (regression persists)
+        # Second eval after retry: passes
+        pass_eval = EvalResult(success=True, stage="eval", commands_run=2, commands_passed=2)
+
+        with (
+            patch("action_harness.worker.subprocess.run", mock),
+            patch("action_harness.pipeline.run_baseline_eval", return_value=baseline),
+            patch(
+                "action_harness.pipeline.run_eval",
+                side_effect=[regression_eval, regression_eval, pass_eval],
+            ),
+            patch("action_harness.pr.subprocess.run", mock),
+            patch(
+                "action_harness.pipeline.dispatch_openspec_review",
+                return_value=('{"result": "{}"}', 1.0),
+            ),
+            patch(
+                "action_harness.pipeline.parse_review_result",
+                return_value=_approved_review_result(),
+            ),
+            patch(
+                "action_harness.pipeline.push_archive_if_needed",
+                return_value=(False, None),
+            ),
+        ):
+            pr_result, manifest = run_pipeline(
+                "test-change", test_repo, max_retries=3, skip_review=True
+            )
+
+        # Pipeline should succeed after retry
+        assert pr_result.success is True
+        assert manifest.retries == 1
+        assert manifest.baseline_eval == baseline

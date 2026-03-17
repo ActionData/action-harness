@@ -18,9 +18,9 @@ Prerequisites: implement `clean-eval-environment` first so VIRTUAL_ENV stripping
 
 ## 4. Tests
 
-- [ ] 4.1 In `tests/test_evaluator.py`: test `run_baseline_eval` — runs ALL commands even when some fail. Returns dict with correct pass/fail per command.
-- [ ] 4.2 In `tests/test_evaluator.py`: test `run_eval` with baseline — pre-existing failure (was failing, still failing) does NOT cause eval failure, added to `pre_existing_failures`. Regression (was passing, now failing) DOES cause failure with `failed_command` set. Worker fixed issue (was failing, now passing) noted as success.
-- [ ] 4.3 In `tests/test_integration.py`: test pipeline with baseline — pre-existing lint failure doesn't trigger retry. Only regressions trigger retry.
+- [x] 4.1 In `tests/test_evaluator.py`: test `run_baseline_eval` — runs ALL commands even when some fail. Returns dict with correct pass/fail per command.
+- [x] 4.2 In `tests/test_evaluator.py`: test `run_eval` with baseline — pre-existing failure (was failing, still failing) does NOT cause eval failure, added to `pre_existing_failures`. Regression (was passing, now failing) DOES cause failure with `failed_command` set. Worker fixed issue (was failing, now passing) noted as success.
+- [x] 4.3 In `tests/test_integration.py`: test pipeline with baseline — pre-existing lint failure doesn't trigger retry. Only regressions trigger retry.
 
 ## 5. Validation
 

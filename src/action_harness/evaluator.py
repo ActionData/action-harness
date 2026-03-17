@@ -73,9 +73,7 @@ def run_baseline_eval(
             )
             passed = result.returncode == 0
         except (FileNotFoundError, OSError, subprocess.TimeoutExpired) as e:
-            typer.echo(
-                f"[baseline-eval] ERROR: failed to run '{cmd_str}': {e}", err=True
-            )
+            typer.echo(f"[baseline-eval] ERROR: failed to run '{cmd_str}': {e}", err=True)
             passed = False
 
         results[cmd_str] = passed
@@ -210,9 +208,7 @@ def run_eval(
 
     # If we had a regression when using baseline mode, report it
     if first_regression_command is not None:
-        typer.echo(
-            f"[eval] regression detected: {first_regression_command}", err=True
-        )
+        typer.echo(f"[eval] regression detected: {first_regression_command}", err=True)
         return EvalResult(
             success=False,
             stage="eval",

@@ -56,12 +56,14 @@ uv run mypy src/                  # type check
 
 The pipeline runs in deterministic stages with zero LLM calls in orchestration:
 
-1. **Task intake** — accepts an OpenSpec change name and repo path
-2. **Worktree isolation** — creates a git worktree on a `harness/<change-name>` branch
-3. **Code agent dispatch** — launches Claude Code CLI in the worktree
-4. **Evaluation** — runs eval commands (pytest, ruff, mypy) as subprocesses; binary pass/fail from exit codes
-5. **Retry** — on eval failure, formats structured feedback and re-dispatches (up to 3 retries)
-6. **PR creation** — opens a PR via `gh` with a structured description built from the run manifest
+1. **Validate** — assert `claude` and `gh` CLIs exist, profile the repo to detect ecosystem and eval commands
+2. **Worktree isolation** — create a git worktree on a `harness/<change-name>` branch
+3. **Dispatch + eval loop** — launch Claude Code CLI in the worktree, run eval commands (pytest, ruff, mypy) as subprocesses, retry with structured feedback on failure (up to 3 retries, with session resume when context is fresh)
+4. **PR creation** — open a PR via `gh` with a structured description built from the run manifest
+5. **Protected paths check** — diff changed files against `.harness/protected-paths.yml`, flag for human review if matched
+6. **Review agents** — dispatch 4 specialized agents in parallel (bug-hunter, test-reviewer, quality-reviewer, spec-compliance), triage findings, auto-fix critical/high issues
+7. **OpenSpec review** — validate spec completion, semantic review, auto-archive on approval
+8. **Auto-merge** (optional) — gate checks (no protected files, review clean, CI passing), merge PR
 
 ## Key principles
 

@@ -561,3 +561,125 @@ class TestResumeLogic:
             )
 
         assert pr_result.success is True
+
+    def test_resume_at_worker_eval_skips_to_pr(self, test_repo: Path) -> None:
+        """Resume with completed_stage='worker_eval' should skip worktree+worker_eval,
+        then create_pr receives worker_result and eval_result from checkpoint."""
+        mock = _make_claude_mock(commits=True)
+
+        # Create a real worktree so the checkpoint is valid
+        wt_result = subprocess.run(
+            ["git", "worktree", "add", "-b", "harness/test-change", str(test_repo / "wt")],
+            cwd=test_repo,
+            capture_output=True,
+            text=True,
+        )
+        assert wt_result.returncode == 0
+        worktree_path = test_repo / "wt"
+
+        # Create a file + commit so there's something for the PR
+        (worktree_path / "feature.py").write_text("# feature\n")
+        subprocess.run(["git", "add", "."], cwd=worktree_path, capture_output=True, check=True)
+        subprocess.run(
+            ["git", "commit", "-m", "Add feature"],
+            cwd=worktree_path,
+            capture_output=True,
+            check=True,
+        )
+
+        # Get actual HEAD SHA
+        head_result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=worktree_path,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        head_sha = head_result.stdout.strip()
+
+        worker = WorkerResult(
+            success=True,
+            stage="worker",
+            commits_ahead=1,
+            cost_usd=0.10,
+            session_id="sess_from_checkpoint",
+        )
+        eval_res = EvalResult(
+            success=True,
+            stage="eval",
+            commands_run=4,
+            commands_passed=4,
+        )
+        wt = WorktreeResult(
+            success=True,
+            stage="worktree",
+            worktree_path=worktree_path,
+            branch="harness/test-change",
+        )
+
+        checkpoint = PipelineCheckpoint(
+            run_id="resumed-worker-eval",
+            change_name="test-change",
+            repo_path=str(test_repo.resolve()),
+            completed_stage="worker_eval",
+            worktree_path=str(worktree_path),
+            branch="harness/test-change",
+            branch_head_sha=head_sha,
+            session_id="sess_from_checkpoint",
+            last_worker_result=worker,
+            last_eval_result=eval_res,
+            protected_files=[],
+            stages=[wt, worker, eval_res],
+            timestamp="2026-01-01T00:00:00+00:00",
+            ecosystem="python",
+            skip_review=True,
+        )
+
+        with (
+            patch("action_harness.pipeline.create_worktree") as mock_create_wt,
+            patch("action_harness.pipeline.dispatch_worker") as mock_dispatch,
+            patch("action_harness.pr.subprocess.run", mock),
+            patch(
+                "action_harness.pipeline.dispatch_openspec_review",
+                return_value=('{"result": "{}"}', 1.0),
+            ),
+            patch(
+                "action_harness.pipeline.parse_review_result",
+                return_value=_approved_review_result(),
+            ),
+            patch(
+                "action_harness.pipeline.push_archive_if_needed",
+                return_value=(False, None),
+            ),
+            patch("action_harness.pipeline.create_pr") as mock_create_pr,
+        ):
+            from action_harness.models import PrResult
+
+            mock_create_pr.return_value = PrResult(
+                success=True,
+                stage="pr",
+                pr_url="https://github.com/test/repo/pull/42",
+                branch="harness/test-change",
+            )
+
+            pr_result, manifest = run_pipeline(
+                "test-change",
+                test_repo,
+                max_retries=1,
+                skip_review=True,
+                checkpoint=checkpoint,
+            )
+
+        # Worktree and worker stages should have been SKIPPED
+        assert not mock_create_wt.called
+        assert not mock_dispatch.called
+
+        # create_pr SHOULD have been called (pr stage runs after worker_eval)
+        assert mock_create_pr.called
+        call_args = mock_create_pr.call_args
+        # Positional arg 3 (index 3) is eval_result
+        assert call_args[0][3] == eval_res
+        # worker_result is passed as kwarg
+        assert call_args[1]["worker_result"] == worker
+
+        assert pr_result.success is True

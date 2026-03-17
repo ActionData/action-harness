@@ -889,7 +889,7 @@ def _run_pipeline_inner(
     cycle = review_cycle if review_cycle is not None else ["low", "med", "high"]
     total_rounds = len(cycle)
     findings_remain = False
-    if not skip_review:
+    if not skip_review and _should_run_stage("review", checkpoint):
         latest_review_results: list[ReviewResult] = []
         last_fix_succeeded = False
         acknowledged: list[AcknowledgedFinding] = []
@@ -1050,8 +1050,10 @@ def _run_pipeline_inner(
                 verbose,
                 header=f"Remaining findings after {rounds_attempted} fix-retry round(s)",
             )
-    else:
+    elif skip_review:
         typer.echo("[pipeline] skipping review agents (--skip-review)", err=True)
+    else:
+        typer.echo("[pipeline] skipping review agents (resumed)", err=True)
 
     # Update per-repo finding frequency using only the LAST review round's
     # findings (not all rounds — a persistent finding across 3 rounds would
@@ -1096,7 +1098,10 @@ def _run_pipeline_inner(
     )
 
     # Stage 6: OpenSpec review (skipped in prompt mode — no OpenSpec artifacts)
-    if prompt is not None:
+    if not _should_run_stage("openspec_review", checkpoint):
+        typer.echo("[pipeline] skipping openspec review (resumed)", err=True)
+        review_result = None
+    elif prompt is not None:
         typer.echo("[pipeline] skipping openspec review (prompt mode)", err=True)
         review_result = None
     else:

@@ -9,6 +9,7 @@ import typer
 from action_harness.agents import resolve_harness_agents_dir
 from action_harness.catalog.frequency import update_frequency
 from action_harness.catalog.loader import load_catalog
+from action_harness.checkpoint import delete_checkpoint, write_checkpoint
 from action_harness.evaluator import run_eval
 from action_harness.event_log import EventLogger
 from action_harness.merge import check_merge_gates, merge_pr, post_merge_blocked_comment
@@ -18,6 +19,7 @@ from action_harness.models import (
     EvalResult,
     MergeResult,
     OpenSpecReviewResult,
+    PipelineCheckpoint,
     PrResult,
     ReviewFinding,
     ReviewResult,
@@ -48,6 +50,85 @@ from action_harness.review_agents import (
 )
 from action_harness.worker import count_commits_ahead, dispatch_worker
 from action_harness.worktree import cleanup_worktree, create_worktree
+
+# Macro-stage progression order for checkpoint-resume.
+# Each checkpoint records the last FULLY completed stage.
+_STAGE_ORDER = ["worktree", "worker_eval", "pr", "review", "openspec_review"]
+
+
+def _should_run_stage(stage: str, checkpoint: PipelineCheckpoint | None) -> bool:
+    """Return True if the given stage should run (not already checkpointed).
+
+    Returns True when checkpoint is None or when stage comes AFTER
+    checkpoint.completed_stage in the progression order.
+    """
+    if checkpoint is None:
+        return True
+    completed = checkpoint.completed_stage
+    if completed not in _STAGE_ORDER or stage not in _STAGE_ORDER:
+        return True
+    return _STAGE_ORDER.index(stage) > _STAGE_ORDER.index(completed)
+
+
+def _get_branch_head_sha(worktree_path: Path) -> str | None:
+    """Get the HEAD SHA of the branch in the worktree."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=worktree_path,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        pass
+    return None
+
+
+def _build_checkpoint(
+    run_id: str,
+    change_name: str,
+    repo: Path,
+    completed_stage: str,
+    stages: list[StageResultUnion],
+    worktree_path: Path | None = None,
+    branch: str | None = None,
+    pr_url: str | None = None,
+    session_id: str | None = None,
+    last_worker_result: WorkerResult | None = None,
+    last_eval_result: EvalResult | None = None,
+    protected_files: list[str] | None = None,
+    ecosystem: str = "unknown",
+    auto_merge: bool = False,
+    skip_review: bool = False,
+    review_cycle: list[str] | None = None,
+) -> PipelineCheckpoint:
+    """Build a PipelineCheckpoint from current pipeline locals."""
+    branch_head_sha: str | None = None
+    if worktree_path is not None:
+        branch_head_sha = _get_branch_head_sha(worktree_path)
+    return PipelineCheckpoint(
+        run_id=run_id,
+        change_name=change_name,
+        repo_path=str(repo),
+        completed_stage=completed_stage,
+        worktree_path=str(worktree_path) if worktree_path is not None else None,
+        branch=branch,
+        branch_head_sha=branch_head_sha,
+        pr_url=pr_url,
+        session_id=session_id,
+        last_worker_result=last_worker_result,
+        last_eval_result=last_eval_result,
+        protected_files=protected_files or [],
+        stages=list(stages),
+        timestamp=datetime.now(UTC).isoformat(),
+        ecosystem=ecosystem,
+        auto_merge=auto_merge,
+        skip_review=skip_review,
+        review_cycle=review_cycle,
+    )
 
 
 def _build_manifest(
@@ -143,6 +224,7 @@ def run_pipeline(
     issue_number: int | None = None,
     review_cycle: list[str] | None = None,
     max_findings_per_retry: int = 5,
+    checkpoint: PipelineCheckpoint | None = None,
 ) -> tuple[PrResult, RunManifest]:
     """Run the full pipeline: worktree -> worker -> eval -> retry -> PR.
 
@@ -152,9 +234,77 @@ def run_pipeline(
 
     When harness_home and repo_name are both set, workspaces are created at
     harness_home/workspaces/<repo_name>/<change_name>/ instead of /tmp.
+
+    When checkpoint is provided, the pipeline resumes from the last completed
+    macro-stage, skipping stages that are already done.
     """
     typer.echo(f"[pipeline] starting for change '{change_name}'", err=True)
     typer.echo(f"  max_retries={max_retries}, max_turns={max_turns}", err=True)
+
+    # Validate checkpoint if provided
+    if checkpoint is not None:
+        if checkpoint.change_name != change_name:
+            typer.echo(
+                f"[pipeline] warning: checkpoint change '{checkpoint.change_name}' "
+                f"does not match '{change_name}', starting fresh",
+                err=True,
+            )
+            checkpoint = None
+        elif checkpoint.repo_path != str(repo.resolve()):
+            typer.echo(
+                f"[pipeline] warning: checkpoint repo '{checkpoint.repo_path}' "
+                f"does not match '{repo.resolve()}', starting fresh",
+                err=True,
+            )
+            checkpoint = None
+        elif checkpoint.worktree_path is not None and not Path(checkpoint.worktree_path).exists():
+            typer.echo(
+                f"[pipeline] warning: checkpoint worktree "
+                f"'{checkpoint.worktree_path}' no longer exists, starting fresh",
+                err=True,
+            )
+            checkpoint = None
+        elif checkpoint.worktree_path is not None and checkpoint.branch_head_sha is not None:
+            actual_sha = _get_branch_head_sha(Path(checkpoint.worktree_path))
+            if actual_sha is not None and actual_sha != checkpoint.branch_head_sha:
+                typer.echo(
+                    f"[pipeline] warning: branch HEAD changed since checkpoint "
+                    f"(expected {checkpoint.branch_head_sha[:8]}, "
+                    f"got {actual_sha[:8]}), starting fresh",
+                    err=True,
+                )
+                checkpoint = None
+
+    if checkpoint is not None:
+        typer.echo(
+            f"[pipeline] resuming from checkpoint {checkpoint.run_id} "
+            f"(completed: {checkpoint.completed_stage})",
+            err=True,
+        )
+        # Use checkpoint values for CLI flags (log warning if they differ)
+        if checkpoint.auto_merge != auto_merge:
+            typer.echo(
+                f"[pipeline] warning: using checkpoint auto_merge="
+                f"{checkpoint.auto_merge} (CLI: {auto_merge})",
+                err=True,
+            )
+            auto_merge = checkpoint.auto_merge
+        if checkpoint.skip_review != skip_review:
+            typer.echo(
+                f"[pipeline] warning: using checkpoint skip_review="
+                f"{checkpoint.skip_review} (CLI: {skip_review})",
+                err=True,
+            )
+            skip_review = checkpoint.skip_review
+        if checkpoint.review_cycle is not None:
+            cli_cycle = review_cycle if review_cycle is not None else ["low", "med", "high"]
+            if checkpoint.review_cycle != cli_cycle:
+                typer.echo(
+                    f"[pipeline] warning: using checkpoint review_cycle="
+                    f"{checkpoint.review_cycle} (CLI: {cli_cycle})",
+                    err=True,
+                )
+            review_cycle = checkpoint.review_cycle
 
     # Profile the repo before the pipeline starts
     try:
@@ -177,13 +327,17 @@ def run_pipeline(
     if harness_home is not None and repo_name is not None:
         workspace_dir = harness_home / "workspaces" / repo_name / change_name
 
-    started_at = datetime.now(UTC).isoformat()
-    stages: list[StageResultUnion] = []
-
-    # Generate run_id from started_at (filesystem-safe) + change name
-    safe_ts = started_at.replace(":", "-").replace("+", "_")
-    safe_change = change_name.replace("/", "-")
-    run_id = f"{safe_ts}-{safe_change}"
+    # On resume: reuse checkpoint's run_id and timestamp
+    if checkpoint is not None:
+        started_at = checkpoint.timestamp
+        run_id = checkpoint.run_id
+        stages: list[StageResultUnion] = list(checkpoint.stages)
+    else:
+        started_at = datetime.now(UTC).isoformat()
+        stages = []
+        safe_ts = started_at.replace(":", "-").replace("+", "_")
+        safe_change = change_name.replace("/", "-")
+        run_id = f"{safe_ts}-{safe_change}"
 
     # Create event logger before try block so it is available in except/finally
     runs_dir = repo / ".action-harness" / "runs"
@@ -196,6 +350,7 @@ def run_pipeline(
         change_name=change_name,
         repo_path=str(repo),
         max_retries=max_retries,
+        resumed=checkpoint is not None,
     )
 
     protected_files: list[str] = []
@@ -226,6 +381,8 @@ def run_pipeline(
             ecosystem=profile.ecosystem,
             harness_home=harness_home,
             repo_name=repo_name,
+            run_id=run_id,
+            checkpoint=checkpoint,
         )
     except Exception as e:
         typer.echo(f"[pipeline] unexpected error: {e}", err=True)
@@ -294,37 +451,69 @@ def _run_pipeline_inner(
     ecosystem: str = "unknown",
     harness_home: Path | None = None,
     repo_name: str | None = None,
+    run_id: str = "",
+    checkpoint: PipelineCheckpoint | None = None,
 ) -> PrResult:
     """Inner pipeline logic. Appends to stages list as side effect.
 
     Separated so that run_pipeline can always build and write the manifest
     after this returns, regardless of which exit path is taken.
+
+    When checkpoint is provided, stages already completed are skipped via
+    _should_run_stage() guards and pipeline locals are restored from the
+    checkpoint.
     """
     # Stage 1: Create worktree
-    wt_result = create_worktree(change_name, repo, verbose=verbose, workspace_dir=workspace_dir)
-    stages.append(wt_result)
-    if not wt_result.success:
+    if _should_run_stage("worktree", checkpoint):
+        wt_result = create_worktree(change_name, repo, verbose=verbose, workspace_dir=workspace_dir)
+        stages.append(wt_result)
+        if not wt_result.success:
+            logger.emit(
+                "worktree.failed",
+                stage="worktree",
+                error=wt_result.error,
+            )
+            typer.echo(f"[pipeline] failed at worktree stage: {wt_result.error}", err=True)
+            return PrResult(
+                success=False, stage="pipeline", error=wt_result.error, branch=wt_result.branch
+            )
+
         logger.emit(
-            "worktree.failed",
+            "worktree.created",
             stage="worktree",
-            error=wt_result.error,
-        )
-        typer.echo(f"[pipeline] failed at worktree stage: {wt_result.error}", err=True)
-        return PrResult(
-            success=False, stage="pipeline", error=wt_result.error, branch=wt_result.branch
+            branch=wt_result.branch,
+            worktree_path=str(wt_result.worktree_path),
         )
 
-    logger.emit(
-        "worktree.created",
-        stage="worktree",
-        branch=wt_result.branch,
-        worktree_path=str(wt_result.worktree_path),
-    )
+        if wt_result.worktree_path is None:
+            raise ValueError("worktree_path is None despite successful creation")
+        worktree_path = wt_result.worktree_path
+        branch = wt_result.branch
 
-    if wt_result.worktree_path is None:
-        raise ValueError("worktree_path is None despite successful creation")
-    worktree_path = wt_result.worktree_path
-    branch = wt_result.branch
+        # Checkpoint: after worktree creation
+        write_checkpoint(
+            repo,
+            _build_checkpoint(
+                run_id=run_id,
+                change_name=change_name,
+                repo=repo,
+                completed_stage="worktree",
+                stages=stages,
+                worktree_path=worktree_path,
+                branch=branch,
+                ecosystem=ecosystem,
+                auto_merge=auto_merge,
+                skip_review=skip_review,
+                review_cycle=review_cycle,
+            ),
+        )
+    else:
+        # Restore from checkpoint
+        if checkpoint is None or checkpoint.worktree_path is None:
+            raise ValueError("checkpoint.worktree_path is required when skipping worktree stage")
+        worktree_path = Path(checkpoint.worktree_path)
+        branch = checkpoint.branch or f"harness/{change_name}"
+        typer.echo(f"[pipeline] skipping worktree stage (resumed: {worktree_path})", err=True)
 
     # Compute repo knowledge dir for frequency-boosted catalog rules
     repo_knowledge_dir: Path | None = None
@@ -341,283 +530,358 @@ def _run_pipeline_inner(
         label_issue(issue_number, "harness:in-progress", repo, verbose=verbose)
 
     # Stage 2+3: Worker dispatch + eval with retry loop
-    attempt = 0
-    feedback: str | None = None
-    resume_session_id: str | None = None
-    prior_worker_result: WorkerResult | None = None
+    worker_result: WorkerResult | None = None
     eval_result: EvalResult | None = None
+    resume_session_id: str | None = None
 
-    while attempt <= max_retries:
-        # Pre-work eval on retries: if the prior worker produced commits,
-        # run eval first — the commits may have already fixed the issue.
-        if (
-            attempt > 0
-            and prior_worker_result is not None
-            and prior_worker_result.commits_ahead > 0
-        ):
-            typer.echo("[pipeline] running pre-work eval before retry", err=True)
-            pre_work_eval = run_eval(
-                worktree_path, eval_commands=eval_commands, verbose=verbose, logger=logger
-            )
-            logger.emit(
-                "eval.pre_work",
-                stage="eval",
-                success=pre_work_eval.success,
-                commands_passed=pre_work_eval.commands_passed,
-                commands_run=pre_work_eval.commands_run,
-            )
-            if pre_work_eval.success:
-                typer.echo("[pipeline] pre-work eval passed, skipping retry", err=True)
-                eval_result = pre_work_eval
-                # Use prior worker result for PR metadata. If the worker
-                # reported failure (e.g. zero-commit detection glitch) but
-                # actually produced valid commits, mark it successful so
-                # downstream consumers (manifest, PR body) aren't misled.
-                if not prior_worker_result.success:
-                    prior_worker_result = prior_worker_result.model_copy(
-                        update={"success": True, "error": None}
-                    )
-                worker_result = prior_worker_result
-                break
-            # Pre-work eval failed — use its feedback if available (fresher than stale)
-            feedback = pre_work_eval.feedback_prompt or feedback
+    if not _should_run_stage("worker_eval", checkpoint):
+        # Restore from checkpoint
+        if checkpoint is None:
+            raise ValueError("checkpoint is required when skipping worker_eval stage")
+        worker_result = checkpoint.last_worker_result
+        eval_result = checkpoint.last_eval_result
+        resume_session_id = checkpoint.session_id
+        typer.echo("[pipeline] skipping worker+eval stage (resumed)", err=True)
 
-        # Dispatch worker
-        if feedback:
-            typer.echo(f"[pipeline] retry {attempt}/{max_retries} with feedback", err=True)
+    if _should_run_stage("worker_eval", checkpoint):
+        attempt = 0
+        feedback: str | None = None
+        resume_session_id = None
+        prior_worker_result: WorkerResult | None = None
 
-        logger.emit(
-            "worker.dispatched",
-            stage="worker",
-            attempt=attempt,
-            session_id=resume_session_id,
-            resumed=resume_session_id is not None,
-        )
-
-        worker_result = dispatch_worker(
-            change_name,
-            worktree_path,
-            base_branch=_get_worktree_base(repo),
-            max_turns=max_turns,
-            feedback=feedback,
-            model=model,
-            effort=effort,
-            max_budget_usd=max_budget_usd,
-            permission_mode=permission_mode,
-            verbose=verbose,
-            session_id=resume_session_id,
-            prompt=prompt,
-            ecosystem=ecosystem,
-            repo_knowledge_dir=repo_knowledge_dir,
-        )
-        stages.append(worker_result)
-
-        if not worker_result.success:
-            # Resume fallback: if we were resuming and it failed, try fresh dispatch
-            # in the same iteration without incrementing attempt
-            if resume_session_id is not None:
-                typer.echo(
-                    "[pipeline] session resume failed, retrying with fresh dispatch",
-                    err=True,
+        while attempt <= max_retries:
+            # Pre-work eval on retries: if the prior worker produced commits,
+            # run eval first — the commits may have already fixed the issue.
+            if (
+                attempt > 0
+                and prior_worker_result is not None
+                and prior_worker_result.commits_ahead > 0
+            ):
+                typer.echo("[pipeline] running pre-work eval before retry", err=True)
+                pre_work_eval = run_eval(
+                    worktree_path, eval_commands=eval_commands, verbose=verbose, logger=logger
                 )
                 logger.emit(
-                    "worker.resume_fallback",
-                    stage="worker",
-                    session_id=resume_session_id,
+                    "eval.pre_work",
+                    stage="eval",
+                    success=pre_work_eval.success,
+                    commands_passed=pre_work_eval.commands_passed,
+                    commands_run=pre_work_eval.commands_run,
                 )
-                resume_session_id = None
-                worker_result = dispatch_worker(
-                    change_name,
-                    worktree_path,
-                    base_branch=_get_worktree_base(repo),
-                    max_turns=max_turns,
-                    feedback=feedback,
-                    model=model,
-                    effort=effort,
-                    max_budget_usd=max_budget_usd,
-                    permission_mode=permission_mode,
-                    verbose=verbose,
-                    session_id=None,
-                    prompt=prompt,
-                    ecosystem=ecosystem,
-                    repo_knowledge_dir=repo_knowledge_dir,
-                )
-                stages.append(worker_result)
+                if pre_work_eval.success:
+                    typer.echo("[pipeline] pre-work eval passed, skipping retry", err=True)
+                    eval_result = pre_work_eval
+                    # Use prior worker result for PR metadata. If the worker
+                    # reported failure (e.g. zero-commit detection glitch) but
+                    # actually produced valid commits, mark it successful so
+                    # downstream consumers (manifest, PR body) aren't misled.
+                    if not prior_worker_result.success:
+                        prior_worker_result = prior_worker_result.model_copy(
+                            update={"success": True, "error": None}
+                        )
+                    worker_result = prior_worker_result
+                    break
+                # Pre-work eval failed — use its feedback if available (fresher than stale)
+                feedback = pre_work_eval.feedback_prompt or feedback
+
+            # Dispatch worker
+            if feedback:
+                typer.echo(f"[pipeline] retry {attempt}/{max_retries} with feedback", err=True)
+
+            logger.emit(
+                "worker.dispatched",
+                stage="worker",
+                attempt=attempt,
+                session_id=resume_session_id,
+                resumed=resume_session_id is not None,
+            )
+
+            worker_result = dispatch_worker(
+                change_name,
+                worktree_path,
+                base_branch=_get_worktree_base(repo),
+                max_turns=max_turns,
+                feedback=feedback,
+                model=model,
+                effort=effort,
+                max_budget_usd=max_budget_usd,
+                permission_mode=permission_mode,
+                verbose=verbose,
+                session_id=resume_session_id,
+                prompt=prompt,
+                ecosystem=ecosystem,
+                repo_knowledge_dir=repo_knowledge_dir,
+            )
+            stages.append(worker_result)
 
             if not worker_result.success:
-                logger.emit(
-                    "worker.failed",
-                    stage="worker",
-                    duration_seconds=worker_result.duration_seconds,
-                    success=False,
-                    error=worker_result.error,
-                )
-                if attempt >= max_retries:
+                # Resume fallback: if we were resuming and it failed, try fresh dispatch
+                # in the same iteration without incrementing attempt
+                if resume_session_id is not None:
                     typer.echo(
-                        f"[pipeline] worker failed after {attempt + 1} attempt(s): "
-                        f"{worker_result.error}",
+                        "[pipeline] session resume failed, retrying with fresh dispatch",
                         err=True,
                     )
-                    cleanup_worktree(repo, worktree_path, branch, verbose=verbose)
-                    return PrResult(
-                        success=False,
-                        stage="pipeline",
-                        error=f"Worker failed: {worker_result.error}",
-                        branch=branch,
+                    logger.emit(
+                        "worker.resume_fallback",
+                        stage="worker",
+                        session_id=resume_session_id,
                     )
-                logger.emit(
-                    "retry.scheduled",
-                    attempt=attempt + 1,
-                    reason="worker_failed",
-                    max_retries=max_retries,
-                )
-                prior_worker_result = worker_result
-                attempt += 1
-                feedback = worker_result.error
-                resume_session_id = None
-                continue
+                    resume_session_id = None
+                    worker_result = dispatch_worker(
+                        change_name,
+                        worktree_path,
+                        base_branch=_get_worktree_base(repo),
+                        max_turns=max_turns,
+                        feedback=feedback,
+                        model=model,
+                        effort=effort,
+                        max_budget_usd=max_budget_usd,
+                        permission_mode=permission_mode,
+                        verbose=verbose,
+                        session_id=None,
+                        prompt=prompt,
+                        ecosystem=ecosystem,
+                        repo_knowledge_dir=repo_knowledge_dir,
+                    )
+                    stages.append(worker_result)
 
-        logger.emit(
-            "worker.completed",
-            stage="worker",
-            duration_seconds=worker_result.duration_seconds,
-            success=True,
-            commits_ahead=worker_result.commits_ahead,
-            cost_usd=worker_result.cost_usd,
-            session_id=worker_result.session_id,
-            context_usage_pct=worker_result.context_usage_pct,
-        )
+                if not worker_result.success:
+                    logger.emit(
+                        "worker.failed",
+                        stage="worker",
+                        duration_seconds=worker_result.duration_seconds,
+                        success=False,
+                        error=worker_result.error,
+                    )
+                    if attempt >= max_retries:
+                        typer.echo(
+                            f"[pipeline] worker failed after {attempt + 1} attempt(s): "
+                            f"{worker_result.error}",
+                            err=True,
+                        )
+                        cleanup_worktree(repo, worktree_path, branch, verbose=verbose)
+                        return PrResult(
+                            success=False,
+                            stage="pipeline",
+                            error=f"Worker failed: {worker_result.error}",
+                            branch=branch,
+                        )
+                    logger.emit(
+                        "retry.scheduled",
+                        attempt=attempt + 1,
+                        reason="worker_failed",
+                        max_retries=max_retries,
+                    )
+                    prior_worker_result = worker_result
+                    attempt += 1
+                    feedback = worker_result.error
+                    resume_session_id = None
+                    continue
 
-        # Run eval
-        actual_commands = eval_commands or BOOTSTRAP_EVAL_COMMANDS
-        logger.emit("eval.started", stage="eval", command_count=len(actual_commands))
-
-        eval_result = run_eval(
-            worktree_path, eval_commands=eval_commands, verbose=verbose, logger=logger
-        )
-        stages.append(eval_result)
-
-        logger.emit(
-            "eval.completed",
-            stage="eval",
-            success=eval_result.success,
-            commands_passed=eval_result.commands_passed,
-            commands_run=eval_result.commands_run,
-        )
-
-        if eval_result.success:
-            typer.echo("[pipeline] eval passed, creating PR", err=True)
-            break
-
-        # Eval failed — decide whether to resume or fresh dispatch on retry
-        if attempt >= max_retries:
-            typer.echo(
-                f"[pipeline] eval failed after {attempt + 1} attempt(s): {eval_result.error}",
-                err=True,
+            logger.emit(
+                "worker.completed",
+                stage="worker",
+                duration_seconds=worker_result.duration_seconds,
+                success=True,
+                commits_ahead=worker_result.commits_ahead,
+                cost_usd=worker_result.cost_usd,
+                session_id=worker_result.session_id,
+                context_usage_pct=worker_result.context_usage_pct,
             )
+
+            # Run eval
+            actual_commands = eval_commands or BOOTSTRAP_EVAL_COMMANDS
+            logger.emit("eval.started", stage="eval", command_count=len(actual_commands))
+
+            eval_result = run_eval(
+                worktree_path, eval_commands=eval_commands, verbose=verbose, logger=logger
+            )
+            stages.append(eval_result)
+
+            logger.emit(
+                "eval.completed",
+                stage="eval",
+                success=eval_result.success,
+                commands_passed=eval_result.commands_passed,
+                commands_run=eval_result.commands_run,
+            )
+
+            if eval_result.success:
+                typer.echo("[pipeline] eval passed, creating PR", err=True)
+                break
+
+            # Eval failed — decide whether to resume or fresh dispatch on retry
+            if attempt >= max_retries:
+                typer.echo(
+                    f"[pipeline] eval failed after {attempt + 1} attempt(s): {eval_result.error}",
+                    err=True,
+                )
+                cleanup_worktree(repo, worktree_path, branch, verbose=verbose)
+                return PrResult(
+                    success=False,
+                    stage="pipeline",
+                    error=f"Eval failed after {attempt + 1} attempts: {eval_result.error}",
+                    branch=branch,
+                )
+
+            # Determine resume eligibility for next retry
+            ctx_pct = worker_result.context_usage_pct
+            if ctx_pct is not None and ctx_pct < 0.6 and worker_result.session_id is not None:
+                resume_session_id = worker_result.session_id
+                typer.echo(
+                    f"[pipeline] resuming session {resume_session_id} (context {ctx_pct:.0%})",
+                    err=True,
+                )
+            else:
+                resume_session_id = None
+                if ctx_pct is not None and ctx_pct >= 0.6:
+                    typer.echo(
+                        f"[pipeline] context usage {ctx_pct:.0%} exceeds threshold, "
+                        f"using fresh dispatch",
+                        err=True,
+                    )
+
+            # Write progress file for retry context (eval failed, retry will follow)
+            write_progress(worktree_path, attempt + 1, worker_result, eval_result)
+
+            logger.emit(
+                "retry.scheduled",
+                attempt=attempt + 1,
+                reason="eval_failed",
+                max_retries=max_retries,
+                resume_session_id=resume_session_id,
+            )
+            prior_worker_result = worker_result
+            attempt += 1
+            feedback = eval_result.feedback_prompt
+        else:
+            # Should not reach here, but safety net
             cleanup_worktree(repo, worktree_path, branch, verbose=verbose)
             return PrResult(
                 success=False,
                 stage="pipeline",
-                error=f"Eval failed after {attempt + 1} attempts: {eval_result.error}",
+                error="Max retries exceeded",
                 branch=branch,
             )
 
-        # Determine resume eligibility for next retry
-        ctx_pct = worker_result.context_usage_pct
-        if ctx_pct is not None and ctx_pct < 0.6 and worker_result.session_id is not None:
-            resume_session_id = worker_result.session_id
-            typer.echo(
-                f"[pipeline] resuming session {resume_session_id} (context {ctx_pct:.0%})",
-                err=True,
-            )
-        else:
-            resume_session_id = None
-            if ctx_pct is not None and ctx_pct >= 0.6:
-                typer.echo(
-                    f"[pipeline] context usage {ctx_pct:.0%} exceeds threshold, "
-                    f"using fresh dispatch",
-                    err=True,
-                )
-
-        # Write progress file for retry context (eval failed, retry will follow)
-        write_progress(worktree_path, attempt + 1, worker_result, eval_result)
-
-        logger.emit(
-            "retry.scheduled",
-            attempt=attempt + 1,
-            reason="eval_failed",
-            max_retries=max_retries,
-            resume_session_id=resume_session_id,
-        )
-        prior_worker_result = worker_result
-        attempt += 1
-        feedback = eval_result.feedback_prompt
-    else:
-        # Should not reach here, but safety net
-        cleanup_worktree(repo, worktree_path, branch, verbose=verbose)
-        return PrResult(
-            success=False,
-            stage="pipeline",
-            error="Max retries exceeded",
-            branch=branch,
+        # Checkpoint: after worker+eval completes
+        write_checkpoint(
+            repo,
+            _build_checkpoint(
+                run_id=run_id,
+                change_name=change_name,
+                repo=repo,
+                completed_stage="worker_eval",
+                stages=stages,
+                worktree_path=worktree_path,
+                branch=branch,
+                session_id=worker_result.session_id if worker_result else None,
+                last_worker_result=worker_result,
+                last_eval_result=eval_result,
+                ecosystem=ecosystem,
+                auto_merge=auto_merge,
+                skip_review=skip_review,
+                review_cycle=review_cycle,
+            ),
         )
 
     # Stage 4: Create PR
-    base_branch = _get_worktree_base(repo)
-    pr_result = create_pr(
-        change_name,
-        worktree_path,
-        branch,
-        eval_result,
-        worker_result=worker_result,
-        base_branch=base_branch,
-        verbose=verbose,
-        prompt=prompt,
-        issue_number=issue_number,
-    )
-    stages.append(pr_result)
+    if _should_run_stage("pr", checkpoint):
+        if eval_result is None:
+            raise ValueError("eval_result is None at PR stage")
+        base_branch = _get_worktree_base(repo)
+        pr_result = create_pr(
+            change_name,
+            worktree_path,
+            branch,
+            eval_result,
+            worker_result=worker_result,
+            base_branch=base_branch,
+            verbose=verbose,
+            prompt=prompt,
+            issue_number=issue_number,
+        )
+        stages.append(pr_result)
 
-    if not pr_result.success:
-        logger.emit("pr.failed", stage="pr", error=pr_result.error)
-        typer.echo(f"[pipeline] PR creation failed: {pr_result.error}", err=True)
-        cleanup_worktree(repo, worktree_path, branch, verbose=verbose)
-        typer.echo("[pipeline] complete (failed)", err=True)
-        return pr_result
+        if not pr_result.success:
+            logger.emit("pr.failed", stage="pr", error=pr_result.error)
+            typer.echo(f"[pipeline] PR creation failed: {pr_result.error}", err=True)
+            cleanup_worktree(repo, worktree_path, branch, verbose=verbose)
+            typer.echo("[pipeline] complete (failed)", err=True)
+            return pr_result
 
-    logger.emit(
-        "pr.created",
-        stage="pr",
-        pr_url=pr_result.pr_url,
-        branch=pr_result.branch,
-    )
+        logger.emit(
+            "pr.created",
+            stage="pr",
+            pr_url=pr_result.pr_url,
+            branch=pr_result.branch,
+        )
 
-    # Label issue with PR-created status and comment with PR URL (best-effort)
-    if issue_number is not None:
-        label_issue(issue_number, "harness:pr-created", repo, verbose=verbose)
-        if pr_result.pr_url:
-            comment_on_issue(issue_number, f"PR created: {pr_result.pr_url}", repo, verbose=verbose)
+        # Checkpoint: after PR creation
+        write_checkpoint(
+            repo,
+            _build_checkpoint(
+                run_id=run_id,
+                change_name=change_name,
+                repo=repo,
+                completed_stage="pr",
+                stages=stages,
+                worktree_path=worktree_path,
+                branch=branch,
+                pr_url=pr_result.pr_url,
+                session_id=resume_session_id,
+                last_worker_result=worker_result,
+                last_eval_result=eval_result,
+                ecosystem=ecosystem,
+                auto_merge=auto_merge,
+                skip_review=skip_review,
+                review_cycle=review_cycle,
+            ),
+        )
 
-    # Stage 4.5: Protected paths check
-    patterns = load_protected_patterns(repo)
-    if patterns:
-        changed = get_changed_files(worktree_path, base_branch)
-        protected_files = check_protected_files(changed, patterns)
+        # Label issue with PR-created status and comment with PR URL (best-effort)
+        if issue_number is not None:
+            label_issue(issue_number, "harness:pr-created", repo, verbose=verbose)
+            if pr_result.pr_url:
+                comment_on_issue(
+                    issue_number, f"PR created: {pr_result.pr_url}", repo, verbose=verbose
+                )
+
+        # Stage 4.5: Protected paths check
+        patterns = load_protected_patterns(repo)
+        if patterns:
+            changed = get_changed_files(worktree_path, base_branch)
+            protected_files = check_protected_files(changed, patterns)
+        else:
+            protected_files = []
+
+        if protected_files_out is not None:
+            protected_files_out.extend(protected_files)
+
+        if protected_files and pr_result.pr_url:
+            flag_pr_protected(pr_result.pr_url, protected_files, worktree_path, verbose)
+
+        logger.emit(
+            "protection.checked",
+            stage="protection",
+            protected_files=protected_files,
+            patterns_count=len(patterns),
+        )
     else:
-        protected_files = []
-
-    if protected_files_out is not None:
-        protected_files_out.extend(protected_files)
-
-    if protected_files and pr_result.pr_url:
-        flag_pr_protected(pr_result.pr_url, protected_files, worktree_path, verbose)
-
-    logger.emit(
-        "protection.checked",
-        stage="protection",
-        protected_files=protected_files,
-        patterns_count=len(patterns),
-    )
+        # Restore PR result from checkpoint
+        if checkpoint is None:
+            raise ValueError("checkpoint is required when skipping pr stage")
+        pr_result = PrResult(
+            success=True,
+            stage="pr",
+            pr_url=checkpoint.pr_url,
+            branch=checkpoint.branch or branch,
+        )
+        protected_files = list(checkpoint.protected_files)
+        if protected_files_out is not None:
+            protected_files_out.extend(protected_files)
+        typer.echo(f"[pipeline] skipping PR stage (resumed: {pr_result.pr_url})", err=True)
 
     # Stage 5: Review agents (parallel code review) with fix-retry loop
     cycle = review_cycle if review_cycle is not None else ["low", "med", "high"]
@@ -809,6 +1073,29 @@ def _run_pipeline_inner(
             catalog_entries = load_catalog(ecosystem)
             update_frequency(repo_knowledge_dir, catalog_entries, last_round_findings)
 
+    # Checkpoint: after review cycle
+    write_checkpoint(
+        repo,
+        _build_checkpoint(
+            run_id=run_id,
+            change_name=change_name,
+            repo=repo,
+            completed_stage="review",
+            stages=stages,
+            worktree_path=worktree_path,
+            branch=branch,
+            pr_url=pr_result.pr_url,
+            session_id=resume_session_id,
+            last_worker_result=worker_result,
+            last_eval_result=eval_result,
+            protected_files=protected_files,
+            ecosystem=ecosystem,
+            auto_merge=auto_merge,
+            skip_review=skip_review,
+            review_cycle=review_cycle,
+        ),
+    )
+
     # Stage 6: OpenSpec review (skipped in prompt mode — no OpenSpec artifacts)
     if prompt is not None:
         typer.echo("[pipeline] skipping openspec review (prompt mode)", err=True)
@@ -853,6 +1140,29 @@ def _run_pipeline_inner(
             branch=branch,
             pr_url=pr_result.pr_url,
         )
+
+    # Checkpoint: after openspec review
+    write_checkpoint(
+        repo,
+        _build_checkpoint(
+            run_id=run_id,
+            change_name=change_name,
+            repo=repo,
+            completed_stage="openspec_review",
+            stages=stages,
+            worktree_path=worktree_path,
+            branch=branch,
+            pr_url=pr_result.pr_url,
+            session_id=resume_session_id,
+            last_worker_result=worker_result,
+            last_eval_result=eval_result,
+            protected_files=protected_files,
+            ecosystem=ecosystem,
+            auto_merge=auto_merge,
+            skip_review=skip_review,
+            review_cycle=review_cycle,
+        ),
+    )
 
     # Stage 7: Auto-merge (optional)
     if auto_merge and not pr_result.pr_url:
@@ -912,6 +1222,9 @@ def _run_pipeline_inner(
             blocked_reason=merge_result.merge_blocked_reason,
             ci_passed=merge_result.ci_passed,
         )
+
+    # Clean up checkpoint on successful completion
+    delete_checkpoint(repo, run_id)
 
     typer.echo("[pipeline] complete (success)", err=True)
     return pr_result

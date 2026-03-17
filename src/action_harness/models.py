@@ -138,7 +138,7 @@ class PipelineCheckpoint(BaseModel):
     run_id: str
     change_name: str
     repo_path: str
-    completed_stage: str  # one of: "worktree", "worker_eval", "pr", "review", "openspec_review"
+    completed_stage: Literal["worktree", "worker_eval", "pr", "review", "openspec_review"]
     worktree_path: str | None = None
     branch: str | None = None
     branch_head_sha: str | None = None

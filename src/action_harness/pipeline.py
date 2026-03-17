@@ -3,6 +3,7 @@
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Literal
 
 import typer
 
@@ -53,7 +54,8 @@ from action_harness.worktree import cleanup_worktree, create_worktree
 
 # Macro-stage progression order for checkpoint-resume.
 # Each checkpoint records the last FULLY completed stage.
-_STAGE_ORDER = ["worktree", "worker_eval", "pr", "review", "openspec_review"]
+MacroStage = Literal["worktree", "worker_eval", "pr", "review", "openspec_review"]
+_STAGE_ORDER: list[str] = ["worktree", "worker_eval", "pr", "review", "openspec_review"]
 
 
 def _should_run_stage(stage: str, checkpoint: PipelineCheckpoint | None) -> bool:
@@ -94,7 +96,7 @@ def _save_checkpoint(
     repo: Path,
     run_id: str,
     change_name: str,
-    completed_stage: str,
+    completed_stage: MacroStage,
     stages: list[StageResultUnion],
     worktree_path: Path | None = None,
     branch: str | None = None,
@@ -550,8 +552,7 @@ def _run_pipeline_inner(
         eval_result = checkpoint.last_eval_result
         resume_session_id = checkpoint.session_id
         typer.echo("[pipeline] skipping worker+eval stage (resumed)", err=True)
-
-    if _should_run_stage("worker_eval", checkpoint):
+    else:
         attempt = 0
         feedback: str | None = None
         resume_session_id = None

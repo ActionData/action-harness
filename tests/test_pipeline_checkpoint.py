@@ -39,18 +39,20 @@ def test_repo(tmp_path: Path) -> Path:
     """Create a temporary git repo with pyproject.toml and an OpenSpec change."""
     repo = tmp_path / "repo"
     repo.mkdir()
-    subprocess.run(["git", "init"], cwd=repo, capture_output=True, check=True)
+    subprocess.run(["git", "init"], cwd=repo, capture_output=True, check=True, timeout=120)
     subprocess.run(
         ["git", "config", "user.email", "test@test.com"],
         cwd=repo,
         capture_output=True,
         check=True,
+        timeout=120,
     )
     subprocess.run(
         ["git", "config", "user.name", "Test"],
         cwd=repo,
         capture_output=True,
         check=True,
+        timeout=120,
     )
     (repo / "pyproject.toml").write_text('[project]\nname = "test"\nversion = "0.1.0"\n')
     (repo / "tests").mkdir()
@@ -60,12 +62,13 @@ def test_repo(tmp_path: Path) -> Path:
     change_dir.mkdir(parents=True)
     (change_dir / "tasks.md").write_text("- [ ] 1.1 Add a feature\n")
     (repo / "src").mkdir()
-    subprocess.run(["git", "add", "."], cwd=repo, capture_output=True, check=True)
+    subprocess.run(["git", "add", "."], cwd=repo, capture_output=True, check=True, timeout=120)
     subprocess.run(
         ["git", "commit", "-m", "init"],
         cwd=repo,
         capture_output=True,
         check=True,
+        timeout=120,
     )
     return repo
 
@@ -319,6 +322,7 @@ class TestResumeLogic:
             cwd=test_repo,
             capture_output=True,
             text=True,
+            timeout=120,
         )
         assert wt_result.returncode == 0
         worktree_path = test_repo / "wt"
@@ -466,6 +470,7 @@ class TestResumeLogic:
             cwd=test_repo,
             capture_output=True,
             text=True,
+            timeout=120,
         )
         assert wt_result.returncode == 0
 
@@ -573,18 +578,26 @@ class TestResumeLogic:
             cwd=test_repo,
             capture_output=True,
             text=True,
+            timeout=120,
         )
         assert wt_result.returncode == 0
         worktree_path = test_repo / "wt"
 
         # Create a file + commit so there's something for the PR
         (worktree_path / "feature.py").write_text("# feature\n")
-        subprocess.run(["git", "add", "."], cwd=worktree_path, capture_output=True, check=True)
+        subprocess.run(
+            ["git", "add", "."],
+            cwd=worktree_path,
+            capture_output=True,
+            check=True,
+            timeout=120,
+        )
         subprocess.run(
             ["git", "commit", "-m", "Add feature"],
             cwd=worktree_path,
             capture_output=True,
             check=True,
+            timeout=120,
         )
 
         # Get actual HEAD SHA

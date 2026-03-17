@@ -42,7 +42,7 @@ def write_checkpoint(repo_path: Path, checkpoint: PipelineCheckpoint) -> None:
             except OSError:
                 pass
             raise
-    except OSError as e:
+    except Exception as e:
         typer.echo(f"[checkpoint] warning: failed to write checkpoint: {e}", err=True)
 
 

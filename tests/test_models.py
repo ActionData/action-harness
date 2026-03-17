@@ -482,6 +482,16 @@ class TestPipelineCheckpoint:
         assert checkpoint.skip_review is False
         assert checkpoint.review_cycle is None
 
+    def test_invalid_completed_stage_rejected(self) -> None:
+        with pytest.raises(Exception):  # noqa: B017 — Pydantic ValidationError
+            PipelineCheckpoint(
+                run_id="run-1",
+                change_name="c",
+                repo_path="/r",
+                completed_stage="typo_stage",  # type: ignore[arg-type]
+                timestamp="2026-01-01T00:00:00+00:00",
+            )
+
 
 class TestMergeResult:
     def test_success_merged(self) -> None:

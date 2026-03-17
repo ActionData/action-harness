@@ -14,4 +14,4 @@
 
 ## 4. Validation
 
-- [ ] 4.1 Run full validation suite: `uv run pytest -v`, `uv run ruff check .`, `uv run ruff format --check .`, `uv run mypy src/`. Fix all failures.
+- [x] 4.1 Run full validation suite: `uv run pytest -v`, `uv run ruff check .`, `uv run ruff format --check .`, `uv run mypy src/`. Fix all failures.

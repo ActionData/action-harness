@@ -1519,7 +1519,8 @@ def lead(
     interactive: bool = typer.Option(
         True,
         "--interactive/--no-interactive",
-        help="Spawn an interactive Claude Code session (default). Use --no-interactive for one-shot JSON plan.",
+        help="Spawn an interactive Claude Code session (default). "
+        "Use --no-interactive for one-shot JSON plan.",
     ),
     dispatch: bool = typer.Option(
         False,

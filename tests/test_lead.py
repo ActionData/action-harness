@@ -724,9 +724,7 @@ class TestLeadCLI:
         repo.mkdir()
         (repo / ".git").mkdir()
 
-        result = runner.invoke(
-            app, ["lead", "--repo", str(repo), "--interactive", "--dispatch"]
-        )
+        result = runner.invoke(app, ["lead", "--repo", str(repo), "--interactive", "--dispatch"])
 
         assert result.exit_code == 1
 

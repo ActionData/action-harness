@@ -20,10 +20,10 @@
 
 ## 5. CLI Command [depends: 2, 3, 4]
 
-- [ ] 5.1 Add `harness lead` command to `cli.py` with `--repo` (required Path), `--dispatch` (flag, default False), `--harness-home` (optional Path), and positional `prompt` argument (optional str, default "Review the repo state and recommend what to work on next"). Calls `gather_lead_context`, `dispatch_lead`, `parse_lead_plan`. Displays the plan as formatted output.
-- [ ] 5.2 When `--dispatch` is provided: for each entry in `plan.dispatches`, verify `repo_path / "openspec" / "changes" / dispatch.change / "tasks.md"` exists (directory AND tasks.md — a change without tasks isn't implementable). Execute dispatches sequentially. Run `harness run --change <name> --repo <path>` via subprocess with `timeout=7200`. If a dispatch exits non-zero, log the failure with change name and exit code, then continue to the next dispatch (failure does not abort remaining dispatches). Report all dispatch results at the end.
-- [ ] 5.3 Update CLI docstring for the `lead` command.
-- [ ] 5.4 Add tests: `--help` shows lead command. Lead with mock dispatch returns formatted plan. `--dispatch` with existing change triggers subprocess. `--dispatch` with nonexistent change logs warning and skips.
+- [x] 5.1 Add `harness lead` command to `cli.py` with `--repo` (required Path), `--dispatch` (flag, default False), `--harness-home` (optional Path), and positional `prompt` argument (optional str, default "Review the repo state and recommend what to work on next"). Calls `gather_lead_context`, `dispatch_lead`, `parse_lead_plan`. Displays the plan as formatted output.
+- [x] 5.2 When `--dispatch` is provided: for each entry in `plan.dispatches`, verify `repo_path / "openspec" / "changes" / dispatch.change / "tasks.md"` exists (directory AND tasks.md — a change without tasks isn't implementable). Execute dispatches sequentially. Run `harness run --change <name> --repo <path>` via subprocess with `timeout=7200`. If a dispatch exits non-zero, log the failure with change name and exit code, then continue to the next dispatch (failure does not abort remaining dispatches). Report all dispatch results at the end.
+- [x] 5.3 Update CLI docstring for the `lead` command.
+- [x] 5.4 Add tests: `--help` shows lead command. Lead with mock dispatch returns formatted plan. `--dispatch` with existing change triggers subprocess. `--dispatch` with nonexistent change logs warning and skips.
 
 ## 6. Validation [depends: all]
 

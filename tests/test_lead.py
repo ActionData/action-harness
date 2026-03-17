@@ -1,4 +1,4 @@
-"""Tests for the repo lead module: agent file, context gathering, dispatch, plan parsing."""
+"""Tests for the repo lead module: agent file, context gathering, dispatch, plan parsing, CLI."""
 
 import json
 import subprocess
@@ -6,8 +6,10 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+from typer.testing import CliRunner
 
 from action_harness.agents import parse_agent_file
+from action_harness.cli import app
 from action_harness.lead import (
     DispatchItem,
     IssueItem,
@@ -17,6 +19,8 @@ from action_harness.lead import (
     gather_lead_context,
     parse_lead_plan,
 )
+
+runner = CliRunner()
 
 
 # ---------------------------------------------------------------------------
@@ -366,3 +370,119 @@ class TestParseLeadPlan:
         assert isinstance(plan, LeadPlan)
         # result field is empty string, so we get an empty plan
         assert plan.summary == ""
+
+
+# ---------------------------------------------------------------------------
+# Task 5.4: CLI command tests
+# ---------------------------------------------------------------------------
+
+
+class TestLeadCLI:
+    def test_help_shows_lead_command(self) -> None:
+        """--help includes the lead command."""
+        result = runner.invoke(app, ["lead", "--help"])
+        assert result.exit_code == 0
+        assert "lead" in result.output.lower()
+        assert "--repo" in result.output
+        assert "--dispatch" in result.output
+
+    def test_lead_with_mock_dispatch(self, tmp_path: Path) -> None:
+        """Lead command with mock dispatch returns formatted plan."""
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        (repo / ".git").mkdir()
+
+        plan_data = {
+            "summary": "Test plan summary",
+            "proposals": [{"name": "improve-tests", "description": "More tests", "priority": "high"}],
+            "issues": [],
+            "dispatches": [],
+        }
+        mock_output = json.dumps({"result": json.dumps(plan_data)})
+
+        with (
+            patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"),
+            patch(
+                "action_harness.lead.dispatch_lead",
+                return_value=mock_output,
+            ),
+            patch("action_harness.lead._gather_issues", return_value=None),
+        ):
+            result = runner.invoke(app, ["lead", "--repo", str(repo)])
+
+        assert result.exit_code == 0
+        assert "Test plan summary" in result.output
+        assert "improve-tests" in result.output
+
+    def test_dispatch_with_existing_change(self, tmp_path: Path) -> None:
+        """--dispatch with existing change triggers subprocess."""
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        (repo / ".git").mkdir()
+        change_dir = repo / "openspec" / "changes" / "my-change"
+        change_dir.mkdir(parents=True)
+        (change_dir / "tasks.md").write_text("- [ ] Do something")
+
+        plan_data = {
+            "summary": "Dispatch test",
+            "proposals": [],
+            "issues": [],
+            "dispatches": [{"change": "my-change"}],
+        }
+        mock_output = json.dumps({"result": json.dumps(plan_data)})
+
+        dispatch_result = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="", stderr=""
+        )
+
+        with (
+            patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"),
+            patch(
+                "action_harness.lead.dispatch_lead",
+                return_value=mock_output,
+            ),
+            patch("action_harness.lead._gather_issues", return_value=None),
+            patch(
+                "action_harness.cli.subprocess.run", return_value=dispatch_result
+            ) as mock_dispatch_run,
+        ):
+            result = runner.invoke(app, ["lead", "--repo", str(repo), "--dispatch"])
+
+        assert result.exit_code == 0
+        assert "my-change" in result.output
+        # Verify harness run was called
+        mock_dispatch_run.assert_called_once()
+        call_cmd = mock_dispatch_run.call_args[0][0]
+        assert "run" in call_cmd
+        assert "--change" in call_cmd
+        assert "my-change" in call_cmd
+
+    def test_dispatch_with_nonexistent_change_skips(self, tmp_path: Path) -> None:
+        """--dispatch with nonexistent change logs warning and skips."""
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        (repo / ".git").mkdir()
+
+        plan_data = {
+            "summary": "Skip test",
+            "proposals": [],
+            "issues": [],
+            "dispatches": [{"change": "nonexistent-change"}],
+        }
+        mock_output = json.dumps({"result": json.dumps(plan_data)})
+
+        with (
+            patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"),
+            patch(
+                "action_harness.lead.dispatch_lead",
+                return_value=mock_output,
+            ),
+            patch("action_harness.lead._gather_issues", return_value=None),
+        ):
+            result = runner.invoke(app, ["lead", "--repo", str(repo), "--dispatch"])
+
+        assert result.exit_code == 0
+        # Should show the dispatch in the plan
+        assert "nonexistent-change" in result.output
+        # Should show failure in dispatch results
+        assert "no tasks.md" in result.output

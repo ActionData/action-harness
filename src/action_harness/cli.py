@@ -1456,3 +1456,169 @@ def history(
 
     for t in tags:
         typer.echo(f"  {t['date']}  {t['commit']}  {t['label']}")
+
+
+@app.command()
+def lead(
+    repo: Path = typer.Option(
+        ...,
+        help="Path to the target repository",
+    ),
+    dispatch: bool = typer.Option(
+        False,
+        "--dispatch",
+        help="Auto-dispatch recommended changes via harness run",
+    ),
+    harness_home: Path | None = typer.Option(
+        None,
+        "--harness-home",
+        help="Harness home directory (default: HARNESS_HOME env or ~/harness/)",
+    ),
+    prompt: str = typer.Argument(
+        "Review the repo state and recommend what to work on next",
+        help="Prompt for the lead agent",
+    ),
+) -> None:
+    """Spawn a repo lead agent to review state and plan next actions.
+
+    The lead agent reads repo context (roadmap, issues, assessment, recent
+    runs) and produces a structured plan with proposals, issues, and dispatch
+    recommendations.
+
+    Without `--dispatch`, the plan is displayed but not executed.
+    With `--dispatch`, recommended changes that have OpenSpec tasks are
+    dispatched sequentially via `harness run`.
+
+    Examples:
+
+        action-harness lead --repo .
+
+        action-harness lead --repo . "Focus on test coverage gaps"
+
+        action-harness lead --repo . --dispatch
+    """
+    import json as json_mod
+
+    from action_harness.agents import resolve_harness_agents_dir
+    from action_harness.lead import (
+        dispatch_lead,
+        gather_lead_context,
+        parse_lead_plan,
+    )
+
+    repo = repo.resolve()
+    _validate_common(repo)
+
+    resolved_home = harness_home
+    if resolved_home is None:
+        env_home = os.environ.get("HARNESS_HOME")
+        if env_home:
+            resolved_home = Path(env_home)
+
+    harness_agents_dir = resolve_harness_agents_dir()
+
+    # 1. Gather context
+    typer.echo("Gathering repo context...", err=True)
+    context = gather_lead_context(repo, harness_home=resolved_home)
+
+    # 2. Dispatch lead agent
+    typer.echo("Dispatching lead agent...", err=True)
+    raw_output = dispatch_lead(
+        repo_path=repo,
+        prompt=prompt,
+        context=context,
+        harness_agents_dir=harness_agents_dir,
+    )
+
+    # 3. Parse plan
+    plan = parse_lead_plan(raw_output)
+
+    # 4. Display plan
+    typer.echo("\n## Lead Plan\n")
+    if plan.summary:
+        typer.echo(f"**Summary:** {plan.summary}\n")
+
+    if plan.proposals:
+        typer.echo(f"### Proposals ({len(plan.proposals)})")
+        for p in plan.proposals:
+            typer.echo(f"  - [{p.priority}] **{p.name}**: {p.description}")
+        typer.echo("")
+
+    if plan.issues:
+        typer.echo(f"### Issues ({len(plan.issues)})")
+        for i in plan.issues:
+            labels = f" [{', '.join(i.labels)}]" if i.labels else ""
+            typer.echo(f"  - **{i.title}**{labels}: {i.body[:200]}")
+        typer.echo("")
+
+    if plan.dispatches:
+        typer.echo(f"### Dispatches ({len(plan.dispatches)})")
+        for d in plan.dispatches:
+            typer.echo(f"  - {d.change}")
+        typer.echo("")
+
+    if not plan.proposals and not plan.issues and not plan.dispatches:
+        typer.echo("No actionable items in plan.")
+        if plan.summary:
+            typer.echo(f"\nRaw summary: {plan.summary}")
+
+    # 5. Auto-dispatch if requested
+    if dispatch and plan.dispatches:
+        typer.echo("\n--- Auto-dispatching recommended changes ---\n", err=True)
+        dispatch_results: list[tuple[str, bool, str]] = []
+
+        for d in plan.dispatches:
+            change_dir = repo / "openspec" / "changes" / d.change
+            tasks_path = change_dir / "tasks.md"
+            if not change_dir.is_dir() or not tasks_path.is_file():
+                typer.echo(
+                    f"[lead] warning: skipping dispatch '{d.change}' — "
+                    f"no tasks.md found at {tasks_path}",
+                    err=True,
+                )
+                dispatch_results.append((d.change, False, "no tasks.md"))
+                continue
+
+            typer.echo(f"[lead] dispatching: harness run --change {d.change}", err=True)
+            try:
+                result = subprocess.run(
+                    [
+                        "action-harness",
+                        "run",
+                        "--change",
+                        d.change,
+                        "--repo",
+                        str(repo),
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=7200,
+                )
+                if result.returncode != 0:
+                    typer.echo(
+                        f"[lead] dispatch '{d.change}' failed (exit {result.returncode}): "
+                        f"{result.stderr[:200]}",
+                        err=True,
+                    )
+                    dispatch_results.append(
+                        (d.change, False, f"exit {result.returncode}")
+                    )
+                else:
+                    typer.echo(f"[lead] dispatch '{d.change}' succeeded", err=True)
+                    dispatch_results.append((d.change, True, "success"))
+            except subprocess.TimeoutExpired:
+                typer.echo(
+                    f"[lead] dispatch '{d.change}' timed out after 7200s", err=True
+                )
+                dispatch_results.append((d.change, False, "timeout"))
+            except (FileNotFoundError, OSError) as exc:
+                typer.echo(
+                    f"[lead] dispatch '{d.change}' failed to launch: {exc}", err=True
+                )
+                dispatch_results.append((d.change, False, f"launch error: {exc}"))
+
+        # Report results
+        typer.echo("\n### Dispatch Results\n")
+        for change_name, success, detail in dispatch_results:
+            status = "success" if success else f"failed ({detail})"
+            typer.echo(f"  - {change_name}: {status}")

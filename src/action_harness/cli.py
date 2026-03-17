@@ -1255,6 +1255,8 @@ def progress(
         if event.event in ("run.completed", "pipeline.error"):
             if event.event == "pipeline.error":
                 saw_error = True
+            elif event.event == "run.completed" and event.success is False:
+                saw_error = True
             return False
 
         return True

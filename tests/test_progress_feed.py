@@ -139,23 +139,45 @@ class TestTailEventLog:
         assert result is True
 
     def test_returns_false_on_idle_timeout(self, tmp_path: Path) -> None:
-        """No terminal event → idle timeout → returns False."""
+        """No terminal event + stale file mtime → idle timeout → returns False."""
         log_path = tmp_path / "test.events.jsonl"
         logger = EventLogger(log_path, "test-run")
         logger.emit("run.started", change_name="test")
         logger.close()
+
+        # Set mtime far in the past so idle_timeout triggers immediately
+        os.utime(log_path, (1000.0, 1000.0))
 
         events: list[PipelineEvent] = []
         result = tail_event_log(
             log_path,
             lambda ev: events.append(ev) is None,  # always returns True
             poll_interval=0.05,
-            idle_timeout=0.15,
+            idle_timeout=1.0,
         )
 
         assert result is False
         assert len(events) == 1
         assert events[0].event == "run.started"
+
+    def test_empty_file_exits_on_idle_timeout(self, tmp_path: Path) -> None:
+        """Empty event log (created but not written to) exits via idle timeout."""
+        log_path = tmp_path / "test.events.jsonl"
+        log_path.write_text("")
+
+        # Set mtime far in the past so idle_timeout triggers immediately
+        os.utime(log_path, (1000.0, 1000.0))
+
+        events: list[PipelineEvent] = []
+        result = tail_event_log(
+            log_path,
+            lambda ev: events.append(ev) is None,
+            poll_interval=0.05,
+            idle_timeout=1.0,
+        )
+
+        assert result is False
+        assert len(events) == 0
 
 
 class TestFormatEvent:

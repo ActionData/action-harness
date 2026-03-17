@@ -142,6 +142,29 @@ class TestProgressPipelineError:
         assert "worker crashed" in output
 
 
+class TestProgressFailedRun:
+    def test_failed_run_exits_with_code_1(self, tmp_path: Path) -> None:
+        repo = _make_repo_with_events(
+            tmp_path,
+            events=[
+                ("run.started", {"change_name": "test", "repo_path": str(tmp_path)}),
+                ("run.completed", {"success": False, "duration_seconds": 90.0}),
+            ],
+        )
+
+        result = runner.invoke(app, ["progress", "--repo", str(repo)])
+        assert result.exit_code == 1
+
+        output = _strip_ansi(result.output)
+        assert "failed" in output
+
+    def test_successful_run_exits_with_code_0(self, tmp_path: Path) -> None:
+        repo = _make_repo_with_events(tmp_path)
+
+        result = runner.invoke(app, ["progress", "--repo", str(repo)])
+        assert result.exit_code == 0
+
+
 class TestProgressFormatted:
     def test_formatted_output_shows_events(self, tmp_path: Path) -> None:
         repo = _make_repo_with_events(tmp_path)

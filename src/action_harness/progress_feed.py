@@ -3,7 +3,6 @@
 Tails event log files and formats pipeline events for human-readable display.
 """
 
-import json
 import time
 from collections.abc import Callable
 from datetime import datetime
@@ -19,7 +18,7 @@ def tail_event_log(
     log_path: Path,
     callback: Callable[[PipelineEvent], bool],
     poll_interval: float = 1.0,
-    idle_timeout: float = 5.0,
+    idle_timeout: float = 30.0,
 ) -> bool:
     """Tail an event log file, calling ``callback`` for each parsed event.
 
@@ -31,9 +30,11 @@ def tail_event_log(
     The callback receives each event and returns ``True`` to continue or
     ``False`` to stop (used for clean exit on ``run.completed``).
 
-    If no new data appears for ``idle_timeout`` seconds after the initial
-    read-through, the function exits — this prevents hanging indefinitely
-    on completed runs that lack a terminal event.
+    Uses file mtime to detect staleness: if the file hasn't been modified
+    for ``idle_timeout`` seconds, the function exits.  This handles both
+    completed runs (file not growing) and empty files (created but not yet
+    written to).  During active runs, each ``flush()`` updates mtime, so
+    the timeout won't fire during normal inter-stage gaps.
 
     Returns ``True`` if the callback signalled stop (normal exit), ``False``
     if the tail ended due to I/O error, interrupt, or idle timeout.
@@ -43,32 +44,33 @@ def tail_event_log(
     typer.echo(f"[progress] tailing {log_path}", err=True)
     try:
         with open(log_path) as fh:
-            idle_elapsed = 0.0
-            saw_any_data = False
             while True:
                 line = fh.readline()
                 if not line:
-                    # No more data — poll for new lines, but respect idle_timeout
-                    # to avoid hanging on completed runs without terminal events.
+                    # No more data — check if the file is still being written to
+                    # by comparing mtime against the current time.
                     time.sleep(poll_interval)
-                    idle_elapsed += poll_interval
-                    if saw_any_data and idle_elapsed >= idle_timeout:
+                    try:
+                        mtime = log_path.stat().st_mtime
+                    except OSError:
+                        typer.echo(f"[progress] log file disappeared: {log_path}", err=True)
+                        return False
+                    seconds_since_modified = time.time() - mtime
+                    if seconds_since_modified >= idle_timeout:
                         typer.echo(
-                            f"[progress] no new events for {idle_timeout:.0f}s, exiting",
+                            f"[progress] file unchanged for {idle_timeout:.0f}s, exiting",
                             err=True,
                         )
                         return False
                     continue
 
-                idle_elapsed = 0.0
                 line = line.strip()
                 if not line:
                     continue
 
-                saw_any_data = True
                 try:
                     event = PipelineEvent.model_validate_json(line)
-                except (json.JSONDecodeError, ValidationError) as exc:
+                except (ValueError, ValidationError) as exc:
                     typer.echo(
                         f"[progress] warning: skipping unparseable line: {exc}",
                         err=True,

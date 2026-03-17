@@ -85,6 +85,31 @@ The CLI help text (`--help`) is the API documentation. When adding or changing c
 ### Preview fidelity
 - `--dry-run` output must match what the pipeline would actually produce. If the PR title in dry-run says `[harness] prompt-fix-bug` but the actual PR says `[harness] Fix the bug`, the preview is misleading.
 
+## Agent definitions
+
+Agent prompts are stored as markdown files with YAML frontmatter. Two directories serve different purposes:
+
+**`.harness/agents/`** — agents dispatched by the autonomous pipeline. The harness loads these at runtime when dispatching review agents and OpenSpec reviewers. These run headless in worktrees.
+
+| Agent | Purpose |
+|-------|---------|
+| `bug-hunter.md` | Memory issues, race conditions, logic errors, edge cases |
+| `test-reviewer.md` | Test coverage, correctness, untested code paths |
+| `quality-reviewer.md` | Conventions, maintainability, architectural consistency |
+| `spec-compliance-reviewer.md` | Verifies task descriptions match the implementation diff |
+| `openspec-reviewer.md` | OpenSpec lifecycle validation, structural checks, semantic review |
+| `spec-writer.md` | Writes and reviews proposals, specs, designs, task breakdowns |
+
+**`.claude/agents/`** — agents available to Claude Code in interactive sessions. These appear in Claude Code's agent picker and run in the current working directory (not in worktrees).
+
+| Agent | Purpose |
+|-------|---------|
+| `spec-reviewer.md` | Reviews OpenSpec artifacts for correctness and agent-implementability |
+
+**When to add agents:**
+- Pipeline agents (autonomous, dispatched by harness) → `.harness/agents/`
+- Interactive agents (conversational, invoked by human via Claude Code) → `.claude/agents/`
+
 ## HARNESS.md convention
 
 `HARNESS.md` is a per-repo file that provides instructions to autonomous harness workers. It lives in the target repo root and is read at worker dispatch time, injected into the worker's system prompt under a `## Repo-Specific Instructions` header.

@@ -1,19 +1,19 @@
 ## 1. Data Models
 
-- [ ] 1.1 Add `RepoSummary` model to `models.py`: `name: str`, `path: Path`, `remote_url: str | None`, `has_harness_md: bool`, `has_protected_paths: bool`, `workspace_count: int`, `stale_workspace_count: int`, `active_changes: int`, `completed_changes: int`
-- [ ] 1.2 Add `WorkspaceInfo` model to `models.py`: `repo_name: str`, `change_name: str`, `path: Path`, `branch: str`, `last_commit_age_days: int`, `has_open_pr: bool`, `stale: bool`
-- [ ] 1.3 Add `ChangeInfo` model to `models.py`: `name: str`, `status: Literal["active", "completed"]`, `progress_pct: float`, `task_count: int`, `tasks_complete: int`
-- [ ] 1.4 Add `RepoDetail` model to `models.py`: `summary: RepoSummary`, `harness_md_content: str | None`, `protected_patterns: list[str]`, `workspaces: list[WorkspaceInfo]`, `roadmap_content: str | None`, `openspec_changes: list[ChangeInfo]`, `completed_changes: int`
-- [ ] 1.5 Add `RepoRoadmap` model to `models.py`: `repo_name: str`, `roadmap_content: str | None`, `active_changes: list[ChangeInfo]`, `completed_count: int`
+- [x] 1.1 Add `RepoSummary` model to `models.py`: `name: str`, `path: Path`, `remote_url: str | None`, `has_harness_md: bool`, `has_protected_paths: bool`, `workspace_count: int`, `stale_workspace_count: int`, `active_changes: int`, `completed_changes: int`
+- [x] 1.2 Add `WorkspaceInfo` model to `models.py`: `repo_name: str`, `change_name: str`, `path: Path`, `branch: str`, `last_commit_age_days: int`, `has_open_pr: bool`, `stale: bool`
+- [x] 1.3 Add `ChangeInfo` model to `models.py`: `name: str`, `status: Literal["active", "completed"]`, `progress_pct: float`, `task_count: int`, `tasks_complete: int`
+- [x] 1.4 Add `RepoDetail` model to `models.py`: `summary: RepoSummary`, `harness_md_content: str | None`, `protected_patterns: list[str]`, `workspaces: list[WorkspaceInfo]`, `roadmap_content: str | None`, `openspec_changes: list[ChangeInfo]`, `completed_changes: int`
+- [x] 1.5 Add `RepoRoadmap` model to `models.py`: `repo_name: str`, `roadmap_content: str | None`, `active_changes: list[ChangeInfo]`, `completed_count: int`
 
 ## 2. Data Layer
 
-- [ ] 2.1 Create `src/action_harness/dashboard.py` with `list_repos(harness_home: Path) -> list[RepoSummary]` — scan `repos/` dir, skip non-git directories (no `.git`), read git remote URL via `git remote get-url origin` (None on failure), check for HARNESS.md and `.harness/protected-paths.yml`, count workspaces and OpenSpec changes
-- [ ] 2.2 Add `repo_detail(harness_home: Path, repo_name: str) -> RepoDetail` — read HARNESS.md content (or None), parse protected-paths.yml using `load_protected_patterns` from `protection.py`, list workspaces with staleness, read roadmap, enumerate OpenSpec changes with progress, count completed changes
-- [ ] 2.3 Add `list_workspaces(harness_home: Path) -> list[WorkspaceInfo]` — scan `workspaces/<repo_name>/<change_name>/` dirs (two-level nesting), get branch name from `git rev-parse --abbrev-ref HEAD`, compute last commit age via `git log -1 --format=%ct`, check for open PR via `gh pr list --head <branch> --json number --limit 1` (best-effort, set `has_open_pr=False` on failure)
-- [ ] 2.4 Add `cross_repo_roadmap(harness_home: Path) -> list[RepoRoadmap]` — for each repo, read `openspec/ROADMAP.md` content and enumerate active changes with progress
-- [ ] 2.5 Add `read_openspec_changes(repo_path: Path) -> tuple[list[ChangeInfo], int]` — scan `openspec/changes/` for active changes (excluding `archive/` and hidden dirs), count `- [x]` vs `- [ ]` lines in each `tasks.md` for progress, count subdirectories in `openspec/changes/archive/` for completed count. Return `(active_changes, completed_count)`
-- [ ] 2.6 Add `read_roadmap(repo_path: Path) -> str | None` — read `openspec/ROADMAP.md` or return None
+- [x] 2.1 Create `src/action_harness/dashboard.py` with `list_repos(harness_home: Path) -> list[RepoSummary]` — scan `repos/` dir, skip non-git directories (no `.git`), read git remote URL via `git remote get-url origin` (None on failure), check for HARNESS.md and `.harness/protected-paths.yml`, count workspaces and OpenSpec changes
+- [x] 2.2 Add `repo_detail(harness_home: Path, repo_name: str) -> RepoDetail` — read HARNESS.md content (or None), parse protected-paths.yml using `load_protected_patterns` from `protection.py`, list workspaces with staleness, read roadmap, enumerate OpenSpec changes with progress, count completed changes
+- [x] 2.3 Add `list_workspaces(harness_home: Path) -> list[WorkspaceInfo]` — scan `workspaces/<repo_name>/<change_name>/` dirs (two-level nesting), get branch name from `git rev-parse --abbrev-ref HEAD`, compute last commit age via `git log -1 --format=%ct`, check for open PR via `gh pr list --head <branch> --json number --limit 1` (best-effort, set `has_open_pr=False` on failure)
+- [x] 2.4 Add `cross_repo_roadmap(harness_home: Path) -> list[RepoRoadmap]` — for each repo, read `openspec/ROADMAP.md` content and enumerate active changes with progress
+- [x] 2.5 Add `read_openspec_changes(repo_path: Path) -> tuple[list[ChangeInfo], int]` — scan `openspec/changes/` for active changes (excluding `archive/` and hidden dirs), count `- [x]` vs `- [ ]` lines in each `tasks.md` for progress, count subdirectories in `openspec/changes/archive/` for completed count. Return `(active_changes, completed_count)`
+- [x] 2.6 Add `read_roadmap(repo_path: Path) -> str | None` — read `openspec/ROADMAP.md` or return None
 
 ## 3. CLI Commands
 

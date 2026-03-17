@@ -1,7 +1,9 @@
 """Integration tests for the full pipeline. Uses a real git repo with mocked Claude CLI."""
 
 import json
+import shutil
 import subprocess
+from collections.abc import Generator
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -30,8 +32,11 @@ def _approved_review_result() -> OpenSpecReviewResult:
 
 
 @pytest.fixture
-def test_repo(tmp_path: Path) -> Path:
-    """Create a temporary git repo with pyproject.toml, a test, and an OpenSpec change."""
+def test_repo(tmp_path: Path) -> Generator[Path]:
+    """Create a temporary git repo with pyproject.toml, a test, and an OpenSpec change.
+
+    Cleans up any worktrees created in /tmp/action-harness-* after the test.
+    """
     repo = tmp_path / "repo"
     repo.mkdir()
 
@@ -75,7 +80,34 @@ def test_repo(tmp_path: Path) -> Path:
         check=True,
     )
 
-    return repo
+    yield repo
+
+    # Teardown: remove all worktrees registered with this repo
+    subprocess.run(
+        ["git", "worktree", "prune"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+    )
+    list_result = subprocess.run(
+        ["git", "worktree", "list", "--porcelain"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+    )
+    for line in list_result.stdout.splitlines():
+        if line.startswith("worktree "):
+            wt_path = Path(line.split(" ", 1)[1])
+            if wt_path != repo:
+                subprocess.run(
+                    ["git", "worktree", "remove", "--force", str(wt_path)],
+                    cwd=repo,
+                    capture_output=True,
+                )
+                # Clean up parent temp directory
+                parent = wt_path.parent
+                if parent.name.startswith("action-harness-") and parent.exists():
+                    shutil.rmtree(parent, ignore_errors=True)
 
 
 def _make_claude_mock(

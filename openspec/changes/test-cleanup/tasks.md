@@ -1,7 +1,7 @@
 ## 1. Test Fixture Cleanup
 
 - [x] 1.1 In `tests/test_worktree.py`: verify the existing `git_repo` fixture teardown (lines 13-63) actually cleans up all worktrees and temp dirs. If it works correctly, no changes needed. If worktrees leak despite the teardown, fix the teardown logic. Run `ls /tmp/action-harness-*/test-change 2>/dev/null | wc -l` before and after `uv run pytest tests/test_worktree.py` to verify.
-- [ ] 1.2 In `tests/test_integration.py`: convert `test_repo` fixture to a yield fixture with teardown that prunes git worktrees via `git worktree prune` and removes any `action-harness-*` temp dirs created during the test. Use the same pattern as `git_repo` in `test_worktree.py`. Also apply to `tests/test_pipeline_review.py` if it has a separate `test_repo` fixture.
+- [x] 1.2 In `tests/test_integration.py`: convert `test_repo` fixture to a yield fixture with teardown that prunes git worktrees via `git worktree prune` and removes any `action-harness-*` temp dirs created during the test. Use the same pattern as `git_repo` in `test_worktree.py`. Also apply to `tests/test_pipeline_review.py` if it has a separate `test_repo` fixture.
 
 ## 2. Pipeline Success Cleanup
 

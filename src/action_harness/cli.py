@@ -15,7 +15,13 @@ if TYPE_CHECKING:
     from action_harness.reporting import RunReport
 
 from action_harness import __version__
-from action_harness.models import ValidationError
+from action_harness.models import (
+    RepoDetail,
+    RepoRoadmap,
+    RepoSummary,
+    ValidationError,
+    WorkspaceInfo,
+)
 from action_harness.profiler import profile_repo
 from action_harness.review_agents import TOLERANCE_THRESHOLD
 from action_harness.slugify import slugify_prompt
@@ -892,3 +898,272 @@ def _print_report(report_data: RunReport, since: str | None = None) -> None:
             cost_str = f"${run.cost_usd:.2f}" if run.cost_usd is not None else "N/A"
             dur_str = f"{run.duration_seconds / 60.0:.0f}m" if run.duration_seconds else "N/A"
             typer.echo(f"  {run.date} {run.change_name}  {status}  {cost_str}  {dur_str}")
+
+
+# ── Dashboard: repos sub-app ─────────────────────────────────────────
+
+repos_app = typer.Typer(name="repos", add_completion=False)
+app.add_typer(repos_app, help="List and inspect onboarded repos.")
+
+
+@repos_app.callback(invoke_without_command=True)
+def repos_list(
+    ctx: typer.Context,
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+    harness_home: Path | None = typer.Option(
+        None,
+        "--harness-home",
+        help="Harness home directory (default: HARNESS_HOME env or ~/harness/)",
+    ),
+) -> None:
+    """List all onboarded repos with summary info."""
+    if ctx.invoked_subcommand is not None:
+        return
+
+    from action_harness.dashboard import list_repos
+
+    resolved_home = _resolve_harness_home(harness_home)
+    summaries = list_repos(resolved_home)
+
+    if json_output:
+        import json as json_mod
+
+        typer.echo(json_mod.dumps([s.model_dump(mode="json") for s in summaries], indent=2))
+        return
+
+    _format_repos_list(summaries)
+
+
+def _format_repos_list(summaries: list[RepoSummary]) -> None:
+    """Formatted text output for repos list."""
+    if not summaries:
+        typer.echo("No repos onboarded.")
+        return
+
+    typer.echo("Onboarded Repos")
+    typer.echo("═" * 60)
+
+    # Compute max name length for alignment
+    max_name = max(len(s.name) for s in summaries)
+
+    for s in summaries:
+        harness_mark = "✓" if s.has_harness_md else "✗"
+        protected_mark = "✓" if s.has_protected_paths else "✗"
+        completed_str = f", {s.completed_changes} completed" if s.completed_changes > 0 else ""
+        typer.echo(
+            f"  {s.name:<{max_name}}  "
+            f"HARNESS.md: {harness_mark}  "
+            f"Protected: {protected_mark}  "
+            f"Workspaces: {s.workspace_count}  "
+            f"Changes: {s.active_changes} active{completed_str}"
+        )
+
+    typer.echo("═" * 60)
+
+
+@repos_app.command()
+def show(
+    name: str = typer.Argument(help="Repo name to show details for"),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+    harness_home: Path | None = typer.Option(
+        None,
+        "--harness-home",
+        help="Harness home directory (default: HARNESS_HOME env or ~/harness/)",
+    ),
+) -> None:
+    """Show detailed view of a single onboarded repo."""
+    from action_harness.dashboard import repo_detail
+
+    resolved_home = _resolve_harness_home(harness_home)
+
+    # Check repo exists before calling
+    repo_dir = resolved_home / "repos" / name
+    if not repo_dir.is_dir():
+        typer.echo(
+            f"Repo '{name}' not found in {resolved_home}/repos/", err=True
+        )
+        raise typer.Exit(code=1)
+
+    try:
+        detail = repo_detail(resolved_home, name)
+    except FileNotFoundError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(code=1) from None
+
+    if json_output:
+        typer.echo(detail.model_dump_json(indent=2))
+        return
+
+    _format_repo_detail(detail)
+
+
+def _format_repo_detail(detail: RepoDetail) -> None:
+    """Formatted text output for repo detail."""
+    typer.echo(f"Repo: {detail.summary.name}")
+    typer.echo("═" * 60)
+
+    # HARNESS.md section
+    typer.echo("HARNESS.md")
+    typer.echo("─" * 40)
+    if detail.harness_md_content:
+        typer.echo(detail.harness_md_content.rstrip())
+    else:
+        typer.echo("  Not configured")
+    typer.echo("")
+
+    # Protected Patterns section
+    typer.echo("Protected Patterns")
+    typer.echo("─" * 40)
+    if detail.protected_patterns:
+        for p in detail.protected_patterns:
+            typer.echo(f"  • {p}")
+    else:
+        typer.echo("  None")
+    typer.echo("")
+
+    # Workspaces section
+    typer.echo("Workspaces")
+    typer.echo("─" * 40)
+    if detail.workspaces:
+        for ws in detail.workspaces:
+            stale_mark = "  (stale)" if ws.stale else ""
+            typer.echo(
+                f"  {ws.change_name}  {ws.branch}  {ws.last_commit_age_days}d ago{stale_mark}"
+            )
+    else:
+        typer.echo("  None")
+    typer.echo("")
+
+    # Roadmap section
+    typer.echo("Roadmap")
+    typer.echo("─" * 40)
+    if detail.roadmap_content:
+        typer.echo(detail.roadmap_content.rstrip())
+    else:
+        typer.echo("  No roadmap")
+    typer.echo("")
+
+    # OpenSpec Changes section
+    active = detail.summary.active_changes
+    completed = detail.completed_changes
+    typer.echo(f"OpenSpec Changes ({active} active, {completed} completed)")
+    typer.echo("─" * 40)
+    if detail.openspec_changes:
+        for c in detail.openspec_changes:
+            bar = _progress_bar(c.progress_pct)
+            typer.echo(f"  ◉ {c.name}  {bar} {c.progress_pct:.0f}%")
+    else:
+        typer.echo("  None")
+
+    typer.echo("═" * 60)
+
+
+def _progress_bar(pct: float, width: int = 20) -> str:
+    """Render a progress bar like [████░░░░░░░░░░░░░░░░]."""
+    filled = int(width * pct / 100.0)
+    empty = width - filled
+    return f"[{'█' * filled}{'░' * empty}]"
+
+
+# ── Dashboard: workspaces command ────────────────────────────────────
+
+
+@app.command()
+def workspaces(
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+    harness_home: Path | None = typer.Option(
+        None,
+        "--harness-home",
+        help="Harness home directory (default: HARNESS_HOME env or ~/harness/)",
+    ),
+) -> None:
+    """List all workspaces across all repos with staleness info."""
+    from action_harness.dashboard import list_workspaces
+
+    resolved_home = _resolve_harness_home(harness_home)
+    ws_list = list_workspaces(resolved_home)
+
+    if json_output:
+        import json as json_mod
+
+        typer.echo(json_mod.dumps([w.model_dump(mode="json") for w in ws_list], indent=2))
+        return
+
+    _format_workspaces(ws_list)
+
+
+def _format_workspaces(ws_list: list[WorkspaceInfo]) -> None:
+    """Formatted text output for workspaces list."""
+    if not ws_list:
+        typer.echo("No workspaces found.")
+        return
+
+    typer.echo("Workspaces")
+    typer.echo("═" * 60)
+
+    # Group by repo
+    current_repo = ""
+    for ws in ws_list:
+        if ws.repo_name != current_repo:
+            current_repo = ws.repo_name
+            typer.echo(current_repo)
+        stale_mark = "  (stale)" if ws.stale else ""
+        typer.echo(
+            f"  {ws.change_name}  {ws.branch}  {ws.last_commit_age_days}d ago{stale_mark}"
+        )
+    typer.echo("")
+    typer.echo("═" * 60)
+
+
+# ── Dashboard: roadmap command ───────────────────────────────────────
+
+
+@app.command()
+def roadmap(
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+    harness_home: Path | None = typer.Option(
+        None,
+        "--harness-home",
+        help="Harness home directory (default: HARNESS_HOME env or ~/harness/)",
+    ),
+) -> None:
+    """Cross-repo view of OpenSpec roadmaps and active changes."""
+    from action_harness.dashboard import cross_repo_roadmap
+
+    resolved_home = _resolve_harness_home(harness_home)
+    roadmaps = cross_repo_roadmap(resolved_home)
+
+    if json_output:
+        import json as json_mod
+
+        typer.echo(json_mod.dumps([r.model_dump(mode="json") for r in roadmaps], indent=2))
+        return
+
+    _format_roadmap(roadmaps)
+
+
+def _format_roadmap(roadmaps: list[RepoRoadmap]) -> None:
+    """Formatted text output for cross-repo roadmap."""
+    if not roadmaps:
+        typer.echo("No repos onboarded.")
+        return
+
+    typer.echo("Cross-Repo Roadmap")
+    typer.echo("═" * 60)
+
+    for rm in roadmaps:
+        completed_str = f", {rm.completed_count} completed" if rm.completed_count > 0 else ""
+        typer.echo(f"{rm.repo_name} ({len(rm.active_changes)} active{completed_str})")
+
+        if not rm.active_changes and rm.roadmap_content is None:
+            typer.echo("  No OpenSpec")
+        elif not rm.active_changes:
+            typer.echo("  No active changes")
+        else:
+            for c in rm.active_changes:
+                indicator = "✓" if c.progress_pct >= 100.0 else "◉"
+                bar = _progress_bar(c.progress_pct)
+                typer.echo(f"  {indicator} {c.name}  {bar} {c.progress_pct:.0f}%")
+        typer.echo("")
+
+    typer.echo("═" * 60)

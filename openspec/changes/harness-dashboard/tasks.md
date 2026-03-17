@@ -17,18 +17,18 @@
 
 ## 3. CLI Commands
 
-- [ ] 3.1 Add `repos` sub-app to `cli.py` using `typer.Typer(name="repos")` and `app.add_typer(repos_app)`. Use `@repos_app.callback(invoke_without_command=True)` so `harness repos` (no subcommand) runs the listing logic. Check `ctx.invoked_subcommand is not None` to skip listing when a subcommand is invoked.
-- [ ] 3.2 Add `show` command on `repos_app` — `@repos_app.command()` with `name: str` argument. Calls `repo_detail()` and prints formatted output. Exits with error `"Repo '<name>' not found in <harness_home>/repos/"` if repo dir doesn't exist.
-- [ ] 3.3 Add `workspaces` top-level command on `app` — calls `list_workspaces()` and prints formatted output
-- [ ] 3.4 Add `roadmap` top-level command on `app` — calls `cross_repo_roadmap()` and prints formatted output
-- [ ] 3.5 Add `--json` flag (typer `Option`, default `False`) to all four commands — when set, print `model.model_dump_json(indent=2)` instead of formatted text
+- [x] 3.1 Add `repos` sub-app to `cli.py` using `typer.Typer(name="repos")` and `app.add_typer(repos_app)`. Use `@repos_app.callback(invoke_without_command=True)` so `harness repos` (no subcommand) runs the listing logic. Check `ctx.invoked_subcommand is not None` to skip listing when a subcommand is invoked.
+- [x] 3.2 Add `show` command on `repos_app` — `@repos_app.command()` with `name: str` argument. Calls `repo_detail()` and prints formatted output. Exits with error `"Repo '<name>' not found in <harness_home>/repos/"` if repo dir doesn't exist.
+- [x] 3.3 Add `workspaces` top-level command on `app` — calls `list_workspaces()` and prints formatted output
+- [x] 3.4 Add `roadmap` top-level command on `app` — calls `cross_repo_roadmap()` and prints formatted output
+- [x] 3.5 Add `--json` flag (typer `Option`, default `False`) to all four commands — when set, print `model.model_dump_json(indent=2)` instead of formatted text
 
 ## 4. Formatting
 
-- [ ] 4.1 Implement formatted text output for `repos` list — each repo on one line with aligned columns: `<name>  HARNESS.md: ✓/✗  Protected: ✓/✗  Workspaces: N  Changes: N active`
-- [ ] 4.2 Implement formatted text output for `repos show` — sections separated by headers (═══): HARNESS.md content (or "Not configured"), Protected Patterns (bullet list or "None"), Workspaces (with `(stale)` marker), Roadmap (content or "No roadmap"), OpenSpec Changes (progress bars: `◉ name  [████░░░░░░] N%`)
-- [ ] 4.3 Implement formatted text output for `workspaces` — grouped by repo name header, each workspace shows: `<change_name>  <branch>  <N>d ago  (stale)?`
-- [ ] 4.4 Implement formatted text output for `roadmap` — grouped by repo name header, active changes with progress bars matching `openspec view` style (`◉`/`✓` indicators, `[████░░░░]` bars). Repos without OpenSpec show "No OpenSpec".
+- [x] 4.1 Implement formatted text output for `repos` list — each repo on one line with aligned columns: `<name>  HARNESS.md: ✓/✗  Protected: ✓/✗  Workspaces: N  Changes: N active`
+- [x] 4.2 Implement formatted text output for `repos show` — sections separated by headers (═══): HARNESS.md content (or "Not configured"), Protected Patterns (bullet list or "None"), Workspaces (with `(stale)` marker), Roadmap (content or "No roadmap"), OpenSpec Changes (progress bars: `◉ name  [████░░░░░░] N%`)
+- [x] 4.3 Implement formatted text output for `workspaces` — grouped by repo name header, each workspace shows: `<change_name>  <branch>  <N>d ago  (stale)?`
+- [x] 4.4 Implement formatted text output for `roadmap` — grouped by repo name header, active changes with progress bars matching `openspec view` style (`◉`/`✓` indicators, `[████░░░░]` bars). Repos without OpenSpec show "No OpenSpec".
 
 ## 5. Tests
 

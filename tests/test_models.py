@@ -8,6 +8,7 @@ import pytest
 from action_harness.models import (
     EvalResult,
     MergeResult,
+    PipelineCheckpoint,
     PrResult,
     ReviewFinding,
     ReviewResult,
@@ -370,6 +371,126 @@ class TestRunManifest:
         assert isinstance(worker, WorkerResult)
         assert worker.session_id == "sess_abc123"
         assert worker.context_usage_pct == pytest.approx(0.45)
+
+
+class TestPipelineCheckpoint:
+    def test_construction(self) -> None:
+        checkpoint = PipelineCheckpoint(
+            run_id="2026-01-01T00-00-00_00-00-test-change",
+            change_name="test-change",
+            repo_path="/tmp/repo",
+            completed_stage="worktree",
+            worktree_path="/tmp/wt",
+            branch="harness/test-change",
+            branch_head_sha="abc123",
+            session_id="sess-123",
+            timestamp="2026-01-01T00:00:00+00:00",
+            ecosystem="python",
+            auto_merge=True,
+            skip_review=False,
+            review_cycle=["low", "med"],
+        )
+        assert checkpoint.run_id == "2026-01-01T00-00-00_00-00-test-change"
+        assert checkpoint.change_name == "test-change"
+        assert checkpoint.completed_stage == "worktree"
+        assert checkpoint.worktree_path == "/tmp/wt"
+        assert checkpoint.branch == "harness/test-change"
+        assert checkpoint.branch_head_sha == "abc123"
+        assert checkpoint.session_id == "sess-123"
+        assert checkpoint.ecosystem == "python"
+        assert checkpoint.auto_merge is True
+        assert checkpoint.skip_review is False
+        assert checkpoint.review_cycle == ["low", "med"]
+        assert checkpoint.protected_files == []
+        assert checkpoint.stages == []
+        assert checkpoint.last_worker_result is None
+        assert checkpoint.last_eval_result is None
+        assert checkpoint.pr_url is None
+
+    def test_roundtrip_with_nested_stages(self) -> None:
+        worker = WorkerResult(
+            success=True,
+            stage="worker",
+            commits_ahead=3,
+            cost_usd=0.42,
+            session_id="sess-123",
+            context_usage_pct=0.45,
+        )
+        eval_res = EvalResult(
+            success=True,
+            stage="eval",
+            commands_run=4,
+            commands_passed=4,
+        )
+        wt = WorktreeResult(
+            success=True,
+            stage="worktree",
+            worktree_path=Path("/tmp/wt"),
+            branch="harness/test-change",
+        )
+        checkpoint = PipelineCheckpoint(
+            run_id="run-123",
+            change_name="test-change",
+            repo_path="/tmp/repo",
+            completed_stage="worker_eval",
+            worktree_path="/tmp/wt",
+            branch="harness/test-change",
+            branch_head_sha="deadbeef",
+            session_id="sess-123",
+            last_worker_result=worker,
+            last_eval_result=eval_res,
+            stages=[wt, worker, eval_res],
+            timestamp="2026-01-01T00:00:00+00:00",
+            ecosystem="python",
+            auto_merge=True,
+            review_cycle=["low", "high"],
+        )
+        raw = checkpoint.model_dump_json()
+        restored = PipelineCheckpoint.model_validate_json(raw)
+        assert restored.session_id == "sess-123"
+        assert restored.completed_stage == "worker_eval"
+        assert restored.auto_merge is True
+        assert restored.review_cycle == ["low", "high"]
+        assert len(restored.stages) == 3
+        assert isinstance(restored.stages[0], WorktreeResult)
+        assert restored.stages[0].worktree_path == Path("/tmp/wt")
+        assert isinstance(restored.stages[1], WorkerResult)
+        assert restored.stages[1].cost_usd == pytest.approx(0.42)
+        assert restored.stages[1].session_id == "sess-123"
+        assert isinstance(restored.stages[2], EvalResult)
+        assert restored.stages[2].commands_run == 4
+        assert restored.last_worker_result is not None
+        assert restored.last_worker_result.session_id == "sess-123"
+        assert restored.last_eval_result is not None
+        assert restored.last_eval_result.commands_passed == 4
+
+    def test_defaults(self) -> None:
+        checkpoint = PipelineCheckpoint(
+            run_id="run-1",
+            change_name="c",
+            repo_path="/r",
+            completed_stage="worktree",
+            timestamp="2026-01-01T00:00:00+00:00",
+        )
+        assert checkpoint.worktree_path is None
+        assert checkpoint.branch is None
+        assert checkpoint.branch_head_sha is None
+        assert checkpoint.pr_url is None
+        assert checkpoint.session_id is None
+        assert checkpoint.ecosystem == "unknown"
+        assert checkpoint.auto_merge is False
+        assert checkpoint.skip_review is False
+        assert checkpoint.review_cycle is None
+
+    def test_invalid_completed_stage_rejected(self) -> None:
+        with pytest.raises(Exception):  # noqa: B017 — Pydantic ValidationError
+            PipelineCheckpoint(
+                run_id="run-1",
+                change_name="c",
+                repo_path="/r",
+                completed_stage="typo_stage",  # type: ignore[arg-type]
+                timestamp="2026-01-01T00:00:00+00:00",
+            )
 
 
 class TestMergeResult:

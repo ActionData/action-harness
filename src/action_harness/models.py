@@ -128,6 +128,33 @@ StageResultUnion = Annotated[
 ]
 
 
+class PipelineCheckpoint(BaseModel):
+    """Snapshot of pipeline state for cross-stage resume after process failure.
+
+    Written after each macro-stage completes. On resume, the pipeline
+    skips completed stages and restores locals from the checkpoint.
+    """
+
+    run_id: str
+    change_name: str
+    repo_path: str
+    completed_stage: Literal["worktree", "worker_eval", "pr", "review", "openspec_review"]
+    worktree_path: str | None = None
+    branch: str | None = None
+    branch_head_sha: str | None = None
+    pr_url: str | None = None
+    session_id: str | None = None
+    last_worker_result: WorkerResult | None = None
+    last_eval_result: EvalResult | None = None
+    protected_files: list[str] = []
+    stages: list[StageResultUnion] = []
+    timestamp: str
+    ecosystem: str = "unknown"
+    auto_merge: bool = False
+    skip_review: bool = False
+    review_cycle: list[str] | None = None
+
+
 class RunManifest(BaseModel):
     """Complete record of a pipeline run, collecting all stage results."""
 

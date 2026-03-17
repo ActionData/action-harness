@@ -172,6 +172,11 @@ def run(
         "Each level: low (all severities), med (medium+), high (critical/high only). "
         "Default: low,med,high. Example: --review-cycle high (single strict-only round).",
     ),
+    resume: str | None = typer.Option(
+        None,
+        "--resume",
+        help='Resume from a checkpoint: "latest" or a specific run ID',
+    ),
     dry_run: bool = typer.Option(
         False, "--dry-run", help="Validate and print plan without executing"
     ),
@@ -201,6 +206,10 @@ def run(
     With `--auto-merge`, the pipeline merges the PR when all quality gates
     pass (eval clean, no protected files, review agents clean, OpenSpec
     review passed). Add `--wait-for-ci` to also wait for CI checks.
+
+    Use `--resume latest` to resume from the most recent checkpoint for the
+    given change, or `--resume <run-id>` to resume a specific run. If no
+    checkpoint exists, the pipeline starts fresh with a warning.
 
     The `--repo` flag accepts a local path (e.g., `.` or `/abs/path`),
     GitHub shorthand (e.g., `owner/repo`), or a full URL
@@ -356,7 +365,27 @@ def run(
         typer.echo(f"  auto-merge: {'enabled' if auto_merge else 'disabled'}")
         typer.echo(f"  wait-for-ci: {'enabled' if wait_for_ci else 'disabled'}")
         typer.echo(f"  max retries: {max_retries}")
+        if resume is not None:
+            typer.echo(f"  resume: {resume}")
         raise typer.Exit(code=0)
+
+    # Resolve --resume checkpoint
+    from action_harness.models import PipelineCheckpoint
+
+    resolved_checkpoint: PipelineCheckpoint | None = None
+    if resume is not None:
+        from action_harness.checkpoint import find_latest_checkpoint, read_checkpoint
+
+        if resume == "latest":
+            resolved_checkpoint = find_latest_checkpoint(resolved_repo, task_label)
+        else:
+            resolved_checkpoint = read_checkpoint(resolved_repo, resume)
+
+        if resolved_checkpoint is None:
+            typer.echo(
+                f"[resume] no checkpoint found for '{resume}', starting fresh",
+                err=True,
+            )
 
     from action_harness.pipeline import run_pipeline
 
@@ -379,6 +408,7 @@ def run(
         issue_number=issue,
         review_cycle=review_cycle_list,
         max_findings_per_retry=max_findings_per_retry,
+        checkpoint=resolved_checkpoint,
     )
 
     if manifest.manifest_path:
@@ -486,6 +516,7 @@ def _remove_workspace(ws_path: Path, repo_path: Path) -> None:
         cwd=repo_path,
         capture_output=True,
         text=True,
+        timeout=120,
     )
     if result.returncode != 0:
         typer.echo(
@@ -503,6 +534,7 @@ def _prune_worktrees(repo_path: Path) -> None:
         cwd=repo_path,
         capture_output=True,
         text=True,
+        timeout=120,
     )
     typer.echo(f"[clean] pruned worktrees in {repo_path}", err=True)
 

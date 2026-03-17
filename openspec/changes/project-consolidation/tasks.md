@@ -5,5 +5,5 @@
 - [x] Update README.md "How it works" section to reflect full 8-stage pipeline
 - [x] Move orphaned `openspec/changes/proposal.md` to `openspec/changes/archive/project-proposal.md`
 - [x] Add agent definitions section to CLAUDE.md explaining `.harness/agents/` vs `.claude/agents/`
-- [ ] Create `docs/README.md` indexing research and exploration documents
+- [x] Create `docs/README.md` indexing research and exploration documents
 - [ ] Run validation suite (pytest, ruff, mypy) to confirm no regressions

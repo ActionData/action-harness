@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Prerequisites field in .openspec.yaml
-Changes MAY have a `prerequisites` field in `.openspec.yaml` listing change names that must be completed before implementation.
+Changes SHALL support a `prerequisites` field in `.openspec.yaml` listing change names that must be completed before implementation.
 
 #### Scenario: Change with prerequisites
 - **WHEN** `.openspec.yaml` contains `prerequisites: [repo-lead, always-on]`
@@ -27,7 +27,7 @@ The `harness ready --repo <path>` command SHALL list all active changes whose pr
 - **THEN** the command SHALL output "No active changes found"
 
 ### Requirement: Prerequisite satisfaction check
-A prerequisite is satisfied when the named change has been archived (exists in `openspec/changes/archive/`) OR has a main spec (exists at `openspec/specs/<name>/`).
+A prerequisite SHALL be considered satisfied when the named change has been archived (exists in `openspec/changes/archive/`) OR has a main spec (exists at `openspec/specs/<name>/`).
 
 #### Scenario: Archived prerequisite
 - **WHEN** prerequisite `repo-lead` has an archive at `openspec/changes/archive/*-repo-lead/`

@@ -277,6 +277,37 @@ def _gather_catalog_frequency(harness_home: Path | None, max_section_chars: int)
     return section
 
 
+def _gather_ready_changes(repo_path: Path, max_section_chars: int) -> str | None:
+    """Gather ready changes from prerequisite computation.
+
+    Returns a "Ready Changes" section listing changes ready for implementation,
+    or a note if no changes are ready. Returns None if there are no active
+    changes at all (no openspec/changes/ directory or no changes in it).
+    """
+    typer.echo("[lead] gathering ready changes from prerequisites", err=True)
+
+    from action_harness.prerequisites import compute_readiness
+
+    ready_names, blocked_list = compute_readiness(repo_path)
+
+    if not ready_names and not blocked_list:
+        # No active changes at all — include a note
+        return "## Ready Changes\n\nNo changes currently ready for implementation."
+
+    lines = ["## Ready Changes", ""]
+    if ready_names:
+        for name in ready_names:
+            lines.append(f"- {name}")
+    else:
+        lines.append("No changes currently ready for implementation.")
+    lines.append("")
+
+    section = "\n".join(lines)
+    if len(section) > max_section_chars:
+        section = section[:max_section_chars] + "\n\n... (truncated)"
+    return section
+
+
 def gather_lead_context(
     repo_path: Path,
     harness_home: Path | None = None,
@@ -287,7 +318,7 @@ def gather_lead_context(
     Reads and assembles context sections, truncating each to max_section_chars:
     (a) ROADMAP.md, (b) CLAUDE.md, (c) HARNESS.md, (d) open issues,
     (e) assessment scores (quick base scan), (f) recent run summary,
-    (g) catalog frequency top entries.
+    (g) catalog frequency top entries, (h) ready changes.
 
     Returns the assembled context string.
     """
@@ -339,6 +370,11 @@ def gather_lead_context(
     freq = _gather_catalog_frequency(harness_home, max_section_chars)
     if freq:
         sections.append(freq)
+
+    # (h) Ready changes (from prerequisites)
+    ready_section = _gather_ready_changes(repo_path, max_section_chars)
+    if ready_section:
+        sections.append(ready_section)
 
     if not sections:
         typer.echo("[lead] no context found — repo may need bootstrapping", err=True)

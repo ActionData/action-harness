@@ -6,7 +6,7 @@
 ## 2. Pipeline Success Cleanup
 
 - [x] 2.1 In `pipeline.py:_run_pipeline_inner`: after the `[pipeline] complete (success)` log (line 520) and before `return pr_result` (line 521), add: `if workspace_dir is None: cleanup_worktree(repo, worktree_path, branch)`. This cleans up temp-dir worktrees on success. Managed workspaces (`workspace_dir is not None`) are preserved — cleaned via `action-harness clean`.
-- [ ] 2.2 Update the `cleanup_worktree` docstring in `worktree.py` (line 178): change "On PR creation: worktree is preserved (caller doesn't call this)" to "On success with temp dirs: cleaned up after all stages. Managed workspaces: preserved, cleaned via action-harness clean."
+- [x] 2.2 Update the `cleanup_worktree` docstring in `worktree.py` (line 178): change "On PR creation: worktree is preserved (caller doesn't call this)" to "On success with temp dirs: cleaned up after all stages. Managed workspaces: preserved, cleaned via action-harness clean."
 
 ## 3. Validation
 

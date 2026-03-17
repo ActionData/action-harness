@@ -174,7 +174,8 @@ def cleanup_worktree(
     """Remove a worktree. Optionally preserve the branch for inspection.
 
     On terminal failure: remove worktree, preserve branch for inspection.
-    On PR creation: worktree is preserved (caller doesn't call this).
+    On success with temp dirs: cleaned up after all stages. Managed workspaces:
+    preserved, cleaned via action-harness clean.
     """
     typer.echo(f"[worktree] cleaning up {worktree_path}", err=True)
 

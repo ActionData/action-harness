@@ -67,6 +67,13 @@ class TestFindEventLogByRunId:
         result = find_event_log_by_run_id(tmp_path, "nonexistent")
         assert result is None
 
+    def test_rejects_path_traversal_run_id(self, tmp_path: Path) -> None:
+        runs_dir = tmp_path / ".action-harness" / "runs"
+        runs_dir.mkdir(parents=True)
+
+        result = find_event_log_by_run_id(tmp_path, "../../etc/passwd")
+        assert result is None
+
 
 class TestTailEventLog:
     def test_calls_callback_for_each_event(self, tmp_path: Path) -> None:
@@ -195,6 +202,20 @@ class TestFormatEvent:
 
         assert "my-change" in result
         assert "repo: /tmp/repo" in result
+
+    def test_negative_elapsed_time_clamped_to_zero(self) -> None:
+        """Events before start_time show [00:00] instead of negative time."""
+        start = datetime(2026, 3, 16, 10, 0, 30, tzinfo=UTC)
+        event = PipelineEvent(
+            timestamp="2026-03-16T10:00:00+00:00",
+            event="worker.completed",
+            run_id="test-run",
+            metadata={"commits_ahead": 1, "context_usage_pct": 0.01},
+        )
+        result = format_event(event, start)
+
+        assert "[00:00]" in result
+        assert "-" not in result.split("]")[0]
 
     def test_elapsed_time_calculation(self) -> None:
         start = datetime(2026, 3, 16, 10, 0, 0, tzinfo=UTC)

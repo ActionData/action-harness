@@ -93,7 +93,14 @@ def find_event_log_by_run_id(repo_path: Path, run_id: str) -> Path | None:
     Looks for ``.action-harness/runs/<run_id>.events.jsonl`` and returns
     the ``Path`` if it exists, ``None`` otherwise.
     """
-    log_path = repo_path / ".action-harness" / "runs" / f"{run_id}.events.jsonl"
+    runs_dir = repo_path / ".action-harness" / "runs"
+    log_path = (runs_dir / f"{run_id}.events.jsonl").resolve()
+
+    # Prevent path traversal via crafted run_id (e.g. "../../etc/passwd")
+    if not log_path.is_relative_to(runs_dir.resolve()):
+        typer.echo(f"[progress] invalid run ID: {run_id}", err=True)
+        return None
+
     typer.echo(f"[progress] looking for {log_path}", err=True)
 
     if log_path.is_file():
@@ -119,7 +126,8 @@ def format_event(
     if start_time is not None:
         event_time = datetime.fromisoformat(event.timestamp)
         elapsed = event_time - start_time
-        total_seconds = int(elapsed.total_seconds())
+        # Guard against negative elapsed time (clock skew, out-of-order events)
+        total_seconds = max(0, int(elapsed.total_seconds()))
         minutes = total_seconds // 60
         seconds = total_seconds % 60
         time_prefix = f"[{minutes:02d}:{seconds:02d}]"

@@ -118,6 +118,24 @@ class TestProgressJson:
         assert events[2].event == "run.completed"
 
 
+class TestProgressPipelineError:
+    def test_pipeline_error_exits_with_code_1(self, tmp_path: Path) -> None:
+        runs_dir = tmp_path / ".action-harness" / "runs"
+        runs_dir.mkdir(parents=True)
+
+        log_path = runs_dir / "error-run.events.jsonl"
+        logger = EventLogger(log_path, "error-run")
+        logger.emit("run.started", change_name="test-change", repo_path=str(tmp_path))
+        logger.emit("pipeline.error", error="eval timed out")
+        logger.close()
+
+        result = runner.invoke(app, ["progress", "--repo", str(tmp_path)])
+        assert result.exit_code == 1
+
+        output = _strip_ansi(result.output)
+        assert "pipeline.error" in output
+
+
 class TestProgressFormatted:
     def test_formatted_output_shows_events(self, tmp_path: Path) -> None:
         runs_dir = tmp_path / ".action-harness" / "runs"

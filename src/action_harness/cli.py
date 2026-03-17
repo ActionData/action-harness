@@ -1236,6 +1236,7 @@ def progress(
 
     # Mutable state for the callback closure
     start_time_holder: list[datetime | None] = [None]
+    saw_error: list[bool] = [False]
 
     def _on_event(event: PipelineEvent) -> bool:
         """Process each event: format and print, track start time."""
@@ -1250,11 +1251,14 @@ def progress(
             typer.echo(formatted)
 
         # Exit on terminal events
-        if event.event == "run.completed":
+        if event.event in ("run.completed", "pipeline.error"):
+            if event.event == "pipeline.error":
+                saw_error[0] = True
             return False
-        if event.event == "pipeline.error":
-            raise typer.Exit(code=1)
 
         return True
 
     tail_event_log(log_path, _on_event)
+
+    if saw_error[0]:
+        raise typer.Exit(code=1)

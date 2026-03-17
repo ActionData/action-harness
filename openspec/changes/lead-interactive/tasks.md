@@ -9,8 +9,8 @@
 
 ## 3. Tests
 
-- [ ] 3.1 Add unit tests for `dispatch_lead_interactive()` — verify the subprocess command is constructed correctly (no `-p`, `--system-prompt`, `--append-system-prompt`, positional prompt). Mock `subprocess.run`.
-- [ ] 3.2 Add CLI tests for the interactive flag — verify `--dispatch` implies non-interactive, verify `--interactive --dispatch` errors, verify default is interactive mode.
+- [x] 3.1 Add unit tests for `dispatch_lead_interactive()` — verify the subprocess command is constructed correctly (no `-p`, `--system-prompt`, `--append-system-prompt`, positional prompt). Mock `subprocess.run`.
+- [x] 3.2 Add CLI tests for the interactive flag — verify `--dispatch` implies non-interactive, verify `--interactive --dispatch` errors, verify default is interactive mode.
 
 ## 4. Validation
 

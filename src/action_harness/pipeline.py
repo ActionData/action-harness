@@ -81,16 +81,19 @@ def _get_branch_head_sha(worktree_path: Path) -> str | None:
             timeout=120,
         )
         if result.returncode == 0:
-            return result.stdout.strip()
+            sha = result.stdout.strip()
+            # Guard against mock objects in tests returning non-strings
+            if isinstance(sha, str):
+                return sha
     except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
         pass
     return None
 
 
-def _build_checkpoint(
+def _save_checkpoint(
+    repo: Path,
     run_id: str,
     change_name: str,
-    repo: Path,
     completed_stage: str,
     stages: list[StageResultUnion],
     worktree_path: Path | None = None,
@@ -104,31 +107,39 @@ def _build_checkpoint(
     auto_merge: bool = False,
     skip_review: bool = False,
     review_cycle: list[str] | None = None,
-) -> PipelineCheckpoint:
-    """Build a PipelineCheckpoint from current pipeline locals."""
-    branch_head_sha: str | None = None
-    if worktree_path is not None:
-        branch_head_sha = _get_branch_head_sha(worktree_path)
-    return PipelineCheckpoint(
-        run_id=run_id,
-        change_name=change_name,
-        repo_path=str(repo),
-        completed_stage=completed_stage,
-        worktree_path=str(worktree_path) if worktree_path is not None else None,
-        branch=branch,
-        branch_head_sha=branch_head_sha,
-        pr_url=pr_url,
-        session_id=session_id,
-        last_worker_result=last_worker_result,
-        last_eval_result=last_eval_result,
-        protected_files=protected_files or [],
-        stages=list(stages),
-        timestamp=datetime.now(UTC).isoformat(),
-        ecosystem=ecosystem,
-        auto_merge=auto_merge,
-        skip_review=skip_review,
-        review_cycle=review_cycle,
-    )
+) -> None:
+    """Build and write a pipeline checkpoint. Never raises.
+
+    Checkpoint failure is non-fatal — it logs a warning but does not
+    mask the pipeline outcome.
+    """
+    try:
+        branch_head_sha: str | None = None
+        if worktree_path is not None:
+            branch_head_sha = _get_branch_head_sha(worktree_path)
+        checkpoint = PipelineCheckpoint(
+            run_id=run_id,
+            change_name=change_name,
+            repo_path=str(repo),
+            completed_stage=completed_stage,
+            worktree_path=str(worktree_path) if worktree_path is not None else None,
+            branch=branch,
+            branch_head_sha=branch_head_sha,
+            pr_url=pr_url,
+            session_id=session_id,
+            last_worker_result=last_worker_result,
+            last_eval_result=last_eval_result,
+            protected_files=protected_files or [],
+            stages=list(stages),
+            timestamp=datetime.now(UTC).isoformat(),
+            ecosystem=ecosystem,
+            auto_merge=auto_merge,
+            skip_review=skip_review,
+            review_cycle=review_cycle,
+        )
+        write_checkpoint(repo, checkpoint)
+    except Exception as e:
+        typer.echo(f"[checkpoint] warning: failed to save checkpoint: {e}", err=True)
 
 
 def _build_manifest(
@@ -491,21 +502,18 @@ def _run_pipeline_inner(
         branch = wt_result.branch
 
         # Checkpoint: after worktree creation
-        write_checkpoint(
+        _save_checkpoint(
             repo,
-            _build_checkpoint(
-                run_id=run_id,
-                change_name=change_name,
-                repo=repo,
-                completed_stage="worktree",
-                stages=stages,
-                worktree_path=worktree_path,
-                branch=branch,
-                ecosystem=ecosystem,
-                auto_merge=auto_merge,
-                skip_review=skip_review,
-                review_cycle=review_cycle,
-            ),
+            run_id=run_id,
+            change_name=change_name,
+            completed_stage="worktree",
+            stages=stages,
+            worktree_path=worktree_path,
+            branch=branch,
+            ecosystem=ecosystem,
+            auto_merge=auto_merge,
+            skip_review=skip_review,
+            review_cycle=review_cycle,
         )
     else:
         # Restore from checkpoint
@@ -766,24 +774,21 @@ def _run_pipeline_inner(
             )
 
         # Checkpoint: after worker+eval completes
-        write_checkpoint(
+        _save_checkpoint(
             repo,
-            _build_checkpoint(
-                run_id=run_id,
-                change_name=change_name,
-                repo=repo,
-                completed_stage="worker_eval",
-                stages=stages,
-                worktree_path=worktree_path,
-                branch=branch,
-                session_id=worker_result.session_id if worker_result else None,
-                last_worker_result=worker_result,
-                last_eval_result=eval_result,
-                ecosystem=ecosystem,
-                auto_merge=auto_merge,
-                skip_review=skip_review,
-                review_cycle=review_cycle,
-            ),
+            run_id=run_id,
+            change_name=change_name,
+            completed_stage="worker_eval",
+            stages=stages,
+            worktree_path=worktree_path,
+            branch=branch,
+            session_id=worker_result.session_id if worker_result else None,
+            last_worker_result=worker_result,
+            last_eval_result=eval_result,
+            ecosystem=ecosystem,
+            auto_merge=auto_merge,
+            skip_review=skip_review,
+            review_cycle=review_cycle,
         )
 
     # Stage 4: Create PR
@@ -819,25 +824,22 @@ def _run_pipeline_inner(
         )
 
         # Checkpoint: after PR creation
-        write_checkpoint(
+        _save_checkpoint(
             repo,
-            _build_checkpoint(
-                run_id=run_id,
-                change_name=change_name,
-                repo=repo,
-                completed_stage="pr",
-                stages=stages,
-                worktree_path=worktree_path,
-                branch=branch,
-                pr_url=pr_result.pr_url,
-                session_id=resume_session_id,
-                last_worker_result=worker_result,
-                last_eval_result=eval_result,
-                ecosystem=ecosystem,
-                auto_merge=auto_merge,
-                skip_review=skip_review,
-                review_cycle=review_cycle,
-            ),
+            run_id=run_id,
+            change_name=change_name,
+            completed_stage="pr",
+            stages=stages,
+            worktree_path=worktree_path,
+            branch=branch,
+            pr_url=pr_result.pr_url,
+            session_id=resume_session_id,
+            last_worker_result=worker_result,
+            last_eval_result=eval_result,
+            ecosystem=ecosystem,
+            auto_merge=auto_merge,
+            skip_review=skip_review,
+            review_cycle=review_cycle,
         )
 
         # Label issue with PR-created status and comment with PR URL (best-effort)
@@ -1074,26 +1076,23 @@ def _run_pipeline_inner(
             update_frequency(repo_knowledge_dir, catalog_entries, last_round_findings)
 
     # Checkpoint: after review cycle
-    write_checkpoint(
+    _save_checkpoint(
         repo,
-        _build_checkpoint(
-            run_id=run_id,
-            change_name=change_name,
-            repo=repo,
-            completed_stage="review",
-            stages=stages,
-            worktree_path=worktree_path,
-            branch=branch,
-            pr_url=pr_result.pr_url,
-            session_id=resume_session_id,
-            last_worker_result=worker_result,
-            last_eval_result=eval_result,
-            protected_files=protected_files,
-            ecosystem=ecosystem,
-            auto_merge=auto_merge,
-            skip_review=skip_review,
-            review_cycle=review_cycle,
-        ),
+        run_id=run_id,
+        change_name=change_name,
+        completed_stage="review",
+        stages=stages,
+        worktree_path=worktree_path,
+        branch=branch,
+        pr_url=pr_result.pr_url,
+        session_id=resume_session_id,
+        last_worker_result=worker_result,
+        last_eval_result=eval_result,
+        protected_files=protected_files,
+        ecosystem=ecosystem,
+        auto_merge=auto_merge,
+        skip_review=skip_review,
+        review_cycle=review_cycle,
     )
 
     # Stage 6: OpenSpec review (skipped in prompt mode — no OpenSpec artifacts)
@@ -1142,26 +1141,23 @@ def _run_pipeline_inner(
         )
 
     # Checkpoint: after openspec review
-    write_checkpoint(
+    _save_checkpoint(
         repo,
-        _build_checkpoint(
-            run_id=run_id,
-            change_name=change_name,
-            repo=repo,
-            completed_stage="openspec_review",
-            stages=stages,
-            worktree_path=worktree_path,
-            branch=branch,
-            pr_url=pr_result.pr_url,
-            session_id=resume_session_id,
-            last_worker_result=worker_result,
-            last_eval_result=eval_result,
-            protected_files=protected_files,
-            ecosystem=ecosystem,
-            auto_merge=auto_merge,
-            skip_review=skip_review,
-            review_cycle=review_cycle,
-        ),
+        run_id=run_id,
+        change_name=change_name,
+        completed_stage="openspec_review",
+        stages=stages,
+        worktree_path=worktree_path,
+        branch=branch,
+        pr_url=pr_result.pr_url,
+        session_id=resume_session_id,
+        last_worker_result=worker_result,
+        last_eval_result=eval_result,
+        protected_files=protected_files,
+        ecosystem=ecosystem,
+        auto_merge=auto_merge,
+        skip_review=skip_review,
+        review_cycle=review_cycle,
     )
 
     # Stage 7: Auto-merge (optional)

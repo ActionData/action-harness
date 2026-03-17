@@ -14,12 +14,9 @@ CHECKPOINTS_DIR = ".action-harness/checkpoints"
 def write_checkpoint(repo_path: Path, checkpoint: PipelineCheckpoint) -> None:
     """Write a checkpoint file atomically (temp file + os.replace).
 
-    Creates the checkpoints directory if needed.
+    Creates the checkpoints directory if needed. Never raises — checkpoint
+    failure should not mask the pipeline outcome.
     """
-    checkpoints_dir = repo_path / CHECKPOINTS_DIR
-    checkpoints_dir.mkdir(parents=True, exist_ok=True)
-
-    target = checkpoints_dir / f"{checkpoint.run_id}.json"
     typer.echo(
         f"[checkpoint] writing checkpoint {checkpoint.run_id} "
         f"(stage: {checkpoint.completed_stage})",
@@ -27,6 +24,10 @@ def write_checkpoint(repo_path: Path, checkpoint: PipelineCheckpoint) -> None:
     )
 
     try:
+        checkpoints_dir = repo_path / CHECKPOINTS_DIR
+        checkpoints_dir.mkdir(parents=True, exist_ok=True)
+
+        target = checkpoints_dir / f"{checkpoint.run_id}.json"
         fd, tmp_path = tempfile.mkstemp(
             dir=str(checkpoints_dir), suffix=".tmp", prefix="checkpoint-"
         )
@@ -42,8 +43,7 @@ def write_checkpoint(repo_path: Path, checkpoint: PipelineCheckpoint) -> None:
                 pass
             raise
     except OSError as e:
-        typer.echo(f"[checkpoint] error writing checkpoint: {e}", err=True)
-        raise
+        typer.echo(f"[checkpoint] warning: failed to write checkpoint: {e}", err=True)
 
 
 def read_checkpoint(repo_path: Path, run_id: str) -> PipelineCheckpoint | None:
@@ -66,9 +66,7 @@ def read_checkpoint(repo_path: Path, run_id: str) -> PipelineCheckpoint | None:
         return None
 
 
-def find_latest_checkpoint(
-    repo_path: Path, change_name: str
-) -> PipelineCheckpoint | None:
+def find_latest_checkpoint(repo_path: Path, change_name: str) -> PipelineCheckpoint | None:
     """Find the most recent checkpoint for a given change name.
 
     Reads each .json file in .action-harness/checkpoints/, parses it, and
@@ -105,15 +103,11 @@ def find_latest_checkpoint(
                 latest = checkpoint
                 latest_ts = checkpoint.timestamp
     except OSError as e:
-        typer.echo(
-            f"[checkpoint] warning: failed to scan checkpoints: {e}", err=True
-        )
+        typer.echo(f"[checkpoint] warning: failed to scan checkpoints: {e}", err=True)
         return None
 
     if latest is not None:
-        typer.echo(
-            f"[checkpoint] found latest checkpoint: {latest.run_id}", err=True
-        )
+        typer.echo(f"[checkpoint] found latest checkpoint: {latest.run_id}", err=True)
     else:
         typer.echo(
             f"[checkpoint] no checkpoints found for change '{change_name}'",
@@ -139,6 +133,4 @@ def delete_checkpoint(repo_path: Path, run_id: str) -> None:
         target.unlink()
         typer.echo(f"[checkpoint] deleted checkpoint {run_id}", err=True)
     except OSError as e:
-        typer.echo(
-            f"[checkpoint] warning: failed to delete checkpoint: {e}", err=True
-        )
+        typer.echo(f"[checkpoint] warning: failed to delete checkpoint: {e}", err=True)

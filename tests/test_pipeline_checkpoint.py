@@ -327,8 +327,6 @@ class TestResumeLogic:
 
         # Track which stages actually run
         create_worktree_called = False
-        create_pr_called = False
-        dispatch_worker_called = False
 
         original_create_worktree = __import__(
             "action_harness.worktree", fromlist=["create_worktree"]

@@ -12,6 +12,63 @@ class ValidationError(Exception):
     """Raised when CLI input validation fails."""
 
 
+class RepoSummary(BaseModel):
+    """Summary of an onboarded repo."""
+
+    name: str
+    path: Path
+    remote_url: str | None
+    has_harness_md: bool
+    has_protected_paths: bool
+    workspace_count: int
+    stale_workspace_count: int
+    active_changes: int
+    completed_changes: int
+
+
+class WorkspaceInfo(BaseModel):
+    """Info about a single workspace (worktree)."""
+
+    repo_name: str
+    change_name: str
+    path: Path
+    branch: str
+    last_commit_age_days: int
+    has_open_pr: bool
+    stale: bool
+
+
+class ChangeInfo(BaseModel):
+    """Info about an OpenSpec change."""
+
+    name: str
+    status: Literal["active", "completed"]
+    progress_pct: float
+    task_count: int
+    tasks_complete: int
+
+
+class RepoDetail(BaseModel):
+    """Detailed view of a single repo."""
+
+    summary: RepoSummary
+    harness_md_content: str | None
+    protected_patterns: list[str]
+    workspaces: list[WorkspaceInfo]
+    roadmap_content: str | None
+    openspec_changes: list[ChangeInfo]
+    completed_changes: int
+
+
+class RepoRoadmap(BaseModel):
+    """Cross-repo OpenSpec roadmap view."""
+
+    repo_name: str
+    roadmap_content: str | None
+    active_changes: list[ChangeInfo]
+    completed_count: int
+
+
 class StageResult(BaseModel):
     """Base result type for all pipeline stages."""
 

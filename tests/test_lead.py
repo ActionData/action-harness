@@ -610,7 +610,26 @@ class TestGatherIssues:
 # ---------------------------------------------------------------------------
 
 
-class TestDispatchLeadNonZeroExit:
+class TestDispatchLeadEdgeCases:
+    def test_missing_agent_file_returns_error(self, tmp_path: Path) -> None:
+        """Missing lead.md agent file returns error JSON, doesn't crash."""
+        repo_path = tmp_path / "repo"
+        repo_path.mkdir()
+        agents_dir = tmp_path / "agents"
+        agents_dir.mkdir()
+        # Intentionally no lead.md file
+
+        output = dispatch_lead(
+            repo_path=repo_path,
+            prompt="test",
+            context="ctx",
+            harness_agents_dir=agents_dir,
+        )
+
+        data = json.loads(output)
+        assert "error" in data
+        assert "not found" in data["error"].lower()
+
     def test_nonzero_exit_returns_error(self, tmp_path: Path) -> None:
         """Claude CLI non-zero exit returns error JSON."""
         repo_path = tmp_path / "repo"

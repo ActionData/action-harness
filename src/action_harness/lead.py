@@ -378,7 +378,11 @@ def dispatch_lead(
         err=True,
     )
 
-    persona = load_agent_prompt("lead", repo_path, harness_agents_dir)
+    try:
+        persona = load_agent_prompt("lead", repo_path, harness_agents_dir)
+    except FileNotFoundError as exc:
+        typer.echo(f"[lead] agent file not found: {exc}", err=True)
+        return json.dumps({"error": f"Lead agent file not found: {exc}"})
     system_prompt = persona
     user_prompt = f"{context}\n\n## Your Task\n\n{prompt}"
 

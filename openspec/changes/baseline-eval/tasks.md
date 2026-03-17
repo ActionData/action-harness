@@ -12,9 +12,9 @@ Prerequisites: implement `clean-eval-environment` first so VIRTUAL_ENV stripping
 
 ## 3. Pipeline Integration
 
-- [ ] 3.1 In `pipeline.py:_run_pipeline_inner`: after worktree creation (after the assert block, before `attempt = 0`), call `baseline = run_baseline_eval(worktree_path, eval_commands, verbose)`. Emit `baseline_eval.started` and `baseline_eval.completed` events via `logger.emit()` with command count, pass count, and fail count.
-- [ ] 3.2 Pass `baseline=baseline` to `run_eval` in the main eval loop (~line 349) and in `_run_review_fix_retry` (~line 656). Add a `baseline: dict[str, bool] | None = None` parameter to `_run_review_fix_retry` and thread from `_run_pipeline_inner`.
-- [ ] 3.3 In `pipeline.py:_build_manifest`: add `baseline_eval: dict[str, bool] | None = None` parameter and set on manifest.
+- [x] 3.1 In `pipeline.py:_run_pipeline_inner`: after worktree creation (after the assert block, before `attempt = 0`), call `baseline = run_baseline_eval(worktree_path, eval_commands, verbose)`. Emit `baseline_eval.started` and `baseline_eval.completed` events via `logger.emit()` with command count, pass count, and fail count.
+- [x] 3.2 Pass `baseline=baseline` to `run_eval` in the main eval loop (~line 349) and in `_run_review_fix_retry` (~line 656). Add a `baseline: dict[str, bool] | None = None` parameter to `_run_review_fix_retry` and thread from `_run_pipeline_inner`.
+- [x] 3.3 In `pipeline.py:_build_manifest`: add `baseline_eval: dict[str, bool] | None = None` parameter and set on manifest.
 
 ## 4. Tests
 

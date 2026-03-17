@@ -11,7 +11,7 @@ from action_harness.agents import resolve_harness_agents_dir
 from action_harness.catalog.frequency import update_frequency
 from action_harness.catalog.loader import load_catalog
 from action_harness.checkpoint import delete_checkpoint, write_checkpoint
-from action_harness.evaluator import run_eval
+from action_harness.evaluator import run_baseline_eval, run_eval
 from action_harness.event_log import EventLogger
 from action_harness.merge import check_merge_gates, merge_pr, post_merge_blocked_comment
 from action_harness.merge import wait_for_ci as wait_for_ci_checks
@@ -154,6 +154,7 @@ def _build_manifest(
     pr_result: PrResult,
     profile: RepoProfile | None = None,
     protected_files: list[str] | None = None,
+    baseline_eval: dict[str, bool] | None = None,
 ) -> RunManifest:
     """Construct a RunManifest from collected stage data."""
     completed_at = datetime.now(UTC).isoformat()
@@ -193,6 +194,7 @@ def _build_manifest(
         needs_human=needs_human,
         protected_files=protected_files or [],
         profile=profile,
+        baseline_eval=baseline_eval or {},
     )
 
 
@@ -368,6 +370,7 @@ def run_pipeline(
     )
 
     protected_files: list[str] = []
+    baseline_eval_out: dict[str, bool] = {}
 
     try:
         pr_result = _run_pipeline_inner(
@@ -397,6 +400,7 @@ def run_pipeline(
             repo_name=repo_name,
             run_id=run_id,
             checkpoint=checkpoint,
+            baseline_eval_out=baseline_eval_out,
         )
     except Exception as e:
         typer.echo(f"[pipeline] unexpected error: {e}", err=True)
@@ -433,6 +437,7 @@ def run_pipeline(
         pr_result,
         profile=profile,
         protected_files=protected_files,
+        baseline_eval=baseline_eval_out,
     )
     manifest.event_log_path = str(log_path)
     _write_manifest(manifest, repo, run_id)
@@ -467,6 +472,7 @@ def _run_pipeline_inner(
     repo_name: str | None = None,
     run_id: str = "",
     checkpoint: PipelineCheckpoint | None = None,
+    baseline_eval_out: dict[str, bool] | None = None,
 ) -> PrResult:
     """Inner pipeline logic. Appends to stages list as side effect.
 
@@ -526,6 +532,24 @@ def _run_pipeline_inner(
         branch = checkpoint.branch or f"harness/{change_name}"
         typer.echo(f"[pipeline] skipping worktree stage (resumed: {worktree_path})", err=True)
 
+    # Run baseline eval before worker dispatch
+    actual_eval_commands = eval_commands or list(BOOTSTRAP_EVAL_COMMANDS)
+    logger.emit(
+        "baseline_eval.started",
+        command_count=len(actual_eval_commands),
+    )
+    baseline = run_baseline_eval(worktree_path, actual_eval_commands, verbose=verbose)
+    pass_count = sum(1 for v in baseline.values() if v)
+    fail_count = len(baseline) - pass_count
+    logger.emit(
+        "baseline_eval.completed",
+        command_count=len(baseline),
+        pass_count=pass_count,
+        fail_count=fail_count,
+    )
+    if baseline_eval_out is not None:
+        baseline_eval_out.update(baseline)
+
     # Compute repo knowledge dir for frequency-boosted catalog rules
     repo_knowledge_dir: Path | None = None
     if harness_home is not None and repo_name is not None:
@@ -569,7 +593,11 @@ def _run_pipeline_inner(
             ):
                 typer.echo("[pipeline] running pre-work eval before retry", err=True)
                 pre_work_eval = run_eval(
-                    worktree_path, eval_commands=eval_commands, verbose=verbose, logger=logger
+                    worktree_path,
+                    eval_commands=eval_commands,
+                    verbose=verbose,
+                    logger=logger,
+                    baseline=baseline,
                 )
                 logger.emit(
                     "eval.pre_work",
@@ -705,7 +733,11 @@ def _run_pipeline_inner(
             logger.emit("eval.started", stage="eval", command_count=len(actual_commands))
 
             eval_result = run_eval(
-                worktree_path, eval_commands=eval_commands, verbose=verbose, logger=logger
+                worktree_path,
+                eval_commands=eval_commands,
+                verbose=verbose,
+                logger=logger,
+                baseline=baseline,
             )
             stages.append(eval_result)
 
@@ -1018,6 +1050,7 @@ def _run_pipeline_inner(
                 max_findings_per_retry=max_findings_per_retry,
                 ecosystem=ecosystem,
                 repo_knowledge_dir=repo_knowledge_dir,
+                baseline=baseline,
             )
             if not last_fix_succeeded:
                 typer.echo("[pipeline] review fix-retry failed", err=True)
@@ -1386,6 +1419,7 @@ def _run_review_fix_retry(
     max_findings_per_retry: int = 5,
     ecosystem: str = "unknown",
     repo_knowledge_dir: Path | None = None,
+    baseline: dict[str, bool] | None = None,
 ) -> bool:
     """Re-dispatch worker with review feedback, re-run eval, push if passing.
 
@@ -1475,7 +1509,11 @@ def _run_review_fix_retry(
         return False
 
     eval_result = run_eval(
-        worktree_path, eval_commands=eval_commands, verbose=verbose, logger=logger
+        worktree_path,
+        eval_commands=eval_commands,
+        verbose=verbose,
+        logger=logger,
+        baseline=baseline,
     )
     stages.append(eval_result)
 

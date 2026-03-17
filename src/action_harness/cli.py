@@ -765,6 +765,12 @@ def report(
     from action_harness.reporting import aggregate_report, load_manifests
 
     repo = repo.resolve()
+    if not repo.exists():
+        typer.echo(f"Error: repository path does not exist: {repo}", err=True)
+        raise typer.Exit(code=1)
+    if not (repo / ".git").exists():
+        typer.echo(f"Error: not a git repository: {repo}", err=True)
+        raise typer.Exit(code=1)
     typer.echo(f"[report] starting report for {repo}", err=True)
 
     # Load manifests

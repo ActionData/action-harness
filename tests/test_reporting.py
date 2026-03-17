@@ -15,6 +15,7 @@ from action_harness.models import (
     ReviewFinding,
     ReviewResult,
     RunManifest,
+    StageResultUnion,
     WorkerResult,
     WorktreeResult,
 )
@@ -39,17 +40,17 @@ def _make_manifest(
     started_at: str = "2026-03-16T10:00:00+00:00",
     cost_usd: float | None = 1.50,
     duration: float = 120.0,
-    stages: list[object] | None = None,
+    stages: list[StageResultUnion] | None = None,
 ) -> RunManifest:
     """Create a minimal RunManifest for testing."""
     if stages is None:
-        stages_list = [
+        stages_list: list[StageResultUnion] = [
             WorktreeResult(success=True, worktree_path=Path("/tmp/wt")),
             WorkerResult(success=True, cost_usd=cost_usd),
             EvalResult(success=success, commands_run=3, commands_passed=3 if success else 2),
         ]
     else:
-        stages_list = stages  # type: ignore[assignment]
+        stages_list = stages
     return RunManifest(
         change_name=change_name,
         repo_path="/tmp/repo",
@@ -423,6 +424,11 @@ _runner = CliRunner()
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 
 
+def _init_git_repo(path: Path) -> None:
+    """Create a bare .git directory so the path passes git repo validation."""
+    (path / ".git").mkdir(exist_ok=True)
+
+
 def _strip_ansi(text: str) -> str:
     return _ANSI_RE.sub("", text)
 
@@ -443,6 +449,7 @@ class TestReportCLI:
         assert "report" in _strip_ansi(result.output).lower()
 
     def test_report_with_manifests(self, tmp_path: Path) -> None:
+        _init_git_repo(tmp_path)
         runs_dir = tmp_path / ".action-harness" / "runs"
         runs_dir.mkdir(parents=True)
         m = _make_manifest(success=True, cost_usd=1.50, duration=120.0)
@@ -454,6 +461,7 @@ class TestReportCLI:
         assert "1/1" in output
 
     def test_report_json_output(self, tmp_path: Path) -> None:
+        _init_git_repo(tmp_path)
         runs_dir = tmp_path / ".action-harness" / "runs"
         runs_dir.mkdir(parents=True)
         m = _make_manifest(success=True)
@@ -467,6 +475,7 @@ class TestReportCLI:
         assert "success_rate" in parsed
 
     def test_since_filters(self, tmp_path: Path) -> None:
+        _init_git_repo(tmp_path)
         runs_dir = tmp_path / ".action-harness" / "runs"
         runs_dir.mkdir(parents=True)
         old = _make_manifest(started_at="2020-01-01T00:00:00+00:00")
@@ -480,11 +489,13 @@ class TestReportCLI:
         assert parsed["total_runs"] == 1
 
     def test_no_manifests(self, tmp_path: Path) -> None:
+        _init_git_repo(tmp_path)
         result = _runner.invoke(app, ["report", "--repo", str(tmp_path)])
         output = _strip_ansi(result.output)
         assert "No runs found" in output
 
     def test_no_harness_home_omits_catalog(self, tmp_path: Path) -> None:
+        _init_git_repo(tmp_path)
         runs_dir = tmp_path / ".action-harness" / "runs"
         runs_dir.mkdir(parents=True)
         m = _make_manifest()

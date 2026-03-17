@@ -105,6 +105,8 @@ class EvalResult(StageResult):
     commands_passed: int = 0
     failed_command: str | None = None
     feedback_prompt: str | None = None
+    # Safe: Pydantic copies mutable defaults per-instance (not shared like dataclasses).
+    pre_existing_failures: list[str] = []
 
 
 class PrResult(StageResult):
@@ -210,6 +212,7 @@ class PipelineCheckpoint(BaseModel):
     auto_merge: bool = False
     skip_review: bool = False
     review_cycle: list[str] | None = None
+    baseline_eval: dict[str, bool] | None = None
 
 
 class RunManifest(BaseModel):
@@ -231,3 +234,4 @@ class RunManifest(BaseModel):
     needs_human: bool = False
     protected_files: list[str] = []
     profile: RepoProfile | None = None
+    baseline_eval: dict[str, bool] = {}

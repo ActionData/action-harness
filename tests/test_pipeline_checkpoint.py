@@ -694,3 +694,61 @@ class TestResumeLogic:
         assert call_args[1]["worker_result"] == worker
 
         assert pr_result.success is True
+
+    def test_resume_restores_baseline_from_checkpoint(self, test_repo: Path) -> None:
+        """On resume, baseline eval is restored from checkpoint, not re-run."""
+        mock = _make_claude_mock(commits=True)
+
+        # Create a real worktree
+        wt_result = subprocess.run(
+            ["git", "worktree", "add", "-b", "harness/test-bl", str(test_repo / "wt-bl")],
+            cwd=test_repo,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        assert wt_result.returncode == 0
+        worktree_path = test_repo / "wt-bl"
+
+        # Checkpoint with baseline_eval persisted
+        saved_baseline = {"uv run pytest -v": True, "uv run ruff check .": False}
+        checkpoint = self._make_pr_stage_checkpoint(
+            test_repo, worktree_path, branch="harness/test-bl"
+        )
+        checkpoint.baseline_eval = saved_baseline
+
+        with (
+            patch("action_harness.worker.subprocess.run", mock),
+            patch("action_harness.pipeline.run_baseline_eval") as mock_baseline,
+            patch(
+                "action_harness.pipeline.run_eval",
+                return_value=self._passing_eval(),
+            ),
+            patch("action_harness.pr.subprocess.run", mock),
+            patch(
+                "action_harness.pipeline.dispatch_openspec_review",
+                return_value=('{"result": "{}"}', 1.0),
+            ),
+            patch(
+                "action_harness.pipeline.parse_review_result",
+                return_value=_approved_review_result(),
+            ),
+            patch(
+                "action_harness.pipeline.push_archive_if_needed",
+                return_value=(False, None),
+            ),
+        ):
+            pr_result, manifest = run_pipeline(
+                "test-change",
+                test_repo,
+                max_retries=1,
+                skip_review=True,
+                checkpoint=checkpoint,
+            )
+
+        # run_baseline_eval should NOT have been called (restored from checkpoint)
+        assert not mock_baseline.called
+
+        # Baseline should be in the manifest from the restored checkpoint
+        assert manifest.baseline_eval == saved_baseline
+        assert pr_result.success is True

@@ -1058,7 +1058,8 @@ def _format_repo_detail(detail: RepoDetail) -> None:
 
 def _progress_bar(pct: float, width: int = 20) -> str:
     """Render a progress bar like [████░░░░░░░░░░░░░░░░]."""
-    filled = int(width * pct / 100.0)
+    clamped = max(0.0, min(100.0, pct))
+    filled = int(width * clamped / 100.0)
     empty = width - filled
     return f"[{'█' * filled}{'░' * empty}]"
 

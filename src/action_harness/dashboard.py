@@ -71,6 +71,9 @@ def read_openspec_changes(repo_path: Path) -> tuple[list[ChangeInfo], int]:
         if tasks_md.is_file():
             try:
                 content = tasks_md.read_text(encoding="utf-8")
+                # Only match top-level tasks (^- [ ]). Indented sub-items are
+                # intentionally excluded — they're subtask detail, not tracked
+                # progress items. This matches openspec's own task counting.
                 tasks_complete = len(re.findall(r"^- \[x\]", content, re.MULTILINE))
                 tasks_incomplete = len(re.findall(r"^- \[ \]", content, re.MULTILINE))
                 task_count = tasks_complete + tasks_incomplete
@@ -82,6 +85,8 @@ def read_openspec_changes(repo_path: Path) -> tuple[list[ChangeInfo], int]:
 
         progress_pct = (tasks_complete / task_count * 100.0) if task_count > 0 else 0.0
 
+        # status is always "active" here — archived (completed) changes live
+        # under archive/ and are counted but not enumerated as ChangeInfo.
         active.append(
             ChangeInfo(
                 name=entry.name,
@@ -127,7 +132,9 @@ def _get_workspace_info(ws_path: Path, repo_name: str, change_name: str) -> Work
         )
         return None
 
-    # Get branch
+    # Get branch. Detached HEAD returns "HEAD" — the gh pr list check will
+    # find no matching PR, so the workspace may be marked stale. This is
+    # acceptable: detached HEAD workspaces are likely abandoned.
     branch = "unknown"
     try:
         result = subprocess.run(
@@ -159,7 +166,9 @@ def _get_workspace_info(ws_path: Path, repo_name: str, change_name: str) -> Work
     except (FileNotFoundError, OSError, subprocess.TimeoutExpired, ValueError) as e:
         typer.echo(f"[dashboard] warning: git log failed: {e}", err=True)
 
-    # Check for open PR (best-effort)
+    # Check for open PR (best-effort). Silent failure is intentional per the
+    # design: if gh is unavailable or unauthenticated, staleness falls back to
+    # time-based only. This matches the spec's "graceful degradation" goal.
     has_open_pr = False
     try:
         result = subprocess.run(
@@ -247,18 +256,17 @@ def list_repos(harness_home: Path) -> list[RepoSummary]:
         has_harness_md = (entry / "HARNESS.md").is_file()
         has_protected_paths = (entry / ".harness" / "protected-paths.yml").is_file()
 
-        # Count workspaces for this repo (only valid git worktrees)
+        # Count workspaces cheaply by directory presence (no subprocess calls).
+        # Staleness requires git/gh subprocess calls and is deferred to
+        # repo_detail. stale_workspace_count is always 0 in the summary —
+        # use `repos show` for accurate staleness.
         ws_dir = harness_home / "workspaces" / entry.name
         workspace_count = 0
         stale_workspace_count = 0
         if ws_dir.is_dir():
             for ws in ws_dir.iterdir():
-                if ws.is_dir():
-                    info = _get_workspace_info(ws, entry.name, ws.name)
-                    if info is not None:
-                        workspace_count += 1
-                        if info.stale:
-                            stale_workspace_count += 1
+                if ws.is_dir() and (ws / ".git").exists():
+                    workspace_count += 1
 
         # Count OpenSpec changes
         active_changes_list, completed_changes = read_openspec_changes(entry)
@@ -308,7 +316,9 @@ def repo_detail(harness_home: Path, repo_name: str) -> RepoDetail:
     # Protected patterns
     protected_patterns = load_protected_patterns(repo_path)
 
-    # Workspaces for this repo
+    # Workspaces for this repo — uses _get_workspace_info for full detail
+    # (branch, staleness, PR check). list_repos intentionally skips this
+    # and counts directories cheaply to avoid N×M subprocess calls.
     workspaces: list[WorkspaceInfo] = []
     ws_dir = harness_home / "workspaces" / repo_name
     stale_workspace_count = 0

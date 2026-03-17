@@ -6,6 +6,8 @@ import time
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from action_harness.dashboard import (
     cross_repo_roadmap,
     list_repos,
@@ -297,3 +299,230 @@ def test_list_repos_empty(tmp_path: Path) -> None:
 
     summaries = list_repos(harness_home)
     assert summaries == []
+
+
+# ── Edge cases (from review findings) ────────────────────────────────
+
+
+def test_repo_detail_not_found(tmp_path: Path) -> None:
+    """repo_detail raises FileNotFoundError for missing repo."""
+    harness_home = tmp_path
+    (harness_home / "repos").mkdir()
+
+    with pytest.raises(FileNotFoundError, match="not found"):
+        repo_detail(harness_home, "nonexistent")
+
+
+def test_list_workspaces_skips_non_git(tmp_path: Path) -> None:
+    """list_workspaces skips non-git workspace directories."""
+    harness_home = tmp_path
+    # Create a workspace dir without .git
+    plain_dir = harness_home / "workspaces" / "repo1" / "not-a-worktree"
+    plain_dir.mkdir(parents=True)
+
+    workspaces = list_workspaces(harness_home)
+    assert workspaces == []
+
+
+def test_read_openspec_changes_unreadable_tasks(tmp_path: Path) -> None:
+    """read_openspec_changes handles unreadable tasks.md gracefully."""
+    change_dir = tmp_path / "openspec" / "changes" / "broken-change"
+    change_dir.mkdir(parents=True)
+    tasks = change_dir / "tasks.md"
+    tasks.write_text("- [x] done\n- [ ] todo\n")
+
+    # Make tasks.md a directory to force OSError on read
+    tasks.unlink()
+    tasks.mkdir()
+
+    changes, completed = read_openspec_changes(tmp_path)
+    assert len(changes) == 1
+    assert changes[0].task_count == 0
+    assert changes[0].tasks_complete == 0
+
+
+# ── CLI smoke tests ──────────────────────────────────────────────────
+
+
+def test_cli_repos_json(tmp_path: Path) -> None:
+    """CLI repos --json returns valid JSON array."""
+    from typer.testing import CliRunner
+
+    from action_harness.cli import app
+
+    runner = CliRunner()
+    repo = tmp_path / "repos" / "test-repo"
+    _init_git_repo(repo)
+
+    result = runner.invoke(app, ["repos", "--json", "--harness-home", str(tmp_path)])
+    assert result.exit_code == 0
+    data = json.loads(result.stdout)
+    assert isinstance(data, list)
+    assert len(data) == 1
+    assert data[0]["name"] == "test-repo"
+
+
+def test_cli_repos_formatted(tmp_path: Path) -> None:
+    """CLI repos formatted output contains repo name and markers."""
+    from typer.testing import CliRunner
+
+    from action_harness.cli import app
+
+    runner = CliRunner()
+    repo = tmp_path / "repos" / "my-repo"
+    _init_git_repo(repo)
+
+    result = runner.invoke(app, ["repos", "--harness-home", str(tmp_path)])
+    assert result.exit_code == 0
+    assert "my-repo" in result.stdout
+    assert "HARNESS.md:" in result.stdout
+    assert "✗" in result.stdout
+
+
+def test_cli_repos_show_json(tmp_path: Path) -> None:
+    """CLI repos show --json returns valid JSON."""
+    from typer.testing import CliRunner
+
+    from action_harness.cli import app
+
+    runner = CliRunner()
+    repo = tmp_path / "repos" / "test-repo"
+    _init_git_repo(repo)
+    (repo / "HARNESS.md").write_text("# Config\n")
+
+    result = runner.invoke(
+        app, ["repos", "show", "test-repo", "--json", "--harness-home", str(tmp_path)]
+    )
+    assert result.exit_code == 0
+    data = json.loads(result.stdout)
+    assert data["summary"]["name"] == "test-repo"
+    assert data["harness_md_content"] == "# Config\n"
+
+
+def test_cli_repos_show_not_found(tmp_path: Path) -> None:
+    """CLI repos show exits with error for missing repo."""
+    from typer.testing import CliRunner
+
+    from action_harness.cli import app
+
+    runner = CliRunner()
+    (tmp_path / "repos").mkdir()
+
+    result = runner.invoke(app, ["repos", "show", "nope", "--harness-home", str(tmp_path)])
+    assert result.exit_code == 1
+
+
+def test_cli_repos_show_formatted(tmp_path: Path) -> None:
+    """CLI repos show formatted output has section headers."""
+    from typer.testing import CliRunner
+
+    from action_harness.cli import app
+
+    runner = CliRunner()
+    repo = tmp_path / "repos" / "test-repo"
+    _init_git_repo(repo)
+
+    result = runner.invoke(app, ["repos", "show", "test-repo", "--harness-home", str(tmp_path)])
+    assert result.exit_code == 0
+    assert "HARNESS.md" in result.stdout
+    assert "Protected Patterns" in result.stdout
+    assert "Workspaces" in result.stdout
+    assert "Roadmap" in result.stdout
+    assert "OpenSpec Changes" in result.stdout
+
+
+def test_cli_workspaces_json(tmp_path: Path) -> None:
+    """CLI workspaces --json returns valid JSON array."""
+    from typer.testing import CliRunner
+
+    from action_harness.cli import app
+
+    runner = CliRunner()
+    # Empty workspaces
+    result = runner.invoke(app, ["workspaces", "--json", "--harness-home", str(tmp_path)])
+    assert result.exit_code == 0
+    data = json.loads(result.stdout)
+    assert data == []
+
+
+def test_cli_workspaces_formatted_empty(tmp_path: Path) -> None:
+    """CLI workspaces formatted shows 'No workspaces found.' when empty."""
+    from typer.testing import CliRunner
+
+    from action_harness.cli import app
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["workspaces", "--harness-home", str(tmp_path)])
+    assert result.exit_code == 0
+    assert "No workspaces found." in result.stdout
+
+
+def test_cli_roadmap_json(tmp_path: Path) -> None:
+    """CLI roadmap --json returns valid JSON array."""
+    from typer.testing import CliRunner
+
+    from action_harness.cli import app
+
+    runner = CliRunner()
+    repo = tmp_path / "repos" / "test-repo"
+    _init_git_repo(repo)
+
+    result = runner.invoke(app, ["roadmap", "--json", "--harness-home", str(tmp_path)])
+    assert result.exit_code == 0
+    data = json.loads(result.stdout)
+    assert isinstance(data, list)
+    assert len(data) == 1
+    assert data[0]["repo_name"] == "test-repo"
+
+
+def test_cli_roadmap_formatted(tmp_path: Path) -> None:
+    """CLI roadmap formatted shows repo names and No OpenSpec indicator."""
+    from typer.testing import CliRunner
+
+    from action_harness.cli import app
+
+    runner = CliRunner()
+    repo = tmp_path / "repos" / "test-repo"
+    _init_git_repo(repo)
+
+    result = runner.invoke(app, ["roadmap", "--harness-home", str(tmp_path)])
+    assert result.exit_code == 0
+    assert "test-repo" in result.stdout
+    assert "No OpenSpec" in result.stdout
+
+
+def test_cli_roadmap_with_progress(tmp_path: Path) -> None:
+    """CLI roadmap shows progress bars for active changes."""
+    from typer.testing import CliRunner
+
+    from action_harness.cli import app
+
+    runner = CliRunner()
+    repo = tmp_path / "repos" / "test-repo"
+    _init_git_repo(repo)
+    change_dir = repo / "openspec" / "changes" / "my-feature"
+    change_dir.mkdir(parents=True)
+    (change_dir / "tasks.md").write_text("- [x] done\n- [ ] todo\n")
+
+    result = runner.invoke(app, ["roadmap", "--harness-home", str(tmp_path)])
+    assert result.exit_code == 0
+    assert "◉" in result.stdout
+    assert "█" in result.stdout
+    assert "50%" in result.stdout
+
+
+def test_progress_bar_bounds() -> None:
+    """_progress_bar clamps values outside [0, 100]."""
+    from action_harness.cli import _progress_bar
+
+    bar_over = _progress_bar(150.0)
+    assert bar_over == "[████████████████████]"
+
+    bar_under = _progress_bar(-10.0)
+    assert bar_under == "[░░░░░░░░░░░░░░░░░░░░]"
+
+    bar_zero = _progress_bar(0.0)
+    assert bar_zero == "[░░░░░░░░░░░░░░░░░░░░]"
+
+    bar_full = _progress_bar(100.0)
+    assert bar_full == "[████████████████████]"

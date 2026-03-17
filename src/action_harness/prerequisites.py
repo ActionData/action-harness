@@ -70,22 +70,35 @@ def read_prerequisites(change_dir: Path) -> list[str]:
     return result
 
 
+def _extract_archive_change_name(dir_name: str) -> str | None:
+    """Extract the change name from an archive directory name.
+
+    Archive dirs are formatted as YYYY-MM-DD-<change-name>.
+    Returns the change name, or None if the format doesn't match.
+    """
+    parts = dir_name.split("-", 3)
+    if len(parts) >= 4:
+        return "-".join(parts[3:])
+    return None
+
+
 def is_prerequisite_satisfied(name: str, repo_path: Path) -> bool:
     """Check if a prerequisite is satisfied.
 
     A prerequisite is satisfied when:
-    (a) any directory in openspec/changes/archive/ ends with -{name}, OR
+    (a) any directory in openspec/changes/archive/ has change name matching
+        {name} (archive dirs are YYYY-MM-DD-{name}), OR
     (b) openspec/specs/{name}/ directory exists.
 
     Returns False otherwise.
     """
     typer.echo(f"[prerequisites] checking if '{name}' is satisfied", err=True)
 
-    # Check archive directories
+    # Check archive directories — extract change name from date-prefixed dir
     archive_dir = repo_path / "openspec" / "changes" / "archive"
     if archive_dir.is_dir():
         for entry in archive_dir.iterdir():
-            if entry.is_dir() and entry.name.endswith(f"-{name}"):
+            if entry.is_dir() and _extract_archive_change_name(entry.name) == name:
                 typer.echo(
                     f"[prerequisites] '{name}' satisfied: archived at {entry.name}",
                     err=True,
@@ -123,19 +136,15 @@ def compute_readiness(
         typer.echo("[prerequisites] no openspec/changes/ directory found", err=True)
         return [], []
 
-    # Collect all known change names for unknown-prerequisite warnings
-    active_names: set[str] = set()
+    # Collect all known change names upfront for unknown-prerequisite warnings
     archive_dir = changes_dir / "archive"
     archived_names: set[str] = set()
     if archive_dir.is_dir():
         for entry in archive_dir.iterdir():
             if entry.is_dir():
-                # Archive dirs are formatted as <date>-<name>, extract the name
-                # by splitting on the first occurrence after the date prefix
-                parts = entry.name.split("-", 3)
-                if len(parts) >= 4:
-                    # e.g. 2026-03-17-change-name -> change-name
-                    archived_names.add("-".join(parts[3:]))
+                extracted = _extract_archive_change_name(entry.name)
+                if extracted is not None:
+                    archived_names.add(extracted)
 
     specs_dir = repo_path / "openspec" / "specs"
     specced_names: set[str] = set()
@@ -144,20 +153,25 @@ def compute_readiness(
             if entry.is_dir():
                 specced_names.add(entry.name)
 
-    # Scan active changes
-    ready_names: list[str] = []
-    blocked_list: list[dict[str, str | list[str]]] = []
-
+    # First pass: collect all active change names so prerequisite lookups
+    # don't depend on iteration order
+    active_entries: list[Path] = []
+    active_names: set[str] = set()
     for entry in sorted(changes_dir.iterdir()):
         if not entry.is_dir():
             continue
         if entry.name == "archive":
             continue
-        yaml_path = entry / ".openspec.yaml"
-        if not yaml_path.is_file():
+        if not (entry / ".openspec.yaml").is_file():
             continue
-
+        active_entries.append(entry)
         active_names.add(entry.name)
+
+    # Second pass: compute readiness
+    ready_names: list[str] = []
+    blocked_list: list[dict[str, str | list[str]]] = []
+
+    for entry in active_entries:
         prereqs = read_prerequisites(entry)
 
         if not prereqs:

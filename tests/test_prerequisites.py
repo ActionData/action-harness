@@ -53,11 +53,28 @@ class TestReadPrerequisites:
 
         assert result == []
 
-    def test_malformed_yaml_returns_empty(self, tmp_path: Path, capsys: object) -> None:
+    def test_malformed_yaml_returns_empty(self, tmp_path: Path, capfd: object) -> None:
         """Malformed YAML logs warning and returns empty list."""
         change_dir = tmp_path / "my-change"
         change_dir.mkdir()
         (change_dir / ".openspec.yaml").write_text(":\n  - [invalid yaml\n  }{")
+
+        result = read_prerequisites(change_dir)
+
+        assert result == []
+        import _pytest.capture
+
+        assert isinstance(capfd, _pytest.capture.CaptureFixture)
+        captured = capfd.readouterr()
+        assert "malformed YAML" in captured.err.lower() or "warning" in captured.err.lower()
+
+    def test_prerequisites_not_a_list(self, tmp_path: Path) -> None:
+        """Prerequisites field as a string (not list) returns empty list."""
+        change_dir = tmp_path / "my-change"
+        change_dir.mkdir()
+        (change_dir / ".openspec.yaml").write_text(
+            "schema: spec-driven\nprerequisites: repo-lead\n"
+        )
 
         result = read_prerequisites(change_dir)
 
@@ -93,6 +110,13 @@ class TestIsPrerequisiteSatisfied:
     def test_no_archive_dir(self, tmp_path: Path) -> None:
         """Returns False when archive directory doesn't exist."""
         assert is_prerequisite_satisfied("repo-lead", tmp_path) is False
+
+    def test_suffix_collision_does_not_match(self, tmp_path: Path) -> None:
+        """Archive dir '2026-03-17-repo-lead' must NOT satisfy prerequisite 'lead'."""
+        archive_dir = tmp_path / "openspec" / "changes" / "archive" / "2026-03-17-repo-lead"
+        archive_dir.mkdir(parents=True)
+
+        assert is_prerequisite_satisfied("lead", tmp_path) is False
 
 
 class TestComputeReadiness:
@@ -147,7 +171,7 @@ class TestComputeReadiness:
         assert "simple-change" in ready
         assert len(blocked) == 0
 
-    def test_unknown_prerequisite_warns_and_unmet(self, tmp_path: Path) -> None:
+    def test_unknown_prerequisite_warns_and_unmet(self, tmp_path: Path, capfd: object) -> None:
         """Unknown prerequisite name logs warning and is treated as unmet."""
         change_dir = tmp_path / "openspec" / "changes" / "my-change"
         change_dir.mkdir(parents=True)
@@ -159,6 +183,36 @@ class TestComputeReadiness:
 
         assert "my-change" not in ready
         assert any(b["name"] == "my-change" for b in blocked)
+
+        import _pytest.capture
+
+        assert isinstance(capfd, _pytest.capture.CaptureFixture)
+        captured = capfd.readouterr()
+        assert "unknown prerequisite" in captured.err.lower()
+        assert "totally-unknown" in captured.err
+
+    def test_active_prereq_sorted_after_is_known(self, tmp_path: Path, capfd: object) -> None:
+        """Active change referenced as prerequisite is known regardless of sort order."""
+        # 'a-feature' depends on 'z-feature'; both active. 'z-feature' sorts after
+        # 'a-feature', so a naive single-pass would miss it in active_names.
+        a_dir = tmp_path / "openspec" / "changes" / "a-feature"
+        a_dir.mkdir(parents=True)
+        (a_dir / ".openspec.yaml").write_text(
+            "schema: spec-driven\nprerequisites:\n  - z-feature\n"
+        )
+
+        z_dir = tmp_path / "openspec" / "changes" / "z-feature"
+        z_dir.mkdir(parents=True)
+        (z_dir / ".openspec.yaml").write_text("schema: spec-driven\n")
+
+        ready, blocked = compute_readiness(tmp_path)
+
+        import _pytest.capture
+
+        assert isinstance(capfd, _pytest.capture.CaptureFixture)
+        captured = capfd.readouterr()
+        # z-feature is active, so no "unknown prerequisite" warning should appear
+        assert "unknown prerequisite" not in captured.err.lower()
 
     def test_no_active_changes(self, tmp_path: Path) -> None:
         """No active changes returns empty lists."""

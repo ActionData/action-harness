@@ -317,10 +317,10 @@ class TestLeadIntegration:
         from action_harness.lead import gather_lead_context
 
         with patch("action_harness.lead._gather_issues", return_value=None):
-            context = gather_lead_context(tmp_path)
+            lead_ctx = gather_lead_context(tmp_path)
 
-        assert "Ready Changes" in context
-        assert "my-feature" in context
+        assert "Ready Changes" in lead_ctx.full_text
+        assert "my-feature" in lead_ctx.full_text
 
     def test_gather_lead_context_no_ready_changes(self, tmp_path: Path) -> None:
         """gather_lead_context with no ready changes notes it."""
@@ -332,6 +332,6 @@ class TestLeadIntegration:
         from action_harness.lead import gather_lead_context
 
         with patch("action_harness.lead._gather_issues", return_value=None):
-            context = gather_lead_context(tmp_path)
+            lead_ctx = gather_lead_context(tmp_path)
 
-        assert "No changes currently ready for implementation" in context
+        assert "No changes currently ready for implementation" in lead_ctx.full_text

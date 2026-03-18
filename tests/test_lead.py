@@ -12,9 +12,11 @@ from action_harness.cli import app
 from action_harness.lead import (
     DispatchItem,
     IssueItem,
+    LeadContext,
     LeadPlan,
     ProposalItem,
     _gather_issues,
+    build_greeting,
     dispatch_lead,
     dispatch_lead_interactive,
     gather_lead_context,
@@ -78,22 +80,22 @@ class TestGatherLeadContext:
         (tmp_path / ".git").mkdir()
 
         with patch("action_harness.lead._gather_issues", return_value=None):
-            context = gather_lead_context(tmp_path)
+            lead_ctx = gather_lead_context(tmp_path)
 
-        assert "Roadmap" in context
-        assert "First change" in context
-        assert "CLAUDE.md" in context
-        assert "Build instructions" in context
+        assert "Roadmap" in lead_ctx.full_text
+        assert "First change" in lead_ctx.full_text
+        assert "CLAUDE.md" in lead_ctx.full_text
+        assert "Build instructions" in lead_ctx.full_text
 
     def test_missing_files_skipped(self, tmp_path: Path) -> None:
         """Missing context files are skipped without error."""
         (tmp_path / ".git").mkdir()
 
         with patch("action_harness.lead._gather_issues", return_value=None):
-            context = gather_lead_context(tmp_path)
+            lead_ctx = gather_lead_context(tmp_path)
 
         # Should return minimal context, not crash
-        assert "context" in context.lower() or "Repo Context" in context
+        assert "context" in lead_ctx.full_text.lower() or "Repo Context" in lead_ctx.full_text
 
     def test_gh_failure_is_nonfatal(self, tmp_path: Path) -> None:
         """gh failure is non-fatal — warning logged, issues section omitted."""
@@ -105,21 +107,22 @@ class TestGatherLeadContext:
             "action_harness.lead.subprocess.run",
             side_effect=FileNotFoundError("gh not found"),
         ):
-            context = gather_lead_context(tmp_path)
+            lead_ctx = gather_lead_context(tmp_path)
 
         # Should still have CLAUDE.md content
-        assert "Test project" in context
+        assert "Test project" in lead_ctx.full_text
         # Should NOT have issues section
-        assert "Open Issues" not in context
+        assert "Open Issues" not in lead_ctx.full_text
 
     def test_empty_repo_returns_minimal_context(self, tmp_path: Path) -> None:
         """Empty repo returns minimal context with a note."""
         (tmp_path / ".git").mkdir()
 
         with patch("action_harness.lead._gather_issues", return_value=None):
-            context = gather_lead_context(tmp_path)
+            lead_ctx = gather_lead_context(tmp_path)
 
-        assert "No context files found" in context or "Repo Context" in context
+        text = lead_ctx.full_text
+        assert "No context files found" in text or "Repo Context" in text
 
     def test_openspec_roadmap_preferred(self, tmp_path: Path) -> None:
         """openspec/ROADMAP.md is preferred over root ROADMAP.md."""
@@ -130,9 +133,9 @@ class TestGatherLeadContext:
         (openspec / "ROADMAP.md").write_text("OpenSpec roadmap content")
 
         with patch("action_harness.lead._gather_issues", return_value=None):
-            context = gather_lead_context(tmp_path)
+            lead_ctx = gather_lead_context(tmp_path)
 
-        assert "OpenSpec roadmap content" in context
+        assert "OpenSpec roadmap content" in lead_ctx.full_text
 
     def test_harness_md_included(self, tmp_path: Path) -> None:
         """HARNESS.md is included in context when present."""
@@ -140,10 +143,10 @@ class TestGatherLeadContext:
         (tmp_path / "HARNESS.md").write_text("Run pytest to validate")
 
         with patch("action_harness.lead._gather_issues", return_value=None):
-            context = gather_lead_context(tmp_path)
+            lead_ctx = gather_lead_context(tmp_path)
 
-        assert "HARNESS.md" in context
-        assert "pytest" in context
+        assert "HARNESS.md" in lead_ctx.full_text
+        assert "pytest" in lead_ctx.full_text
 
 
 # ---------------------------------------------------------------------------
@@ -289,7 +292,7 @@ class TestDispatchLeadInteractive:
             exit_code = dispatch_lead_interactive(
                 repo_path=repo_path,
                 prompt="What next?",
-                context="# Context\n\nRepo context here",
+                context=LeadContext(full_text="# Context\n\nRepo context here", repo_name="repo"),
                 harness_agents_dir=agents_dir,
             )
 
@@ -312,7 +315,7 @@ class TestDispatchLeadInteractive:
             dispatch_lead_interactive(
                 repo_path=repo_path,
                 prompt="Focus on tests",
-                context="# Repo Context\n\nTest info",
+                context=LeadContext(full_text="# Repo Context\n\nTest info", repo_name="repo"),
                 harness_agents_dir=agents_dir,
             )
 
@@ -335,12 +338,13 @@ class TestDispatchLeadInteractive:
         (agents_dir / "lead.md").write_text("---\nname: lead\n---\nPersona")
 
         mock_result = subprocess.CompletedProcess(args=[], returncode=0)
+        ctx = LeadContext(full_text="ctx", repo_name="repo")
 
         with patch("action_harness.lead.subprocess.run", return_value=mock_result) as mock_run:
             dispatch_lead_interactive(
                 repo_path=repo_path,
                 prompt="My specific question",
-                context="ctx",
+                context=ctx,
                 harness_agents_dir=agents_dir,
             )
 
@@ -356,12 +360,13 @@ class TestDispatchLeadInteractive:
         (agents_dir / "lead.md").write_text("---\nname: lead\n---\nPersona")
 
         mock_result = subprocess.CompletedProcess(args=[], returncode=0)
+        ctx = LeadContext(full_text="ctx", repo_name="repo")
 
         with patch("action_harness.lead.subprocess.run", return_value=mock_result) as mock_run:
             dispatch_lead_interactive(
                 repo_path=repo_path,
                 prompt="test",
-                context="ctx",
+                context=ctx,
                 harness_agents_dir=agents_dir,
             )
 
@@ -377,12 +382,13 @@ class TestDispatchLeadInteractive:
         (agents_dir / "lead.md").write_text("---\nname: lead\n---\nPersona")
 
         mock_result = subprocess.CompletedProcess(args=[], returncode=42)
+        ctx = LeadContext(full_text="ctx", repo_name="repo")
 
         with patch("action_harness.lead.subprocess.run", return_value=mock_result):
             exit_code = dispatch_lead_interactive(
                 repo_path=repo_path,
                 prompt="test",
-                context="ctx",
+                context=ctx,
                 harness_agents_dir=agents_dir,
             )
 
@@ -395,6 +401,7 @@ class TestDispatchLeadInteractive:
         agents_dir = tmp_path / "agents"
         agents_dir.mkdir()
         (agents_dir / "lead.md").write_text("---\nname: lead\n---\nPersona")
+        ctx = LeadContext(full_text="ctx", repo_name="repo")
 
         with patch(
             "action_harness.lead.subprocess.run",
@@ -403,7 +410,7 @@ class TestDispatchLeadInteractive:
             exit_code = dispatch_lead_interactive(
                 repo_path=repo_path,
                 prompt="test",
-                context="ctx",
+                context=ctx,
                 harness_agents_dir=agents_dir,
             )
 
@@ -416,6 +423,7 @@ class TestDispatchLeadInteractive:
         agents_dir = tmp_path / "agents"
         agents_dir.mkdir()
         (agents_dir / "lead.md").write_text("---\nname: lead\n---\nPersona")
+        ctx = LeadContext(full_text="ctx", repo_name="repo")
 
         with patch(
             "action_harness.lead.subprocess.run",
@@ -424,7 +432,7 @@ class TestDispatchLeadInteractive:
             exit_code = dispatch_lead_interactive(
                 repo_path=repo_path,
                 prompt="test",
-                context="ctx",
+                context=ctx,
                 harness_agents_dir=agents_dir,
             )
 
@@ -437,38 +445,141 @@ class TestDispatchLeadInteractive:
         agents_dir = tmp_path / "agents"
         agents_dir.mkdir()
         # No lead.md
+        ctx = LeadContext(full_text="ctx", repo_name="repo")
 
         exit_code = dispatch_lead_interactive(
             repo_path=repo_path,
             prompt="test",
-            context="ctx",
+            context=ctx,
             harness_agents_dir=agents_dir,
         )
 
         assert exit_code == 1
 
-    def test_none_prompt_omits_positional_arg(self, tmp_path: Path) -> None:
-        """None prompt starts session without a positional argument."""
+    def test_none_prompt_uses_built_greeting(self, tmp_path: Path) -> None:
+        """None prompt passes a built greeting as the positional argument."""
         repo_path = tmp_path / "repo"
         repo_path.mkdir()
         agents_dir = tmp_path / "agents"
         agents_dir.mkdir()
         (agents_dir / "lead.md").write_text("---\nname: lead\n---\nPersona")
+        ctx = LeadContext(
+            full_text="ctx",
+            repo_name="my-repo",
+            active_changes=["feature-a"],
+            ready_changes=["feature-a"],
+        )
 
         with patch("action_harness.lead.subprocess.run") as mock_run:
             mock_run.return_value.returncode = 0
             dispatch_lead_interactive(
                 repo_path=repo_path,
                 prompt=None,
-                context="ctx",
+                context=ctx,
                 harness_agents_dir=agents_dir,
             )
 
         mock_run.assert_called_once()
         cmd = mock_run.call_args[0][0]
-        # No positional prompt arg — command starts with 'claude --system-prompt ...'
+        # Greeting IS passed as positional arg (no longer omitted)
         assert cmd[0] == "claude"
-        assert cmd[1] == "--system-prompt"
+        assert cmd[1] != "--system-prompt"  # positional arg comes before flags
+        assert "my-repo" in cmd[1]
+        assert "feature-a" in cmd[1]
+
+
+# ---------------------------------------------------------------------------
+# Greeting builder tests
+# ---------------------------------------------------------------------------
+
+
+class TestBuildGreeting:
+    def test_full_context_produces_complete_greeting(self) -> None:
+        """build_greeting includes all populated fields."""
+        ctx = LeadContext(
+            full_text="...",
+            repo_name="action-harness",
+            active_changes=["feature-a", "feature-b"],
+            ready_changes=["feature-a"],
+            recent_run_stats=(4, 5),
+        )
+        greeting = build_greeting(ctx)
+
+        assert "action-harness" in greeting
+        assert "feature-a" in greeting
+        assert "feature-b" in greeting
+        assert "Ready to implement: feature-a" in greeting
+        assert "4/5 passed" in greeting
+        assert "Greet me" in greeting
+
+    def test_empty_context_produces_minimal_greeting(self) -> None:
+        """build_greeting with empty fields produces minimal greeting."""
+        ctx = LeadContext(full_text="...", repo_name="my-repo")
+        greeting = build_greeting(ctx)
+
+        assert "my-repo" in greeting
+        assert "Greet me" in greeting
+        # Should NOT contain optional sections
+        assert "Active changes" not in greeting
+        assert "Ready to implement" not in greeting
+        assert "Recent runs" not in greeting
+
+    def test_no_run_stats_omits_runs_line(self) -> None:
+        """build_greeting with no run stats omits the runs line."""
+        ctx = LeadContext(
+            full_text="...",
+            repo_name="test-repo",
+            active_changes=["change-1"],
+            recent_run_stats=None,
+        )
+        greeting = build_greeting(ctx)
+
+        assert "Recent runs" not in greeting
+        assert "change-1" in greeting
+
+
+class TestGatherLeadContextStructured:
+    def test_returns_lead_context_with_repo_name(self, tmp_path: Path) -> None:
+        """gather_lead_context returns LeadContext with repo_name set."""
+        (tmp_path / ".git").mkdir()
+        (tmp_path / "CLAUDE.md").write_text("# Project")
+
+        with patch("action_harness.lead._gather_issues", return_value=None):
+            lead_ctx = gather_lead_context(tmp_path)
+
+        assert isinstance(lead_ctx, LeadContext)
+        assert lead_ctx.repo_name == tmp_path.name
+        assert lead_ctx.full_text  # non-empty
+
+    def test_has_roadmap_flag_set(self, tmp_path: Path) -> None:
+        """has_roadmap is True when ROADMAP.md exists."""
+        (tmp_path / ".git").mkdir()
+        (tmp_path / "ROADMAP.md").write_text("# Roadmap")
+
+        with patch("action_harness.lead._gather_issues", return_value=None):
+            lead_ctx = gather_lead_context(tmp_path)
+
+        assert lead_ctx.has_roadmap is True
+
+    def test_has_claude_md_flag_set(self, tmp_path: Path) -> None:
+        """has_claude_md is True when CLAUDE.md exists."""
+        (tmp_path / ".git").mkdir()
+        (tmp_path / "CLAUDE.md").write_text("# Claude")
+
+        with patch("action_harness.lead._gather_issues", return_value=None):
+            lead_ctx = gather_lead_context(tmp_path)
+
+        assert lead_ctx.has_claude_md is True
+
+    def test_flags_false_when_files_missing(self, tmp_path: Path) -> None:
+        """has_roadmap and has_claude_md are False when files don't exist."""
+        (tmp_path / ".git").mkdir()
+
+        with patch("action_harness.lead._gather_issues", return_value=None):
+            lead_ctx = gather_lead_context(tmp_path)
+
+        assert lead_ctx.has_roadmap is False
+        assert lead_ctx.has_claude_md is False
 
 
 # ---------------------------------------------------------------------------

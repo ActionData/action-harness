@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: RunStats model
-The system SHALL provide a `RunStats` Pydantic model in `reporting.py` with fields `passed: int`, `failed: int`, `total: int`, and `success_rate: float`.
+The system SHALL provide a `RunStats` Pydantic model in `models.py` with fields `passed: int`, `failed: int`, `total: int`, and `success_rate: float`.
 
 #### Scenario: Model field values
 - **WHEN** a `RunStats` is constructed with `passed=3`, `failed=2`, `total=5`, `success_rate=60.0`

@@ -12,7 +12,7 @@ Both compute `sum(1 for m in manifests if m.success)` independently. The lead pa
 **Goals:**
 - Single function for computing success/failure counts from a list of manifests
 - Both `_gather_recent_runs` and `aggregate_report` delegate to this shared function
-- Configurable window size (callers pass their own limit)
+- Callers pre-slice manifests before passing to the shared function
 
 **Non-Goals:**
 - Unifying the data models (`LeadContext.recent_run_stats` remains `tuple[int, int]`, `RunReport` keeps its full structure)
@@ -24,7 +24,7 @@ Both compute `sum(1 for m in manifests if m.success)` independently. The lead pa
 
 **1. Add `compute_run_stats` to `reporting.py`**
 
-A new function `compute_run_stats(manifests, limit)` returns a `RunStats` dataclass with `passed`, `failed`, `total`, and `success_rate`. Lives in `reporting.py` because that module already owns manifest loading and aggregation.
+A new function `compute_run_stats(manifests)` returns a `RunStats` Pydantic model with `passed`, `failed`, `total`, and `success_rate`. Lives in `reporting.py` because that module already owns manifest loading and aggregation. The `RunStats` model itself lives in `models.py`, consistent with all other Pydantic data models in the codebase.
 
 Alternative considered: separate `stats.py` module. Rejected — the function is small and `reporting.py` is the natural home for manifest-derived calculations.
 

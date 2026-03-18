@@ -131,6 +131,10 @@ def dispatch_single_review(
     if extra_context is not None:
         user_prompt = f"{user_prompt}\n\n{extra_context}"
 
+    session_name = (
+        f"[action-harness] Review: {agent_name} PR#{pr_number}"
+        f" (repo: {worktree_path.name})"
+    )
     cmd = [
         "claude",
         "-p",
@@ -143,6 +147,8 @@ def dispatch_single_review(
         str(max_turns),
         "--permission-mode",
         permission_mode,
+        "--name",
+        session_name,
     ]
     if model is not None:
         cmd.extend(["--model", model])

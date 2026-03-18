@@ -546,7 +546,7 @@ class TestReportCLI:
 
         fake_home = tmp_path / "fake-harness-home"
         repo_name = tmp_path.name
-        freq_dir = fake_home / "repos" / repo_name / "knowledge"
+        freq_dir = fake_home / "projects" / repo_name / "knowledge"
         freq_dir.mkdir(parents=True)
         freq_data = {
             "subprocess-timeout": {"count": 8, "last_seen": "2026-03-16"},

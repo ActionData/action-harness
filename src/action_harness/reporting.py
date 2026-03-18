@@ -85,14 +85,23 @@ def parse_since(since: str) -> datetime | None:
     return None
 
 
-def load_manifests(repo_path: Path, since: str | None = None) -> list[RunManifest]:
+def load_manifests(
+    repo_path: Path,
+    since: str | None = None,
+    runs_dir: Path | None = None,
+) -> list[RunManifest]:
     """Load all run manifests from a repository.
 
-    Reads all ``.json`` files from ``.action-harness/runs/`` (excluding
-    ``.events.jsonl``), parses each as ``RunManifest``, optionally filters
-    by ``started_at >= since``. Skips and warns on unparseable files.
+    When ``runs_dir`` is provided (managed repos), reads from that directory.
+    Otherwise falls back to ``.action-harness/runs/`` inside ``repo_path``
+    (local repos).
+
+    Reads all ``.json`` files (excluding ``.events.jsonl``), parses each as
+    ``RunManifest``, optionally filters by ``started_at >= since``. Skips and
+    warns on unparseable files.
     """
-    runs_dir = repo_path / ".action-harness" / "runs"
+    if runs_dir is None:
+        runs_dir = repo_path / ".action-harness" / "runs"
     typer.echo(f"[report] loading manifests from {runs_dir}", err=True)
 
     if not runs_dir.is_dir():

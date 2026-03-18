@@ -80,7 +80,7 @@ class TestResolveRepo:
 
     def test_remote_repo_triggers_clone(self, tmp_path: Path) -> None:
         harness_home = tmp_path / "harness"
-        expected_dir = harness_home / "repos" / "my-app"
+        expected_dir = harness_home / "projects" / "my-app" / "repo"
 
         with (
             patch("action_harness.repo._detect_gh_protocol", return_value="https"),
@@ -100,8 +100,10 @@ class TestResolveRepo:
 
     def test_already_cloned_triggers_fetch(self, tmp_path: Path) -> None:
         harness_home = tmp_path / "harness"
-        repo_dir = harness_home / "repos" / "my-app"
+        repo_dir = harness_home / "projects" / "my-app" / "repo"
         repo_dir.mkdir(parents=True)
+        # Add .git to make it look like an existing clone
+        (repo_dir / ".git").mkdir()
 
         with (
             patch("action_harness.repo._detect_gh_protocol", return_value="https"),
@@ -149,11 +151,12 @@ class TestGetRepoDir:
 
     def test_default_path_when_no_collision(self, tmp_path: Path) -> None:
         result = _get_repo_dir("owner", "repo", "https://github.com/owner/repo.git", tmp_path)
-        assert result == tmp_path / "repos" / "repo"
+        assert result == tmp_path / "projects" / "repo" / "repo"
 
     def test_same_repo_returns_same_dir(self, tmp_path: Path) -> None:
-        repo_dir = tmp_path / "repos" / "utils"
+        repo_dir = tmp_path / "projects" / "utils" / "repo"
         repo_dir.mkdir(parents=True)
+        (repo_dir / ".git").mkdir()
 
         with patch("action_harness.repo.subprocess.run") as mock_run:
             mock_run.return_value = subprocess.CompletedProcess(
@@ -168,8 +171,9 @@ class TestGetRepoDir:
 
     def test_same_repo_https_existing_ssh_clone_url(self, tmp_path: Path) -> None:
         """Existing remote is HTTPS, clone_url is SSH — same repo, no collision."""
-        repo_dir = tmp_path / "repos" / "utils"
+        repo_dir = tmp_path / "projects" / "utils" / "repo"
         repo_dir.mkdir(parents=True)
+        (repo_dir / ".git").mkdir()
 
         with patch("action_harness.repo.subprocess.run") as mock_run:
             mock_run.return_value = subprocess.CompletedProcess(
@@ -184,8 +188,9 @@ class TestGetRepoDir:
 
     def test_same_repo_ssh_existing_https_clone_url(self, tmp_path: Path) -> None:
         """Existing remote is SSH, clone_url is HTTPS — same repo, no collision."""
-        repo_dir = tmp_path / "repos" / "utils"
+        repo_dir = tmp_path / "projects" / "utils" / "repo"
         repo_dir.mkdir(parents=True)
+        (repo_dir / ".git").mkdir()
 
         with patch("action_harness.repo.subprocess.run") as mock_run:
             mock_run.return_value = subprocess.CompletedProcess(
@@ -199,8 +204,9 @@ class TestGetRepoDir:
         assert result == repo_dir
 
     def test_collision_falls_back_to_owner_repo(self, tmp_path: Path) -> None:
-        repo_dir = tmp_path / "repos" / "utils"
+        repo_dir = tmp_path / "projects" / "utils" / "repo"
         repo_dir.mkdir(parents=True)
+        (repo_dir / ".git").mkdir()
 
         with patch("action_harness.repo.subprocess.run") as mock_run:
             mock_run.return_value = subprocess.CompletedProcess(
@@ -211,7 +217,7 @@ class TestGetRepoDir:
             )
             result = _get_repo_dir("orgB", "utils", "https://github.com/orgB/utils.git", tmp_path)
 
-        assert result == tmp_path / "repos" / "orgB-utils"
+        assert result == tmp_path / "projects" / "orgB-utils" / "repo"
 
 
 class TestNormalizeGithubIdentity:
@@ -249,7 +255,7 @@ class TestDetectGhProtocol:
             )
             assert _detect_gh_protocol() == "https"
             mock_run.assert_called_once_with(
-                ["gh", "auth", "token"], capture_output=True, text=True
+                ["gh", "auth", "token"], capture_output=True, text=True, timeout=120
             )
 
     def test_gh_token_failure_returns_ssh(self) -> None:
@@ -278,7 +284,7 @@ class TestResolveRepoProtocolDetection:
             mock_run.return_value = subprocess.CompletedProcess(
                 args=[], returncode=0, stdout="", stderr=""
             )
-            path, name = resolve_repo("user/my-app", harness_home)
+            resolve_repo("user/my-app", harness_home)
 
         mock_detect.assert_called_once()
         # Clone should use SSH URL
@@ -295,7 +301,7 @@ class TestResolveRepoProtocolDetection:
             mock_run.return_value = subprocess.CompletedProcess(
                 args=[], returncode=0, stdout="", stderr=""
             )
-            path, name = resolve_repo("user/my-app", harness_home)
+            resolve_repo("user/my-app", harness_home)
 
         mock_detect.assert_called_once()
         # Clone should use HTTPS URL

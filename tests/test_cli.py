@@ -634,19 +634,20 @@ class TestCleanCommand:
         assert result.exit_code == 1
         assert "specify --repo or --all" in result.output
 
-    def test_clean_no_workspaces_dir(self, tmp_path: Path) -> None:
+    def test_clean_no_projects_dir(self, tmp_path: Path) -> None:
         result = runner.invoke(app, ["clean", "--all", "--harness-home", str(tmp_path)])
         assert result.exit_code == 0
-        assert "no workspaces directory" in result.output
+        assert "no projects directory" in result.output
 
     def test_clean_specific_workspace(self, tmp_path: Path) -> None:
         """Clean a specific workspace directory."""
         harness_home = tmp_path / "harness"
-        ws_dir = harness_home / "workspaces" / "my-app" / "fix-bug"
+        # Create workspace under projects/<name>/workspaces/
+        ws_dir = harness_home / "projects" / "my-app" / "workspaces" / "fix-bug"
         ws_dir.mkdir(parents=True)
 
-        # Create a fake repo clone for resolve_repo to find
-        repo_dir = harness_home / "repos" / "my-app"
+        # Create a fake repo clone under projects/<name>/repo/
+        repo_dir = harness_home / "projects" / "my-app" / "repo"
         repo_dir.mkdir(parents=True)
         # Init a git repo so git commands don't fail hard
         subprocess.run(["git", "init"], cwd=repo_dir, capture_output=True, check=True)
@@ -681,12 +682,12 @@ class TestCleanCommand:
     def test_clean_all_for_repo(self, tmp_path: Path) -> None:
         """Clean all workspaces for a repo."""
         harness_home = tmp_path / "harness"
-        ws_base = harness_home / "workspaces" / "my-app"
+        ws_base = harness_home / "projects" / "my-app" / "workspaces"
         (ws_base / "fix-a").mkdir(parents=True)
         (ws_base / "fix-b").mkdir(parents=True)
 
         # Create repo clone
-        repo_dir = harness_home / "repos" / "my-app"
+        repo_dir = harness_home / "projects" / "my-app" / "repo"
         repo_dir.mkdir(parents=True)
         subprocess.run(["git", "init"], cwd=repo_dir, capture_output=True, check=True)
         subprocess.run(
@@ -717,17 +718,17 @@ class TestCleanCommand:
         assert not (ws_base / "fix-b").exists()
 
     def test_clean_all(self, tmp_path: Path) -> None:
-        """Clean all workspaces across all repos."""
+        """Clean all workspaces across all projects."""
         harness_home = tmp_path / "harness"
-        (harness_home / "workspaces" / "app1" / "change1").mkdir(parents=True)
-        (harness_home / "workspaces" / "app2" / "change2").mkdir(parents=True)
+        (harness_home / "projects" / "app1" / "workspaces" / "change1").mkdir(parents=True)
+        (harness_home / "projects" / "app2" / "workspaces" / "change2").mkdir(parents=True)
 
         result = runner.invoke(app, ["clean", "--all", "--harness-home", str(harness_home)])
         assert result.exit_code == 0
         assert "all workspaces removed" in result.output
         # Workspace dirs should be cleaned up
-        assert not (harness_home / "workspaces" / "app1" / "change1").exists()
-        assert not (harness_home / "workspaces" / "app2" / "change2").exists()
+        assert not (harness_home / "projects" / "app1" / "workspaces" / "change1").exists()
+        assert not (harness_home / "projects" / "app2" / "workspaces" / "change2").exists()
 
 
 class TestMaxFindingsPerRetryCli:

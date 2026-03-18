@@ -200,14 +200,26 @@ def _build_manifest(
     )
 
 
-def _write_manifest(manifest: RunManifest, repo: Path, run_id: str) -> None:
-    """Write manifest JSON to .action-harness/runs/ and set manifest_path.
+def _write_manifest(
+    manifest: RunManifest,
+    repo: Path,
+    run_id: str,
+    project_runs_dir: Path | None = None,
+) -> None:
+    """Write manifest JSON to runs directory and set manifest_path.
+
+    When ``project_runs_dir`` is set (managed repo), writes to
+    ``projects/<name>/runs/``. Otherwise falls back to
+    ``.action-harness/runs/`` inside the repo (local repo).
 
     Never raises — logs errors to stderr and continues. The manifest is an
     observability artifact; its failure should not mask the pipeline outcome.
     """
     try:
-        runs_dir = repo / ".action-harness" / "runs"
+        if project_runs_dir is not None:
+            runs_dir = project_runs_dir
+        else:
+            runs_dir = repo / ".action-harness" / "runs"
         runs_dir.mkdir(parents=True, exist_ok=True)
 
         safe_name = manifest.change_name.replace("/", "-")
@@ -343,7 +355,7 @@ def run_pipeline(
     # Compute workspace path for managed repos
     workspace_dir: Path | None = None
     if harness_home is not None and repo_name is not None:
-        workspace_dir = harness_home / "workspaces" / repo_name / change_name
+        workspace_dir = harness_home / "projects" / repo_name / "workspaces" / change_name
 
     # On resume: reuse checkpoint's run_id and timestamp
     if checkpoint is not None:
@@ -357,8 +369,16 @@ def run_pipeline(
         safe_change = change_name.replace("/", "-")
         run_id = f"{safe_ts}-{safe_change}"
 
+    # Determine runs directory: project dir for managed repos, worktree for local
+    project_runs_dir: Path | None = None
+    if harness_home is not None and repo_name is not None:
+        project_runs_dir = harness_home / "projects" / repo_name / "runs"
+
     # Create event logger before try block so it is available in except/finally
-    runs_dir = repo / ".action-harness" / "runs"
+    if project_runs_dir is not None:
+        runs_dir = project_runs_dir
+    else:
+        runs_dir = repo / ".action-harness" / "runs"
     runs_dir.mkdir(parents=True, exist_ok=True)
     log_path = runs_dir / f"{run_id}.events.jsonl"
     logger = EventLogger(log_path, run_id)
@@ -442,7 +462,7 @@ def run_pipeline(
         baseline_eval=baseline_eval_out,
     )
     manifest.event_log_path = str(log_path)
-    _write_manifest(manifest, repo, run_id)
+    _write_manifest(manifest, repo, run_id, project_runs_dir=project_runs_dir)
 
     return pr_result, manifest
 
@@ -576,7 +596,7 @@ def _run_pipeline_inner(
     # Compute repo knowledge dir for frequency-boosted catalog rules
     repo_knowledge_dir: Path | None = None
     if harness_home is not None and repo_name is not None:
-        repo_knowledge_dir = harness_home / "repos" / repo_name / "knowledge"
+        repo_knowledge_dir = harness_home / "projects" / repo_name / "knowledge"
 
     # Resolve agent definitions directory once for all review dispatches
     harness_agents_dir = resolve_harness_agents_dir()

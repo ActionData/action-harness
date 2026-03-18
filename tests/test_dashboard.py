@@ -56,25 +56,28 @@ def _init_workspace(path: Path, branch: str = "harness/test") -> None:
 
 
 def test_list_repos_two_repos(tmp_path: Path) -> None:
-    """5.1: list_repos with 2 repo dirs, one with HARNESS.md."""
+    """5.1: list_repos with 2 project dirs, one with HARNESS.md."""
     harness_home = tmp_path
-    repos_dir = harness_home / "repos"
 
-    # Repo 1: has HARNESS.md, has workspace, has openspec change
-    repo1 = repos_dir / "repo1"
+    # Project 1: has HARNESS.md, has workspace, has openspec change
+    project1 = harness_home / "projects" / "repo1"
+    repo1 = project1 / "repo"
     _init_git_repo(repo1)
     (repo1 / "HARNESS.md").write_text("# Test")
+    (project1 / "config.yaml").write_text("repo_name: repo1\nremote_url: null\n")
     changes_dir = repo1 / "openspec" / "changes" / "active1"
     changes_dir.mkdir(parents=True)
     (changes_dir / "tasks.md").write_text("- [x] done\n- [ ] todo\n")
 
     # Create workspace for repo1
-    ws = harness_home / "workspaces" / "repo1" / "change1"
+    ws = project1 / "workspaces" / "change1"
     _init_workspace(ws)
 
-    # Repo 2: no HARNESS.md
-    repo2 = repos_dir / "repo2"
+    # Project 2: no HARNESS.md
+    project2 = harness_home / "projects" / "repo2"
+    repo2 = project2 / "repo"
     _init_git_repo(repo2)
+    (project2 / "config.yaml").write_text("repo_name: repo2\nremote_url: null\n")
 
     summaries = list_repos(harness_home)
     assert len(summaries) == 2
@@ -91,15 +94,18 @@ def test_list_repos_two_repos(tmp_path: Path) -> None:
 # ── 5.2: list_repos skips non-git dirs ───────────────────────────────
 
 
-def test_list_repos_skips_non_git(tmp_path: Path) -> None:
-    """5.2: Non-git directories are excluded."""
+def test_list_repos_skips_no_config(tmp_path: Path) -> None:
+    """5.2: Projects without config.yaml are excluded."""
     harness_home = tmp_path
-    repos_dir = harness_home / "repos"
 
-    # Git repo
-    _init_git_repo(repos_dir / "real-repo")
-    # Plain directory (not git)
-    (repos_dir / "not-a-repo").mkdir(parents=True)
+    # Project with config.yaml
+    project1 = harness_home / "projects" / "real-repo"
+    _init_git_repo(project1 / "repo")
+    (project1 / "config.yaml").write_text("repo_name: real-repo\nremote_url: null\n")
+
+    # Project without config.yaml
+    project2 = harness_home / "projects" / "not-managed"
+    _init_git_repo(project2 / "repo")
 
     summaries = list_repos(harness_home)
     assert len(summaries) == 1
@@ -112,8 +118,10 @@ def test_list_repos_skips_non_git(tmp_path: Path) -> None:
 def test_repo_detail_harness_md(tmp_path: Path) -> None:
     """5.3: repo_detail reads HARNESS.md content."""
     harness_home = tmp_path
-    repo = harness_home / "repos" / "test-repo"
+    project = harness_home / "projects" / "test-repo"
+    repo = project / "repo"
     _init_git_repo(repo)
+    (project / "config.yaml").write_text("repo_name: test-repo\nremote_url: null\n")
 
     content = "line 1\nline 2\nline 3\nline 4\nline 5\n"
     (repo / "HARNESS.md").write_text(content)
@@ -128,8 +136,10 @@ def test_repo_detail_harness_md(tmp_path: Path) -> None:
 def test_repo_detail_protected_patterns(tmp_path: Path) -> None:
     """5.4: repo_detail reads protected-paths.yml."""
     harness_home = tmp_path
-    repo = harness_home / "repos" / "test-repo"
+    project = harness_home / "projects" / "test-repo"
+    repo = project / "repo"
     _init_git_repo(repo)
+    (project / "config.yaml").write_text("repo_name: test-repo\nremote_url: null\n")
 
     harness_dir = repo / ".harness"
     harness_dir.mkdir()
@@ -201,13 +211,14 @@ def test_read_roadmap_missing(tmp_path: Path) -> None:
 
 
 def test_cross_repo_roadmap(tmp_path: Path) -> None:
-    """5.8: Cross-repo roadmap with 2 repos."""
+    """5.8: Cross-repo roadmap with 2 projects."""
     harness_home = tmp_path
-    repos_dir = harness_home / "repos"
 
-    # Repo 1: has OpenSpec
-    repo1 = repos_dir / "repo1"
+    # Project 1: has OpenSpec
+    project1 = harness_home / "projects" / "repo1"
+    repo1 = project1 / "repo"
     _init_git_repo(repo1)
+    (project1 / "config.yaml").write_text("repo_name: repo1\nremote_url: null\n")
     roadmap_dir = repo1 / "openspec"
     roadmap_dir.mkdir()
     (roadmap_dir / "ROADMAP.md").write_text("# Roadmap for repo1\n")
@@ -215,9 +226,11 @@ def test_cross_repo_roadmap(tmp_path: Path) -> None:
     change_dir.mkdir(parents=True)
     (change_dir / "tasks.md").write_text("- [x] done\n- [ ] todo\n")
 
-    # Repo 2: no OpenSpec
-    repo2 = repos_dir / "repo2"
+    # Project 2: no OpenSpec
+    project2 = harness_home / "projects" / "repo2"
+    repo2 = project2 / "repo"
     _init_git_repo(repo2)
+    (project2 / "config.yaml").write_text("repo_name: repo2\nremote_url: null\n")
 
     roadmaps = cross_repo_roadmap(harness_home)
     assert len(roadmaps) == 2
@@ -237,7 +250,7 @@ def test_cross_repo_roadmap(tmp_path: Path) -> None:
 def test_workspace_stale(tmp_path: Path) -> None:
     """5.9: Workspace is stale when >7 days old and no open PR."""
     harness_home = tmp_path
-    ws_path = harness_home / "workspaces" / "repo1" / "old-change"
+    ws_path = harness_home / "projects" / "repo1" / "workspaces" / "old-change"
     _init_workspace(ws_path, branch="harness/old-change")
 
     # Mock git log to return timestamp 10 days ago
@@ -266,7 +279,7 @@ def test_workspace_stale(tmp_path: Path) -> None:
 def test_workspace_not_stale_with_pr(tmp_path: Path) -> None:
     """5.10: Workspace not stale when open PR exists despite old commits."""
     harness_home = tmp_path
-    ws_path = harness_home / "workspaces" / "repo1" / "old-change"
+    ws_path = harness_home / "projects" / "repo1" / "workspaces" / "old-change"
     _init_workspace(ws_path, branch="harness/old-change")
 
     old_ts = str(int(time.time()) - 10 * 86400)
@@ -293,9 +306,9 @@ def test_workspace_not_stale_with_pr(tmp_path: Path) -> None:
 
 
 def test_list_repos_empty(tmp_path: Path) -> None:
-    """5.11: Empty repos/ dir returns empty list."""
+    """5.11: Empty projects/ dir returns empty list."""
     harness_home = tmp_path
-    (harness_home / "repos").mkdir()
+    (harness_home / "projects").mkdir()
 
     summaries = list_repos(harness_home)
     assert summaries == []
@@ -307,7 +320,7 @@ def test_list_repos_empty(tmp_path: Path) -> None:
 def test_repo_detail_not_found(tmp_path: Path) -> None:
     """repo_detail raises FileNotFoundError for missing repo."""
     harness_home = tmp_path
-    (harness_home / "repos").mkdir()
+    (harness_home / "projects").mkdir()
 
     with pytest.raises(FileNotFoundError, match="not found"):
         repo_detail(harness_home, "nonexistent")
@@ -317,7 +330,7 @@ def test_list_workspaces_skips_non_git(tmp_path: Path) -> None:
     """list_workspaces skips non-git workspace directories."""
     harness_home = tmp_path
     # Create a workspace dir without .git
-    plain_dir = harness_home / "workspaces" / "repo1" / "not-a-worktree"
+    plain_dir = harness_home / "projects" / "repo1" / "workspaces" / "not-a-worktree"
     plain_dir.mkdir(parents=True)
 
     workspaces = list_workspaces(harness_home)
@@ -351,8 +364,10 @@ def test_cli_repos_json(tmp_path: Path) -> None:
     from action_harness.cli import app
 
     runner = CliRunner()
-    repo = tmp_path / "repos" / "test-repo"
+    project = tmp_path / "projects" / "test-repo"
+    repo = project / "repo"
     _init_git_repo(repo)
+    (project / "config.yaml").write_text("repo_name: test-repo\nremote_url: null\n")
 
     result = runner.invoke(app, ["repos", "--json", "--harness-home", str(tmp_path)])
     assert result.exit_code == 0
@@ -369,8 +384,10 @@ def test_cli_repos_formatted(tmp_path: Path) -> None:
     from action_harness.cli import app
 
     runner = CliRunner()
-    repo = tmp_path / "repos" / "my-repo"
+    project = tmp_path / "projects" / "my-repo"
+    repo = project / "repo"
     _init_git_repo(repo)
+    (project / "config.yaml").write_text("repo_name: my-repo\nremote_url: null\n")
 
     result = runner.invoke(app, ["repos", "--harness-home", str(tmp_path)])
     assert result.exit_code == 0
@@ -386,8 +403,10 @@ def test_cli_repos_show_json(tmp_path: Path) -> None:
     from action_harness.cli import app
 
     runner = CliRunner()
-    repo = tmp_path / "repos" / "test-repo"
+    project = tmp_path / "projects" / "test-repo"
+    repo = project / "repo"
     _init_git_repo(repo)
+    (project / "config.yaml").write_text("repo_name: test-repo\nremote_url: null\n")
     (repo / "HARNESS.md").write_text("# Config\n")
 
     result = runner.invoke(
@@ -406,7 +425,7 @@ def test_cli_repos_show_not_found(tmp_path: Path) -> None:
     from action_harness.cli import app
 
     runner = CliRunner()
-    (tmp_path / "repos").mkdir()
+    (tmp_path / "projects").mkdir()
 
     result = runner.invoke(app, ["repos", "show", "nope", "--harness-home", str(tmp_path)])
     assert result.exit_code == 1
@@ -419,8 +438,10 @@ def test_cli_repos_show_formatted(tmp_path: Path) -> None:
     from action_harness.cli import app
 
     runner = CliRunner()
-    repo = tmp_path / "repos" / "test-repo"
+    project = tmp_path / "projects" / "test-repo"
+    repo = project / "repo"
     _init_git_repo(repo)
+    (project / "config.yaml").write_text("repo_name: test-repo\nremote_url: null\n")
 
     result = runner.invoke(app, ["repos", "show", "test-repo", "--harness-home", str(tmp_path)])
     assert result.exit_code == 0
@@ -464,8 +485,10 @@ def test_cli_roadmap_json(tmp_path: Path) -> None:
     from action_harness.cli import app
 
     runner = CliRunner()
-    repo = tmp_path / "repos" / "test-repo"
+    project = tmp_path / "projects" / "test-repo"
+    repo = project / "repo"
     _init_git_repo(repo)
+    (project / "config.yaml").write_text("repo_name: test-repo\nremote_url: null\n")
 
     result = runner.invoke(app, ["roadmap", "--json", "--harness-home", str(tmp_path)])
     assert result.exit_code == 0
@@ -482,8 +505,10 @@ def test_cli_roadmap_formatted(tmp_path: Path) -> None:
     from action_harness.cli import app
 
     runner = CliRunner()
-    repo = tmp_path / "repos" / "test-repo"
+    project = tmp_path / "projects" / "test-repo"
+    repo = project / "repo"
     _init_git_repo(repo)
+    (project / "config.yaml").write_text("repo_name: test-repo\nremote_url: null\n")
 
     result = runner.invoke(app, ["roadmap", "--harness-home", str(tmp_path)])
     assert result.exit_code == 0
@@ -498,8 +523,10 @@ def test_cli_roadmap_with_progress(tmp_path: Path) -> None:
     from action_harness.cli import app
 
     runner = CliRunner()
-    repo = tmp_path / "repos" / "test-repo"
+    project = tmp_path / "projects" / "test-repo"
+    repo = project / "repo"
     _init_git_repo(repo)
+    (project / "config.yaml").write_text("repo_name: test-repo\nremote_url: null\n")
     change_dir = repo / "openspec" / "changes" / "my-feature"
     change_dir.mkdir(parents=True)
     (change_dir / "tasks.md").write_text("- [x] done\n- [ ] todo\n")

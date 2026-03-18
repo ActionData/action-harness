@@ -88,13 +88,17 @@ def tail_event_log(
         return False
 
 
-def find_latest_event_log(repo_path: Path) -> Path | None:
+def find_latest_event_log(repo_path: Path, runs_dir: Path | None = None) -> Path | None:
     """Find the most recently modified ``.events.jsonl`` file in a repo's runs directory.
 
-    Scans ``.action-harness/runs/`` for ``.events.jsonl`` files and returns
-    the most recently modified one, or ``None`` if none exist.
+    When ``runs_dir`` is provided (managed repos), scans that directory.
+    Otherwise falls back to ``.action-harness/runs/`` inside ``repo_path``.
+
+    Returns the most recently modified ``.events.jsonl`` file, or ``None``
+    if none exist.
     """
-    runs_dir = repo_path / ".action-harness" / "runs"
+    if runs_dir is None:
+        runs_dir = repo_path / ".action-harness" / "runs"
     typer.echo(f"[progress] scanning {runs_dir} for event logs", err=True)
 
     if not runs_dir.is_dir():
@@ -119,13 +123,18 @@ def find_latest_event_log(repo_path: Path) -> Path | None:
     return latest
 
 
-def find_event_log_by_run_id(repo_path: Path, run_id: str) -> Path | None:
+def find_event_log_by_run_id(
+    repo_path: Path, run_id: str, runs_dir: Path | None = None
+) -> Path | None:
     """Find the event log for a specific run ID.
 
-    Looks for ``.action-harness/runs/<run_id>.events.jsonl`` and returns
-    the ``Path`` if it exists, ``None`` otherwise.
+    When ``runs_dir`` is provided (managed repos), searches that directory.
+    Otherwise falls back to ``.action-harness/runs/`` inside ``repo_path``.
+
+    Returns the ``Path`` if it exists, ``None`` otherwise.
     """
-    runs_dir = repo_path / ".action-harness" / "runs"
+    if runs_dir is None:
+        runs_dir = repo_path / ".action-harness" / "runs"
     log_path = (runs_dir / f"{run_id}.events.jsonl").resolve()
 
     # Prevent path traversal via crafted run_id (e.g. "../../etc/passwd")

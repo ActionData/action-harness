@@ -206,22 +206,25 @@ def _get_workspace_info(ws_path: Path, repo_name: str, change_name: str) -> Work
 
 
 def list_workspaces(harness_home: Path) -> list[WorkspaceInfo]:
-    """List all workspaces across all repos.
+    """List all workspaces across all projects.
 
-    Scans workspaces/<repo_name>/<change_name>/ directories.
+    Scans projects/<name>/workspaces/<change_name>/ directories.
     """
     typer.echo(f"[dashboard] listing workspaces from {harness_home}", err=True)
-    ws_root = harness_home / "workspaces"
-    if not ws_root.is_dir():
-        typer.echo("[dashboard] no workspaces/ directory", err=True)
+    projects_root = harness_home / "projects"
+    if not projects_root.is_dir():
+        typer.echo("[dashboard] no projects/ directory", err=True)
         return []
 
     workspaces: list[WorkspaceInfo] = []
-    for repo_dir in sorted(ws_root.iterdir()):
-        if not repo_dir.is_dir():
+    for project_dir in sorted(projects_root.iterdir()):
+        if not project_dir.is_dir():
             continue
-        repo_name = repo_dir.name
-        for change_dir in sorted(repo_dir.iterdir()):
+        repo_name = project_dir.name
+        ws_root = project_dir / "workspaces"
+        if not ws_root.is_dir():
+            continue
+        for change_dir in sorted(ws_root.iterdir()):
             if not change_dir.is_dir():
                 continue
             info = _get_workspace_info(change_dir, repo_name, change_dir.name)
@@ -235,32 +238,38 @@ def list_workspaces(harness_home: Path) -> list[WorkspaceInfo]:
 def list_repos(harness_home: Path) -> list[RepoSummary]:
     """List all onboarded repos with summary info.
 
-    Scans repos/ dir, skips non-git directories.
+    Scans projects/ dir. A directory is a managed project only if
+    ``config.yaml`` exists. The repo clone is at ``project_dir/repo/``.
     """
     typer.echo(f"[dashboard] listing repos from {harness_home}", err=True)
-    repos_dir = harness_home / "repos"
-    if not repos_dir.is_dir():
-        typer.echo("[dashboard] no repos/ directory", err=True)
+    projects_dir = harness_home / "projects"
+    if not projects_dir.is_dir():
+        typer.echo("[dashboard] no projects/ directory", err=True)
         return []
 
     summaries: list[RepoSummary] = []
-    for entry in sorted(repos_dir.iterdir()):
+    for entry in sorted(projects_dir.iterdir()):
         if not entry.is_dir():
             continue
-        # Skip non-git directories
-        if not (entry / ".git").exists():
-            typer.echo(f"[dashboard] skipping {entry.name}: not a git repo", err=True)
+        # Only include projects with config.yaml (managed projects)
+        if not (entry / "config.yaml").is_file():
+            typer.echo(f"[dashboard] skipping {entry.name}: no config.yaml", err=True)
             continue
 
-        remote_url = _get_remote_url(entry)
-        has_harness_md = (entry / "HARNESS.md").is_file()
-        has_protected_paths = (entry / ".harness" / "protected-paths.yml").is_file()
+        repo_path = entry / "repo"
+        if not repo_path.is_dir() or not (repo_path / ".git").exists():
+            typer.echo(f"[dashboard] skipping {entry.name}: no git repo at repo/", err=True)
+            continue
+
+        remote_url = _get_remote_url(repo_path)
+        has_harness_md = (repo_path / "HARNESS.md").is_file()
+        has_protected_paths = (repo_path / ".harness" / "protected-paths.yml").is_file()
 
         # Count workspaces cheaply by directory presence (no subprocess calls).
         # Staleness requires git/gh subprocess calls and is deferred to
         # repo_detail. stale_workspace_count is always 0 in the summary —
         # use `repos show` for accurate staleness.
-        ws_dir = harness_home / "workspaces" / entry.name
+        ws_dir = entry / "workspaces"
         workspace_count = 0
         stale_workspace_count = 0
         if ws_dir.is_dir():
@@ -269,13 +278,13 @@ def list_repos(harness_home: Path) -> list[RepoSummary]:
                     workspace_count += 1
 
         # Count OpenSpec changes
-        active_changes_list, completed_changes = read_openspec_changes(entry)
+        active_changes_list, completed_changes = read_openspec_changes(repo_path)
         active_changes = len(active_changes_list)
 
         summaries.append(
             RepoSummary(
                 name=entry.name,
-                path=entry,
+                path=repo_path,
                 remote_url=remote_url,
                 has_harness_md=has_harness_md,
                 has_protected_paths=has_protected_paths,
@@ -293,12 +302,16 @@ def list_repos(harness_home: Path) -> list[RepoSummary]:
 def repo_detail(harness_home: Path, repo_name: str) -> RepoDetail:
     """Get detailed view of a single repo.
 
-    Raises FileNotFoundError if the repo directory doesn't exist.
+    Reads from ``projects/<repo_name>/repo/`` for repo data and
+    ``projects/<repo_name>/workspaces/`` for workspace info.
+
+    Raises FileNotFoundError if the project directory doesn't exist.
     """
     typer.echo(f"[dashboard] reading detail for repo {repo_name}", err=True)
-    repo_path = harness_home / "repos" / repo_name
+    project_dir = harness_home / "projects" / repo_name
+    repo_path = project_dir / "repo"
     if not repo_path.is_dir():
-        raise FileNotFoundError(f"Repo '{repo_name}' not found in {harness_home}/repos/")
+        raise FileNotFoundError(f"Repo '{repo_name}' not found in {harness_home}/projects/")
 
     # Build summary
     remote_url = _get_remote_url(repo_path)
@@ -320,7 +333,7 @@ def repo_detail(harness_home: Path, repo_name: str) -> RepoDetail:
     # (branch, staleness, PR check). list_repos intentionally skips this
     # and counts directories cheaply to avoid N×M subprocess calls.
     workspaces: list[WorkspaceInfo] = []
-    ws_dir = harness_home / "workspaces" / repo_name
+    ws_dir = project_dir / "workspaces"
     stale_workspace_count = 0
     if ws_dir.is_dir():
         for ws in sorted(ws_dir.iterdir()):
@@ -366,23 +379,27 @@ def repo_detail(harness_home: Path, repo_name: str) -> RepoDetail:
 def cross_repo_roadmap(harness_home: Path) -> list[RepoRoadmap]:
     """Cross-repo OpenSpec roadmap view.
 
-    For each onboarded repo, read ROADMAP.md and enumerate active changes.
+    For each onboarded project (with ``config.yaml``), read ROADMAP.md and
+    enumerate active changes from the repo clone at ``projects/<name>/repo/``.
     """
     typer.echo(f"[dashboard] building cross-repo roadmap from {harness_home}", err=True)
-    repos_dir = harness_home / "repos"
-    if not repos_dir.is_dir():
-        typer.echo("[dashboard] no repos/ directory", err=True)
+    projects_dir = harness_home / "projects"
+    if not projects_dir.is_dir():
+        typer.echo("[dashboard] no projects/ directory", err=True)
         return []
 
     roadmaps: list[RepoRoadmap] = []
-    for entry in sorted(repos_dir.iterdir()):
+    for entry in sorted(projects_dir.iterdir()):
         if not entry.is_dir():
             continue
-        if not (entry / ".git").exists():
+        if not (entry / "config.yaml").is_file():
+            continue
+        repo_path = entry / "repo"
+        if not repo_path.is_dir():
             continue
 
-        roadmap_content = read_roadmap(entry)
-        active_changes, completed_count = read_openspec_changes(entry)
+        roadmap_content = read_roadmap(repo_path)
+        active_changes, completed_count = read_openspec_changes(repo_path)
 
         roadmaps.append(
             RepoRoadmap(

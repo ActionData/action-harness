@@ -341,7 +341,7 @@ class RepoQueue:
                 f"{_MAX_WORKER_RESTARTS})",
                 err=True,
             )
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             loop.call_later(delay, self.start)
         elif task.cancelled():
             typer.echo(
@@ -398,6 +398,9 @@ class RepoQueue:
                     harness_agents_dir=harness_agents_dir,
                     permission_mode=permission_mode,
                 )
+
+                # Reset restart counter — worker is healthy after a successful event
+                self._restart_count = 0
 
                 typer.echo(
                     f"[server] completed {event.event_type}.{event.action} for {self.repo_name}",

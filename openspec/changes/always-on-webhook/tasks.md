@@ -54,9 +54,9 @@
 
 ## 10. Self-Validation
 
-- [ ] 10.1 `uv run pytest tests/ -v` — all existing and new tests pass
-- [ ] 10.2 `uv run ruff check .` — no lint errors
-- [ ] 10.3 `uv run ruff format --check .` — formatting clean
-- [ ] 10.4 `uv run mypy src/` — no type errors
-- [ ] 10.5 `uv run action-harness serve --help` — shows help with --port, --host, --harness-home options
-- [ ] 10.6 Start server with `HARNESS_WEBHOOK_SECRET=test uv run action-harness serve --port 0`, send GET to `/health`, verify 200 response, then shut down
+- [x] 10.1 `uv run pytest tests/ -v` — all existing and new tests pass
+- [x] 10.2 `uv run ruff check .` — no lint errors
+- [x] 10.3 `uv run ruff format --check .` — formatting clean
+- [x] 10.4 `uv run mypy src/` — no type errors
+- [x] 10.5 `uv run action-harness serve --help` — shows help with --port, --host, --harness-home options
+- [x] 10.6 Start server with `HARNESS_WEBHOOK_SECRET=test uv run action-harness serve --port 0`, send GET to `/health`, verify 200 response, then shut down

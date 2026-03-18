@@ -43,7 +43,12 @@ def _make_test_client(
         configs = {
             "owner/repo": WebhookConfig(
                 enabled=True,
-                events=["issues.opened", "issues.labeled", "pull_request.closed", "check_suite.completed"],
+                events=[
+                    "issues.opened",
+                    "issues.labeled",
+                    "pull_request.closed",
+                    "check_suite.completed",
+                ],
                 auto_dispatch=True,
                 project_dir=Path("/tmp/test-project"),
             ),
@@ -194,7 +199,11 @@ class TestWebhookEndpoint:
 
     def test_invalid_signature(self) -> None:
         client = _make_test_client()
-        payload = {"action": "opened", "issue": {"number": 1, "title": "X"}, "repository": {"full_name": "owner/repo"}}
+        payload = {
+            "action": "opened",
+            "issue": {"number": 1, "title": "X"},
+            "repository": {"full_name": "owner/repo"},
+        }
         body = json.dumps(payload).encode()
         response = client.post(
             "/webhook",
@@ -209,7 +218,11 @@ class TestWebhookEndpoint:
 
     def test_missing_signature(self) -> None:
         client = _make_test_client()
-        payload = {"action": "opened", "issue": {"number": 1, "title": "X"}, "repository": {"full_name": "owner/repo"}}
+        payload = {
+            "action": "opened",
+            "issue": {"number": 1, "title": "X"},
+            "repository": {"full_name": "owner/repo"},
+        }
         body = json.dumps(payload).encode()
         response = client.post(
             "/webhook",

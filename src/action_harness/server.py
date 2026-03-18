@@ -7,11 +7,10 @@ import hashlib
 import hmac
 import json
 import re
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Sequence
 
 import typer
 import yaml
@@ -240,9 +239,7 @@ def load_webhook_configs(harness_home: Path) -> dict[str, WebhookConfig]:
             continue
         owner_repo = _extract_owner_repo(remote_url)
         if owner_repo is None:
-            typer.echo(
-                f"[server] could not extract owner/repo from {remote_url}", err=True
-            )
+            typer.echo(f"[server] could not extract owner/repo from {remote_url}", err=True)
             continue
 
         # Parse webhook section — skip projects without it
@@ -329,7 +326,9 @@ class RepoQueue:
 
             if slack_url:
                 await asyncio.to_thread(
-                    post_slack, slack_url, f"Triaging {event.event_type}.{event.action} on {self.repo_name}"
+                    post_slack,
+                    slack_url,
+                    f"Triaging {event.event_type}.{event.action} on {self.repo_name}",
                 )
 
             try:
@@ -362,7 +361,8 @@ class RepoQueue:
                     )
             except Exception as exc:
                 typer.echo(
-                    f"[server] failed {event.event_type}.{event.action} for {self.repo_name}: {exc}",
+                    f"[server] failed {event.event_type}.{event.action} "
+                    f"for {self.repo_name}: {exc}",
                     err=True,
                 )
                 if slack_url:

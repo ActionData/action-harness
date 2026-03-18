@@ -15,7 +15,10 @@ from action_harness.lead import (
     LeadContext,
     LeadPlan,
     ProposalItem,
+    _build_active_names,
+    _compute_readiness_safe,
     _gather_issues,
+    _gather_recent_runs,
     build_greeting,
     dispatch_lead,
     dispatch_lead_interactive,
@@ -580,6 +583,175 @@ class TestGatherLeadContextStructured:
 
         assert lead_ctx.has_roadmap is False
         assert lead_ctx.has_claude_md is False
+
+    def test_active_and_ready_changes_populated(self, tmp_path: Path) -> None:
+        """active_changes and ready_changes populated from prerequisites."""
+        (tmp_path / ".git").mkdir()
+        (tmp_path / "CLAUDE.md").write_text("# Project")
+        change_dir = tmp_path / "openspec" / "changes" / "my-feature"
+        change_dir.mkdir(parents=True)
+        (change_dir / ".openspec.yaml").write_text("schema: spec-driven\n")
+
+        with patch("action_harness.lead._gather_issues", return_value=None):
+            lead_ctx = gather_lead_context(tmp_path)
+
+        assert "my-feature" in lead_ctx.ready_changes
+        assert "my-feature" in lead_ctx.active_changes
+
+    def test_recent_run_stats_populated_from_manifests(self, tmp_path: Path) -> None:
+        """recent_run_stats populated when manifests exist."""
+        (tmp_path / ".git").mkdir()
+        (tmp_path / "CLAUDE.md").write_text("# Project")
+
+        mock_manifest = type(
+            "M", (), {"success": True, "change_name": "x", "total_duration_seconds": 10.0}
+        )()
+        mock_fail = type(
+            "M", (), {"success": False, "change_name": "y", "total_duration_seconds": 5.0}
+        )()
+
+        with (
+            patch("action_harness.lead._gather_issues", return_value=None),
+            patch(
+                "action_harness.reporting.load_manifests",
+                return_value=[mock_manifest, mock_fail, mock_manifest],
+            ),
+        ):
+            lead_ctx = gather_lead_context(tmp_path)
+
+        assert lead_ctx.recent_run_stats == (2, 3)
+
+
+# ---------------------------------------------------------------------------
+# Helper function tests
+# ---------------------------------------------------------------------------
+
+
+class TestBuildActiveNames:
+    def test_ready_only(self) -> None:
+        """Returns ready names when no blocked changes."""
+        result = _build_active_names(["a", "b"], [])
+        assert result == ["a", "b"]
+
+    def test_ready_plus_blocked(self) -> None:
+        """Combines ready and blocked names."""
+        blocked = [{"name": "c", "unmet": ["dep"]}]
+        result = _build_active_names(["a"], blocked)
+        assert result == ["a", "c"]
+
+    def test_malformed_blocked_entries_skipped(self) -> None:
+        """Non-dict and missing-name entries are skipped."""
+        blocked: list[dict[str, str | list[str]]] = [
+            {"name": "valid"},
+            {"no_name_key": "bad"},
+        ]
+        result = _build_active_names([], blocked)
+        assert result == ["valid"]
+
+    def test_empty_inputs(self) -> None:
+        """Both empty returns empty."""
+        result = _build_active_names([], [])
+        assert result == []
+
+
+class TestComputeReadinessSafe:
+    def test_exception_returns_empty(self, tmp_path: Path) -> None:
+        """Exception from compute_readiness returns empty lists."""
+        with patch(
+            "action_harness.prerequisites.compute_readiness",
+            side_effect=RuntimeError("boom"),
+        ):
+            ready, blocked = _compute_readiness_safe(tmp_path)
+
+        assert ready == []
+        assert blocked == []
+
+
+class TestGatherRecentRuns:
+    def test_returns_section_and_stats(self, tmp_path: Path) -> None:
+        """Returns both section text and structured stats."""
+        mock_manifest = type(
+            "M", (), {"success": True, "change_name": "feat", "total_duration_seconds": 10.0}
+        )()
+        mock_fail = type(
+            "M", (), {"success": False, "change_name": "fix", "total_duration_seconds": 5.0}
+        )()
+
+        with patch(
+            "action_harness.reporting.load_manifests",
+            return_value=[mock_manifest, mock_fail],
+        ):
+            section, stats = _gather_recent_runs(tmp_path, 3000)
+
+        assert section is not None
+        assert "feat" in section
+        assert "fix" in section
+        assert stats == (1, 2)
+
+    def test_no_manifests_returns_none(self, tmp_path: Path) -> None:
+        """No manifests returns (None, None)."""
+        with patch("action_harness.reporting.load_manifests", return_value=[]):
+            section, stats = _gather_recent_runs(tmp_path, 3000)
+
+        assert section is None
+        assert stats is None
+
+    def test_load_error_returns_none(self, tmp_path: Path) -> None:
+        """Exception from load_manifests returns (None, None)."""
+        with patch(
+            "action_harness.reporting.load_manifests",
+            side_effect=OSError("corrupt"),
+        ):
+            section, stats = _gather_recent_runs(tmp_path, 3000)
+
+        assert section is None
+        assert stats is None
+
+
+class TestEmptyPromptUsesGreeting:
+    def test_empty_string_prompt_triggers_greeting(self, tmp_path: Path) -> None:
+        """Empty-string prompt is treated as no-prompt — greeting is injected."""
+        repo_path = tmp_path / "repo"
+        repo_path.mkdir()
+        agents_dir = tmp_path / "agents"
+        agents_dir.mkdir()
+        (agents_dir / "lead.md").write_text("---\nname: lead\n---\nPersona")
+        ctx = LeadContext(full_text="ctx", repo_name="my-repo", active_changes=["feat"])
+
+        with patch("action_harness.lead.subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 0
+            dispatch_lead_interactive(
+                repo_path=repo_path,
+                prompt="",
+                context=ctx,
+                harness_agents_dir=agents_dir,
+            )
+
+        cmd = mock_run.call_args[0][0]
+        # Empty-string prompt triggers greeting, not passed as-is
+        assert "my-repo" in cmd[1]
+        assert "Greet me" in cmd[1]
+
+    def test_whitespace_only_prompt_triggers_greeting(self, tmp_path: Path) -> None:
+        """Whitespace-only prompt is treated as no-prompt — greeting is injected."""
+        repo_path = tmp_path / "repo"
+        repo_path.mkdir()
+        agents_dir = tmp_path / "agents"
+        agents_dir.mkdir()
+        (agents_dir / "lead.md").write_text("---\nname: lead\n---\nPersona")
+        ctx = LeadContext(full_text="ctx", repo_name="my-repo")
+
+        with patch("action_harness.lead.subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 0
+            dispatch_lead_interactive(
+                repo_path=repo_path,
+                prompt="   ",
+                context=ctx,
+                harness_agents_dir=agents_dir,
+            )
+
+        cmd = mock_run.call_args[0][0]
+        assert "my-repo" in cmd[1]
 
 
 # ---------------------------------------------------------------------------

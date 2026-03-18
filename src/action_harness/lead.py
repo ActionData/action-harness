@@ -226,18 +226,32 @@ def _gather_assessment_scores(repo_path: Path, max_section_chars: int) -> str | 
         return None
 
 
-def _gather_recent_runs(repo_path: Path, max_section_chars: int) -> str | None:
-    """Gather recent run summary from manifests."""
-    typer.echo("[lead] gathering recent run data", err=True)
-    # Lazy import to avoid circular dependencies
-    from action_harness.reporting import load_manifests
+def _gather_recent_runs(
+    repo_path: Path, max_section_chars: int
+) -> tuple[str | None, tuple[int, int] | None]:
+    """Gather recent run summary and structured stats from manifests.
 
-    manifests = load_manifests(repo_path)
+    Returns ``(section_text, (passed, total))`` in a single pass.
+    Either value may be ``None`` if no manifests exist or on error.
+    """
+    typer.echo("[lead] gathering recent run data", err=True)
+    try:
+        # Lazy import to avoid circular dependencies
+        from action_harness.reporting import load_manifests
+
+        manifests = load_manifests(repo_path)
+    except Exception as exc:  # noqa: BLE001 — optional context, must not block lead
+        typer.echo(f"[lead] warning: could not load manifests: {exc}", err=True)
+        return (None, None)
+
     if not manifests:
-        return None
+        return (None, None)
 
     # Take last 5
     recent = manifests[-5:]
+    passed = sum(1 for m in recent if m.success)
+    run_stats: tuple[int, int] = (passed, len(recent))
+
     lines = ["## Recent Harness Runs", ""]
     for m in recent:
         status = "success" if m.success else "failure"
@@ -248,7 +262,7 @@ def _gather_recent_runs(repo_path: Path, max_section_chars: int) -> str | None:
     section = "\n".join(lines)
     if len(section) > max_section_chars:
         section = section[:max_section_chars] + "\n\n... (truncated)"
-    return section
+    return (section, run_stats)
 
 
 def _gather_catalog_frequency(harness_home: Path | None, max_section_chars: int) -> str | None:
@@ -386,13 +400,12 @@ def gather_lead_context(
     if assessment:
         sections.append(assessment)
 
-    # (f) Recent run summary
-    runs = _gather_recent_runs(repo_path, max_section_chars)
-    if runs:
-        sections.append(runs)
-
-    # (f-extra) Extract structured run stats for greeting
-    lead_ctx.recent_run_stats = _extract_recent_run_stats(repo_path)
+    # (f) Recent run summary — single load_manifests call produces both the
+    #     text section and the structured stats for the greeting builder.
+    runs_section, run_stats = _gather_recent_runs(repo_path, max_section_chars)
+    if runs_section:
+        sections.append(runs_section)
+    lead_ctx.recent_run_stats = run_stats
 
     # (g) Catalog frequency
     freq = _gather_catalog_frequency(harness_home, max_section_chars)
@@ -425,26 +438,6 @@ def gather_lead_context(
         err=True,
     )
     return lead_ctx
-
-
-def _extract_recent_run_stats(repo_path: Path) -> tuple[int, int] | None:
-    """Extract pass/total counts from recent run manifests.
-
-    Returns ``(passed, total)`` or ``None`` if no manifests exist.
-    """
-    try:
-        from action_harness.reporting import load_manifests
-
-        manifests = load_manifests(repo_path)
-    except Exception:  # noqa: BLE001 — optional context, must not block lead
-        return None
-
-    if not manifests:
-        return None
-
-    recent = manifests[-5:]
-    passed = sum(1 for m in recent if m.success)
-    return (passed, len(recent))
 
 
 def _compute_readiness_safe(

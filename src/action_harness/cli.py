@@ -1744,3 +1744,46 @@ def lead(
         for change_name, success, detail in dispatch_results:
             status = "success" if success else f"failed ({detail})"
             typer.echo(f"  - {change_name}: {status}")
+
+
+# ---------------------------------------------------------------------------
+# serve — webhook server
+# ---------------------------------------------------------------------------
+
+
+@app.command()
+def serve(
+    port: int = typer.Option(8080, help="Port to listen on."),
+    host: str = typer.Option("0.0.0.0", help="Host to bind to."),
+    harness_home: Path | None = typer.Option(
+        None,
+        envvar="HARNESS_HOME",
+        help="Path to the harness home directory.",
+    ),
+) -> None:
+    """Start the webhook server for receiving GitHub events.
+
+    Listens for GitHub webhook events and dispatches lead sessions
+    for configured repos. Requires the HARNESS_WEBHOOK_SECRET
+    environment variable to be set.
+    """
+    import uvicorn
+
+    from action_harness.server import app as webhook_app
+
+    secret = os.environ.get("HARNESS_WEBHOOK_SECRET", "")
+    if not secret:
+        typer.echo(
+            "Error: HARNESS_WEBHOOK_SECRET environment variable is required",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    resolved_home = _resolve_harness_home(harness_home)
+    typer.echo(f"[serve] starting webhook server on {host}:{port}", err=True)
+    typer.echo(f"[serve] harness home: {resolved_home}", err=True)
+
+    webhook_app.state.harness_home = resolved_home
+    webhook_app.state.webhook_secret = secret
+
+    uvicorn.run(webhook_app, host=host, port=port)

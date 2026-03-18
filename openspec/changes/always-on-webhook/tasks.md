@@ -34,7 +34,7 @@
 
 ## 7. CLI Command
 
-- [ ] 7.1 Add `serve` command to `cli.py`: `harness serve [--port 8080] [--host 0.0.0.0] [--harness-home PATH]`. Read `HARNESS_WEBHOOK_SECRET` from `os.environ` — if not set, `typer.echo("Error: HARNESS_WEBHOOK_SECRET environment variable is required", err=True)` and exit with code 1. Import the FastAPI app from `server.py`, set `app.state.harness_home` and `app.state.webhook_secret`, then call `uvicorn.run(app, host=host, port=port)`.
+- [x] 7.1 Add `serve` command to `cli.py`: `harness serve [--port 8080] [--host 0.0.0.0] [--harness-home PATH]`. Read `HARNESS_WEBHOOK_SECRET` from `os.environ` — if not set, `typer.echo("Error: HARNESS_WEBHOOK_SECRET environment variable is required", err=True)` and exit with code 1. Import the FastAPI app from `server.py`, set `app.state.harness_home` and `app.state.webhook_secret`, then call `uvicorn.run(app, host=host, port=port)`.
 
 ## 8. Tests
 

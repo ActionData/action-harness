@@ -32,6 +32,9 @@ class WebhookEvent:
     event_type: str
     action: str
     prompt: str
+    # NOTE: auto_dispatch is set per event type but not yet consumed by the
+    # queue worker — it will gate whether dispatch_lead is called vs. a
+    # check-only session when that distinction is implemented.
     auto_dispatch: bool
 
 
@@ -290,6 +293,10 @@ def load_webhook_configs(harness_home: Path) -> dict[str, WebhookConfig]:
 # ---------------------------------------------------------------------------
 
 
+_MAX_WORKER_RESTARTS = 5
+_RESTART_BACKOFF_BASE_SECONDS = 1.0
+
+
 class RepoQueue:
     """In-memory serial queue for a single repo's webhook events."""
 
@@ -304,6 +311,7 @@ class RepoQueue:
         self._configs = configs
         self._harness_home = harness_home
         self._task: asyncio.Task[None] | None = None
+        self._restart_count = 0
 
     def start(self) -> None:
         """Start the background worker task."""
@@ -311,14 +319,30 @@ class RepoQueue:
         self._task.add_done_callback(self._on_worker_done)
 
     def _on_worker_done(self, task: asyncio.Task[None]) -> None:
-        """Log and restart if the worker task exits unexpectedly."""
+        """Log and restart with exponential backoff if the worker dies.
+
+        Caps restarts at _MAX_WORKER_RESTARTS to prevent infinite spin
+        loops when the failure is persistent (e.g., broken import).
+        """
         exc = task.exception() if not task.cancelled() else None
         if exc is not None:
+            self._restart_count += 1
+            if self._restart_count > _MAX_WORKER_RESTARTS:
+                typer.echo(
+                    f"[server] worker for {self.repo_name} died {self._restart_count} "
+                    f"times; giving up. Last error: {exc}",
+                    err=True,
+                )
+                return
+            delay = _RESTART_BACKOFF_BASE_SECONDS * (2 ** (self._restart_count - 1))
             typer.echo(
-                f"[server] worker for {self.repo_name} died: {exc}; restarting",
+                f"[server] worker for {self.repo_name} died: {exc}; "
+                f"restarting in {delay:.0f}s (attempt {self._restart_count}/"
+                f"{_MAX_WORKER_RESTARTS})",
                 err=True,
             )
-            self.start()
+            loop = asyncio.get_event_loop()
+            loop.call_later(delay, self.start)
         elif task.cancelled():
             typer.echo(
                 f"[server] worker for {self.repo_name} was cancelled",
@@ -346,6 +370,8 @@ class RepoQueue:
                 err=True,
             )
 
+            # NOTE: Slack message omits issue number — the event prompt has it,
+            # but extracting it here would require parsing. Acceptable for v1.
             if slack_url:
                 await asyncio.to_thread(
                     post_slack,
@@ -427,6 +453,11 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
 
     Skipped when app.state.webhook_configs is already set (e.g., in tests
     that configure state before creating the TestClient).
+
+    NOTE: No graceful shutdown of worker tasks or subprocesses on exit.
+    Worker tasks are fire-and-forget asyncio tasks; uvicorn's SIGTERM
+    handling cancels them. In-flight dispatch_lead subprocesses may be
+    orphaned — acceptable for v1 since the lead is idempotent.
     """
     if not hasattr(application.state, "webhook_configs"):
         harness_home: Path = application.state.harness_home
@@ -518,5 +549,11 @@ async def handle_webhook(request: Request) -> JSONResponse:
 
 
 def _event_matches(event_key: str, allowed_events: Sequence[str]) -> bool:
-    """Check if an event key matches any of the allowed events."""
+    """Check if an event key matches any of the allowed events.
+
+    Exact match only — wildcard/prefix matching (e.g., "issues.*") is not
+    supported. Config must list each event.action pair explicitly. This is
+    intentional: explicit config prevents accidental dispatch on unexpected
+    event subtypes.
+    """
     return event_key in allowed_events

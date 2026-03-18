@@ -56,6 +56,10 @@ def _make_test_client(
             ),
         }
 
+    # NOTE: Sets shared mutable app.state — each test using _make_test_client
+    # must call _cleanup_app_state() in a finally block to avoid cross-test
+    # contamination. Acceptable for this module's test count; a fixture-based
+    # approach would be warranted if test count grows significantly.
     app.state.webhook_secret = SECRET
     app.state.harness_home = Path("/tmp/test-harness")
     app.state.webhook_configs = configs
@@ -485,6 +489,14 @@ class TestLoadWebhookConfigs:
 
 
 class TestRepoQueueWorker:
+    # NOTE on patching strategy: _worker uses local imports
+    # (from action_harness.lead import ...) so we patch at the source module
+    # (action_harness.lead.gather_lead_context). This works because Python's
+    # import system caches modules — the local import gets the patched version.
+    # This is fragile if action_harness.lead gets imported at the top of this
+    # file or via a transitive import before the patch context. Do NOT add
+    # top-level imports of action_harness.lead to this test file.
+
     async def test_worker_dispatches_lead(self) -> None:
         """Worker should call gather_lead_context and dispatch_lead."""
         from action_harness.server import RepoQueue
@@ -598,3 +610,99 @@ class TestRepoQueueWorker:
             fail_msg = mock_slack.call_args_list[1][0][1]
             assert "failed" in fail_msg
             assert "context error" in fail_msg
+
+
+# ---------------------------------------------------------------------------
+# check_suite.completed event parsing (prior acknowledged finding)
+# ---------------------------------------------------------------------------
+
+
+class TestParseCheckSuiteCompleted:
+    def test_check_suite_completed(self) -> None:
+        payload: dict[str, object] = {
+            "action": "completed",
+            "check_suite": {"head_branch": "feature-x"},
+            "repository": {"full_name": "owner/repo"},
+        }
+        event = parse_github_event("check_suite", "completed", payload)
+        assert event is not None
+        assert "feature-x" in event.prompt
+        assert event.auto_dispatch is False
+        assert event.event_type == "check_suite"
+
+
+# ---------------------------------------------------------------------------
+# Disabled repo config (prior acknowledged finding)
+# ---------------------------------------------------------------------------
+
+
+class TestDisabledRepoConfig:
+    def test_disabled_repo_returns_acknowledged(self) -> None:
+        """Repo with enabled=False should return 200 acknowledged, not queue."""
+        configs = {
+            "owner/repo": WebhookConfig(
+                enabled=False,
+                events=["issues.opened"],
+                project_dir=Path("/tmp/test"),
+            ),
+        }
+        client = _make_test_client(configs)
+        try:
+            payload = {
+                "action": "opened",
+                "issue": {"number": 1, "title": "X"},
+                "repository": {"full_name": "owner/repo"},
+            }
+            body = json.dumps(payload).encode()
+            response = client.post(
+                "/webhook",
+                content=body,
+                headers={
+                    "X-Hub-Signature-256": _sign(body),
+                    "X-GitHub-Event": "issues",
+                    "Content-Type": "application/json",
+                },
+            )
+            assert response.status_code == 200
+            assert response.json()["action"] == "none"
+        finally:
+            _cleanup_app_state()
+
+
+# ---------------------------------------------------------------------------
+# Invalid JSON payload (prior acknowledged finding)
+# ---------------------------------------------------------------------------
+
+
+class TestInvalidJsonPayload:
+    def test_invalid_json_returns_400(self) -> None:
+        client = _make_test_client()
+        try:
+            body = b"not valid json"
+            response = client.post(
+                "/webhook",
+                content=body,
+                headers={
+                    "X-Hub-Signature-256": _sign(body),
+                    "X-GitHub-Event": "issues",
+                    "Content-Type": "application/json",
+                },
+            )
+            assert response.status_code == 400
+        finally:
+            _cleanup_app_state()
+
+
+# ---------------------------------------------------------------------------
+# post_slack with HTTP error status (prior acknowledged finding)
+# ---------------------------------------------------------------------------
+
+
+class TestPostSlackHttpError:
+    def test_http_error_status_does_not_propagate(self) -> None:
+        from action_harness.notifications import post_slack
+
+        with patch("action_harness.notifications.httpx.post") as mock_post:
+            mock_post.return_value.status_code = 500
+            # Should not raise — best-effort
+            post_slack("https://hooks.slack.com/test", "Hello")

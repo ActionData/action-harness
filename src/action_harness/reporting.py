@@ -9,7 +9,7 @@ from pathlib import Path
 import typer
 from pydantic import BaseModel
 
-from action_harness.models import ReviewFinding, ReviewResult, RunManifest
+from action_harness.models import ReviewFinding, ReviewResult, RunManifest, RunStats
 
 
 class RecurringFinding(BaseModel):
@@ -150,6 +150,19 @@ def load_manifests(
     return manifests
 
 
+def compute_run_stats(manifests: list[RunManifest]) -> RunStats:
+    """Compute success/failure counts and success rate from manifests.
+
+    Shared by ``aggregate_report`` and ``_gather_recent_runs`` in ``lead.py``
+    to avoid duplicating the counting logic.
+    """
+    total = len(manifests)
+    passed = sum(1 for m in manifests if m.success)
+    failed = total - passed
+    success_rate = (passed / total * 100.0) if total > 0 else 0.0
+    return RunStats(passed=passed, failed=failed, total=total, success_rate=success_rate)
+
+
 def group_recurring_findings(
     manifests: list[RunManifest],
 ) -> list[RecurringFinding]:
@@ -215,10 +228,7 @@ def aggregate_report(
     across manifests. Averages duration. Builds recent runs list (last 10,
     most recent first).
     """
-    total = len(manifests)
-    successful = sum(1 for m in manifests if m.success)
-    failed = total - successful
-    success_rate = (successful / total * 100.0) if total > 0 else 0.0
+    stats = compute_run_stats(manifests)
 
     # Failure stages
     failures_by_stage: dict[str, int] = {}
@@ -283,10 +293,10 @@ def aggregate_report(
         )
 
     return RunReport(
-        total_runs=total,
-        successful_runs=successful,
-        failed_runs=failed,
-        success_rate=success_rate,
+        total_runs=stats.total,
+        successful_runs=stats.passed,
+        failed_runs=stats.failed,
+        success_rate=stats.success_rate,
         failures_by_stage=failures_by_stage,
         recurring_findings=recurring,
         catalog_frequency=catalog_frequency or {},

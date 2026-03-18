@@ -237,7 +237,7 @@ def _gather_recent_runs(
     typer.echo("[lead] gathering recent run data", err=True)
     try:
         # Lazy import to avoid circular dependencies
-        from action_harness.reporting import load_manifests
+        from action_harness.reporting import compute_run_stats, load_manifests
 
         manifests = load_manifests(repo_path)
     except Exception as exc:  # noqa: BLE001 — optional context, must not block lead
@@ -249,8 +249,8 @@ def _gather_recent_runs(
 
     # Take last 5
     recent = manifests[-5:]
-    passed = sum(1 for m in recent if m.success)
-    run_stats: tuple[int, int] = (passed, len(recent))
+    stats = compute_run_stats(recent)
+    run_stats: tuple[int, int] = (stats.passed, stats.total)
 
     lines = ["## Recent Harness Runs", ""]
     for m in recent:

@@ -25,6 +25,7 @@ from action_harness.lead import (
     gather_lead_context,
     parse_lead_plan,
 )
+from action_harness.models import EvalResult, RunManifest, WorkerResult, WorktreeResult
 
 runner = CliRunner()
 
@@ -670,16 +671,36 @@ class TestComputeReadinessSafe:
 class TestGatherRecentRuns:
     def test_returns_section_and_stats(self, tmp_path: Path) -> None:
         """Returns both section text and structured stats."""
-        mock_manifest = type(
-            "M", (), {"success": True, "change_name": "feat", "total_duration_seconds": 10.0}
-        )()
-        mock_fail = type(
-            "M", (), {"success": False, "change_name": "fix", "total_duration_seconds": 5.0}
-        )()
+        manifest_pass = RunManifest(
+            change_name="feat",
+            repo_path=str(tmp_path),
+            started_at="2026-03-16T10:00:00+00:00",
+            completed_at="2026-03-16T10:00:10+00:00",
+            success=True,
+            stages=[
+                WorktreeResult(success=True, worktree_path=tmp_path),
+                WorkerResult(success=True),
+                EvalResult(success=True, commands_run=1, commands_passed=1),
+            ],
+            total_duration_seconds=10.0,
+        )
+        manifest_fail = RunManifest(
+            change_name="fix",
+            repo_path=str(tmp_path),
+            started_at="2026-03-16T10:01:00+00:00",
+            completed_at="2026-03-16T10:01:05+00:00",
+            success=False,
+            stages=[
+                WorktreeResult(success=True, worktree_path=tmp_path),
+                WorkerResult(success=True),
+                EvalResult(success=False, commands_run=1, commands_passed=0),
+            ],
+            total_duration_seconds=5.0,
+        )
 
         with patch(
             "action_harness.reporting.load_manifests",
-            return_value=[mock_manifest, mock_fail],
+            return_value=[manifest_pass, manifest_fail],
         ):
             section, stats = _gather_recent_runs(tmp_path, 3000)
 

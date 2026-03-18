@@ -215,6 +215,15 @@ class PipelineCheckpoint(BaseModel):
     baseline_eval: dict[str, bool] | None = None
 
 
+class RunStats(BaseModel):
+    """Aggregate success/failure statistics over a set of run manifests."""
+
+    passed: int
+    failed: int
+    total: int
+    success_rate: float
+
+
 class RunManifest(BaseModel):
     """Complete record of a pipeline run, collecting all stage results."""
 

@@ -64,7 +64,6 @@ class LeadContext:
     full_text: str = ""
     repo_name: str = ""
     active_changes: list[str] = field(default_factory=list)
-    completed_changes: list[str] = field(default_factory=list)
     ready_changes: list[str] = field(default_factory=list)
     recent_run_stats: tuple[int, int] | None = None  # (passed, total)
     has_roadmap: bool = False
@@ -301,19 +300,17 @@ def _gather_catalog_frequency(harness_home: Path | None, max_section_chars: int)
     return section
 
 
-def _gather_ready_changes(repo_path: Path, max_section_chars: int) -> str | None:
-    """Gather ready changes from prerequisite computation.
+def _format_ready_changes_section(
+    ready_names: list[str],
+    blocked_list: list[dict[str, str | list[str]]],
+    max_section_chars: int,
+) -> str | None:
+    """Format a "Ready Changes" section from pre-computed readiness data.
 
-    Returns a "Ready Changes" section listing changes ready for implementation,
+    Returns a markdown section listing changes ready for implementation,
     or a note if no changes are ready. Returns None if there are no active
-    changes at all (no openspec/changes/ directory or no changes in it).
+    changes at all.
     """
-    typer.echo("[lead] gathering ready changes from prerequisites", err=True)
-
-    from action_harness.prerequisites import compute_readiness
-
-    ready_names, blocked_list = compute_readiness(repo_path)
-
     if not ready_names and not blocked_list:
         # No active changes at all — include a note
         return "## Ready Changes\n\nNo changes currently ready for implementation."
@@ -402,12 +399,14 @@ def gather_lead_context(
     if freq:
         sections.append(freq)
 
-    # (h) Ready changes (from prerequisites)
-    ready_names, active_names = _extract_change_names(repo_path)
-    lead_ctx.ready_changes = ready_names
-    lead_ctx.active_changes = active_names
+    # (h) Ready changes (from prerequisites) — single compute_readiness call
+    #     feeds both the structured LeadContext fields and the text section.
+    typer.echo("[lead] gathering ready changes from prerequisites", err=True)
+    ready_names, blocked_list = _compute_readiness_safe(repo_path)
+    lead_ctx.ready_changes = list(ready_names)
+    lead_ctx.active_changes = _build_active_names(ready_names, blocked_list)
 
-    ready_section = _gather_ready_changes(repo_path, max_section_chars)
+    ready_section = _format_ready_changes_section(ready_names, blocked_list, max_section_chars)
     if ready_section:
         sections.append(ready_section)
 
@@ -448,26 +447,30 @@ def _extract_recent_run_stats(repo_path: Path) -> tuple[int, int] | None:
     return (passed, len(recent))
 
 
-def _extract_change_names(repo_path: Path) -> tuple[list[str], list[str]]:
-    """Extract ready and active change names.
-
-    Returns ``(ready_names, active_names)``. Both lists may be empty.
-    """
+def _compute_readiness_safe(
+    repo_path: Path,
+) -> tuple[list[str], list[dict[str, str | list[str]]]]:
+    """Call compute_readiness, returning empty results on any failure."""
     try:
         from action_harness.prerequisites import compute_readiness
 
-        ready_names, blocked_list = compute_readiness(repo_path)
-        # Active = ready + blocked names
-        blocked_names: list[str] = []
-        for b in blocked_list:
-            if isinstance(b, dict):
-                name = b.get("name")
-                if isinstance(name, str):
-                    blocked_names.append(name)
-        active_names = list(ready_names) + blocked_names
-        return (list(ready_names), active_names)
+        return compute_readiness(repo_path)
     except Exception:  # noqa: BLE001 — optional context, must not block lead
         return ([], [])
+
+
+def _build_active_names(
+    ready_names: list[str],
+    blocked_list: list[dict[str, str | list[str]]],
+) -> list[str]:
+    """Combine ready + blocked names into a single active changes list."""
+    blocked_names: list[str] = []
+    for b in blocked_list:
+        if isinstance(b, dict):
+            name = b.get("name")
+            if isinstance(name, str):
+                blocked_names.append(name)
+    return list(ready_names) + blocked_names
 
 
 # ---------------------------------------------------------------------------

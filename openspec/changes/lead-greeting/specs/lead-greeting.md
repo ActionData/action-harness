@@ -14,7 +14,6 @@ class LeadContext:
     full_text: str
     repo_name: str
     active_changes: list[str]
-    completed_changes: list[str]
     ready_changes: list[str]
     recent_run_stats: tuple[int, int] | None  # (passed, total)
     has_roadmap: bool

@@ -50,7 +50,7 @@
 
 ## 9. Documentation
 
-- [ ] 9.1 Create `docs/guides/always-on-setup.md` covering: Cloudflare Tunnel setup (`cloudflared tunnel create`, route, run as launchd service), GitHub webhook configuration (URL, secret, events: Issues + Pull requests + Check suites), Mac Mini launchd plist for `harness serve`, and example project `config.yaml` with webhook + notification settings.
+- [x] 9.1 Create `docs/guides/always-on-setup.md` covering: Cloudflare Tunnel setup (`cloudflared tunnel create`, route, run as launchd service), GitHub webhook configuration (URL, secret, events: Issues + Pull requests + Check suites), Mac Mini launchd plist for `harness serve`, and example project `config.yaml` with webhook + notification settings.
 
 ## 10. Self-Validation
 

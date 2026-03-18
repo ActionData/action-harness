@@ -3,6 +3,7 @@
 import json
 import subprocess
 import time
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import typer
@@ -45,6 +46,28 @@ class LeadPlan(BaseModel):
     proposals: list[ProposalItem] = []
     issues: list[IssueItem] = []
     dispatches: list[DispatchItem] = []
+
+
+# ---------------------------------------------------------------------------
+# Structured context model
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class LeadContext:
+    """Structured context gathered for the lead agent.
+
+    Holds both the assembled flat text (for system prompt injection) and
+    structured fields used by the greeting builder.
+    """
+
+    full_text: str = ""
+    repo_name: str = ""
+    active_changes: list[str] = field(default_factory=list)
+    ready_changes: list[str] = field(default_factory=list)
+    recent_run_stats: tuple[int, int] | None = None  # (passed, total)
+    has_roadmap: bool = False
+    has_claude_md: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -203,18 +226,32 @@ def _gather_assessment_scores(repo_path: Path, max_section_chars: int) -> str | 
         return None
 
 
-def _gather_recent_runs(repo_path: Path, max_section_chars: int) -> str | None:
-    """Gather recent run summary from manifests."""
-    typer.echo("[lead] gathering recent run data", err=True)
-    # Lazy import to avoid circular dependencies
-    from action_harness.reporting import load_manifests
+def _gather_recent_runs(
+    repo_path: Path, max_section_chars: int
+) -> tuple[str | None, tuple[int, int] | None]:
+    """Gather recent run summary and structured stats from manifests.
 
-    manifests = load_manifests(repo_path)
+    Returns ``(section_text, (passed, total))`` in a single pass.
+    Either value may be ``None`` if no manifests exist or on error.
+    """
+    typer.echo("[lead] gathering recent run data", err=True)
+    try:
+        # Lazy import to avoid circular dependencies
+        from action_harness.reporting import load_manifests
+
+        manifests = load_manifests(repo_path)
+    except Exception as exc:  # noqa: BLE001 — optional context, must not block lead
+        typer.echo(f"[lead] warning: could not load manifests: {exc}", err=True)
+        return (None, None)
+
     if not manifests:
-        return None
+        return (None, None)
 
     # Take last 5
     recent = manifests[-5:]
+    passed = sum(1 for m in recent if m.success)
+    run_stats: tuple[int, int] = (passed, len(recent))
+
     lines = ["## Recent Harness Runs", ""]
     for m in recent:
         status = "success" if m.success else "failure"
@@ -225,7 +262,7 @@ def _gather_recent_runs(repo_path: Path, max_section_chars: int) -> str | None:
     section = "\n".join(lines)
     if len(section) > max_section_chars:
         section = section[:max_section_chars] + "\n\n... (truncated)"
-    return section
+    return (section, run_stats)
 
 
 def _gather_catalog_frequency(harness_home: Path | None, max_section_chars: int) -> str | None:
@@ -277,19 +314,17 @@ def _gather_catalog_frequency(harness_home: Path | None, max_section_chars: int)
     return section
 
 
-def _gather_ready_changes(repo_path: Path, max_section_chars: int) -> str | None:
-    """Gather ready changes from prerequisite computation.
+def _format_ready_changes_section(
+    ready_names: list[str],
+    blocked_list: list[dict[str, str | list[str]]],
+    max_section_chars: int,
+) -> str | None:
+    """Format a "Ready Changes" section from pre-computed readiness data.
 
-    Returns a "Ready Changes" section listing changes ready for implementation,
+    Returns a markdown section listing changes ready for implementation,
     or a note if no changes are ready. Returns None if there are no active
-    changes at all (no openspec/changes/ directory or no changes in it).
+    changes at all.
     """
-    typer.echo("[lead] gathering ready changes from prerequisites", err=True)
-
-    from action_harness.prerequisites import compute_readiness
-
-    ready_names, blocked_list = compute_readiness(repo_path)
-
     if not ready_names and not blocked_list:
         # No active changes at all — include a note
         return "## Ready Changes\n\nNo changes currently ready for implementation."
@@ -312,7 +347,7 @@ def gather_lead_context(
     repo_path: Path,
     harness_home: Path | None = None,
     max_section_chars: int = 3000,
-) -> str:
+) -> LeadContext:
     """Gather repo context for the lead agent.
 
     Reads and assembles context sections, truncating each to max_section_chars:
@@ -320,7 +355,8 @@ def gather_lead_context(
     (e) assessment scores (quick base scan), (f) recent run summary,
     (g) catalog frequency top entries, (h) ready changes.
 
-    Returns the assembled context string.
+    Returns a :class:`LeadContext` with both the assembled flat text and
+    structured fields for the greeting builder.
     """
     typer.echo(
         f"[lead] gathering context for {repo_path} (max_section_chars={max_section_chars})",
@@ -328,6 +364,7 @@ def gather_lead_context(
     )
 
     sections: list[str] = []
+    lead_ctx = LeadContext(repo_name=repo_path.name)
 
     # (a) ROADMAP.md — check openspec directory first, then repo root
     roadmap_path = repo_path / "openspec" / "ROADMAP.md"
@@ -336,6 +373,7 @@ def gather_lead_context(
     roadmap = _read_file_section(roadmap_path, "Roadmap", max_section_chars)
     if roadmap:
         sections.append(roadmap)
+        lead_ctx.has_roadmap = True
 
     # (b) CLAUDE.md
     claude_md = _read_file_section(
@@ -343,6 +381,7 @@ def gather_lead_context(
     )
     if claude_md:
         sections.append(claude_md)
+        lead_ctx.has_claude_md = True
 
     # (c) HARNESS.md
     harness_md = _read_file_section(
@@ -361,35 +400,100 @@ def gather_lead_context(
     if assessment:
         sections.append(assessment)
 
-    # (f) Recent run summary
-    runs = _gather_recent_runs(repo_path, max_section_chars)
-    if runs:
-        sections.append(runs)
+    # (f) Recent run summary — single load_manifests call produces both the
+    #     text section and the structured stats for the greeting builder.
+    runs_section, run_stats = _gather_recent_runs(repo_path, max_section_chars)
+    if runs_section:
+        sections.append(runs_section)
+    lead_ctx.recent_run_stats = run_stats
 
     # (g) Catalog frequency
     freq = _gather_catalog_frequency(harness_home, max_section_chars)
     if freq:
         sections.append(freq)
 
-    # (h) Ready changes (from prerequisites)
-    ready_section = _gather_ready_changes(repo_path, max_section_chars)
+    # (h) Ready changes (from prerequisites) — single compute_readiness call
+    #     feeds both the structured LeadContext fields and the text section.
+    typer.echo("[lead] gathering ready changes from prerequisites", err=True)
+    ready_names, blocked_list = _compute_readiness_safe(repo_path)
+    lead_ctx.ready_changes = list(ready_names)
+    lead_ctx.active_changes = _build_active_names(ready_names, blocked_list)
+
+    ready_section = _format_ready_changes_section(ready_names, blocked_list, max_section_chars)
     if ready_section:
         sections.append(ready_section)
 
     if not sections:
         typer.echo("[lead] no context found — repo may need bootstrapping", err=True)
-        return (
+        lead_ctx.full_text = (
             "# Repo Context\n\n"
             "No context files found. "
             "This repo may need initial setup (ROADMAP.md, CLAUDE.md)."
         )
+        return lead_ctx
 
-    context = "# Repo Context\n\n" + "\n\n".join(sections)
+    lead_ctx.full_text = "# Repo Context\n\n" + "\n\n".join(sections)
     typer.echo(
-        f"[lead] gathered {len(sections)} context section(s) ({len(context)} chars)",
+        f"[lead] gathered {len(sections)} context section(s) ({len(lead_ctx.full_text)} chars)",
         err=True,
     )
-    return context
+    return lead_ctx
+
+
+def _compute_readiness_safe(
+    repo_path: Path,
+) -> tuple[list[str], list[dict[str, str | list[str]]]]:
+    """Call compute_readiness, returning empty results on any failure."""
+    try:
+        from action_harness.prerequisites import compute_readiness
+
+        return compute_readiness(repo_path)
+    except Exception:  # noqa: BLE001 — optional context, must not block lead
+        return ([], [])
+
+
+def _build_active_names(
+    ready_names: list[str],
+    blocked_list: list[dict[str, str | list[str]]],
+) -> list[str]:
+    """Combine ready + blocked names into a single active changes list."""
+    blocked_names: list[str] = []
+    for b in blocked_list:
+        if isinstance(b, dict):
+            name = b.get("name")
+            if isinstance(name, str):
+                blocked_names.append(name)
+    return list(ready_names) + blocked_names
+
+
+# ---------------------------------------------------------------------------
+# Greeting builder
+# ---------------------------------------------------------------------------
+
+
+def build_greeting(ctx: LeadContext) -> str:
+    """Build a deterministic greeting prompt from gathered context.
+
+    Produces a concise message the lead agent can use as a starting point
+    instead of synthesizing one from the system prompt alone.
+    """
+    parts: list[str] = [f"You are leading {ctx.repo_name}."]
+
+    if ctx.active_changes:
+        parts.append(f"Active changes: {', '.join(ctx.active_changes)}.")
+
+    if ctx.ready_changes:
+        parts.append(f"Ready to implement: {', '.join(ctx.ready_changes)}.")
+
+    if ctx.recent_run_stats is not None:
+        passed, total = ctx.recent_run_stats
+        parts.append(f"Recent runs: {passed}/{total} passed.")
+
+    parts.append("Greet me with a brief status summary and suggest 2-3 directions we could go.")
+
+    greeting = " ".join(parts)
+    typer.echo(f"[lead] built greeting ({len(greeting)} chars)", err=True)
+    return greeting
 
 
 # ---------------------------------------------------------------------------
@@ -400,7 +504,7 @@ def gather_lead_context(
 def dispatch_lead_interactive(
     repo_path: Path,
     prompt: str | None,
-    context: str,
+    context: LeadContext,
     harness_agents_dir: Path,
     permission_mode: str = "default",
 ) -> int:
@@ -410,8 +514,8 @@ def dispatch_lead_interactive(
     and gathered repo context as ``--append-system-prompt``.
 
     When *prompt* is provided, it is passed as a positional argument so the
-    conversation starts with that message. When *prompt* is ``None``, the
-    session starts with the agent greeting (defined in the lead persona).
+    conversation starts with that message. When *prompt* is ``None``, a
+    deterministic greeting built from the gathered context is used instead.
 
     Uses subprocess.run with inherited stdio (no capture_output) so the human
     can interact naturally with the Claude Code session.
@@ -434,15 +538,18 @@ def dispatch_lead_interactive(
         "--system-prompt",
         persona,
         "--append-system-prompt",
-        context,
+        context.full_text,
         "--permission-mode",
         permission_mode,
     ]
 
-    # Only pass the prompt as a positional arg if the user explicitly provided one.
-    # Without a prompt, the agent greets based on its persona instructions.
+    # When the user explicitly provides a prompt, use it as-is.
+    # Otherwise, build a deterministic greeting from the gathered context.
     if prompt is not None and prompt.strip():
         cmd.insert(1, prompt)
+    else:
+        greeting = build_greeting(context)
+        cmd.insert(1, greeting)
 
     prompt_label = "<prompt> " if prompt else ""
     typer.echo(

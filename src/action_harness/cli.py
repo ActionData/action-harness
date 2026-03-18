@@ -1653,7 +1653,7 @@ def lead(
     raw_output = dispatch_lead(
         repo_path=repo,
         prompt=prompt,
-        context=context,
+        context=context.full_text,
         harness_agents_dir=harness_agents_dir,
         permission_mode=permission_mode,
     )

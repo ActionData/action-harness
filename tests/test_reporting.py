@@ -15,6 +15,7 @@ from action_harness.models import (
     ReviewFinding,
     ReviewResult,
     RunManifest,
+    RunStats,
     StageResultUnion,
     WorkerResult,
     WorktreeResult,
@@ -24,6 +25,7 @@ from action_harness.reporting import (
     RecurringFinding,
     RunReport,
     aggregate_report,
+    compute_run_stats,
     group_recurring_findings,
     load_manifests,
     parse_since,
@@ -122,6 +124,49 @@ class TestRunReportModels:
         restored = RunReport.model_validate_json(json_str)
         assert restored.total_cost_usd is None
         assert restored.avg_duration_seconds is None
+
+
+# ---------------------------------------------------------------------------
+# compute_run_stats
+# ---------------------------------------------------------------------------
+
+
+class TestComputeRunStats:
+    def test_mixed_manifests(self) -> None:
+        manifests = [
+            _make_manifest(success=True),
+            _make_manifest(success=True),
+            _make_manifest(success=True),
+            _make_manifest(success=False),
+            _make_manifest(success=False),
+        ]
+        stats = compute_run_stats(manifests)
+        assert isinstance(stats, RunStats)
+        assert stats.passed == 3
+        assert stats.failed == 2
+        assert stats.total == 5
+        assert stats.success_rate == 60.0
+
+    def test_empty_manifests(self) -> None:
+        stats = compute_run_stats([])
+        assert stats.passed == 0
+        assert stats.failed == 0
+        assert stats.total == 0
+        assert stats.success_rate == 0.0
+
+    def test_all_successful(self) -> None:
+        manifests = [_make_manifest(success=True) for _ in range(4)]
+        stats = compute_run_stats(manifests)
+        assert stats.passed == 4
+        assert stats.failed == 0
+        assert stats.success_rate == 100.0
+
+    def test_all_failed(self) -> None:
+        manifests = [_make_manifest(success=False) for _ in range(3)]
+        stats = compute_run_stats(manifests)
+        assert stats.passed == 0
+        assert stats.failed == 3
+        assert stats.success_rate == 0.0
 
 
 # ---------------------------------------------------------------------------

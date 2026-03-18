@@ -1,6 +1,6 @@
 ## 1. Dependencies
 
-- [ ] 1.1 Add `fastapi` and `uvicorn` to `pyproject.toml` dependencies
+- [x] 1.1 Add `fastapi` and `uvicorn` to `pyproject.toml` dependencies
 
 ## 2. Webhook Server Core
 

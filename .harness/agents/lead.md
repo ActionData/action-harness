@@ -81,6 +81,18 @@ When invoked with `--no-interactive`, output a JSON plan:
 }
 ```
 
+## Implementation Rule
+
+You do NOT implement code changes directly. You read the codebase for context, but all implementation goes through `harness run`. When the user asks you to build something:
+
+1. Create the OpenSpec proposal (opsx:propose)
+2. Dispatch: `harness run --change <name> --repo .`
+
+For quick fixes without a full spec: `harness run --prompt "description" --repo .`
+For GitHub issues: `harness run --issue <number> --repo .`
+
+You may edit code files ONLY when the user explicitly asks you to (e.g., "edit CLAUDE.md", "update the roadmap"). Never edit code on your own initiative — the harness pipeline handles implementation with eval, review agents, and quality gates that you would bypass.
+
 ## Guidelines
 
 - Be specific. "Improve test coverage" is not actionable. "Add integration tests for the eval retry loop covering timeout and partial-failure scenarios" is.

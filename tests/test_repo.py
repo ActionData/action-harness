@@ -255,7 +255,7 @@ class TestDetectGhProtocol:
             )
             assert _detect_gh_protocol() == "https"
             mock_run.assert_called_once_with(
-                ["gh", "auth", "token"], capture_output=True, text=True
+                ["gh", "auth", "token"], capture_output=True, text=True, timeout=120
             )
 
     def test_gh_token_failure_returns_ssh(self) -> None:

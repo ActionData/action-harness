@@ -27,7 +27,8 @@ def write_project_config(project_dir: Path, repo_name: str, remote_url: str | No
     """Write ``config.yaml`` with repo metadata if it doesn't already exist.
 
     Only writes on first creation — subsequent calls are no-ops to avoid
-    overwriting user edits.
+    overwriting user edits. Never raises — config is an ancillary artifact
+    and its failure should not block the pipeline.
     """
     import yaml
 
@@ -36,7 +37,10 @@ def write_project_config(project_dir: Path, repo_name: str, remote_url: str | No
         return
 
     config = {"repo_name": repo_name, "remote_url": remote_url}
-    config_path.write_text(yaml.dump(config, default_flow_style=False), encoding="utf-8")
+    try:
+        config_path.write_text(yaml.dump(config, default_flow_style=False), encoding="utf-8")
+    except OSError as e:
+        typer.echo(f"[repo] warning: failed to write config.yaml: {e}", err=True)
 
 
 def _detect_gh_protocol() -> str:
@@ -51,9 +55,10 @@ def _detect_gh_protocol() -> str:
             ["gh", "auth", "token"],
             capture_output=True,
             text=True,
+            timeout=120,
         )
         return "https" if result.returncode == 0 else "ssh"
-    except FileNotFoundError:
+    except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
         return "https"
 
 
@@ -135,8 +140,10 @@ def _get_repo_dir(owner: str, repo_name: str, clone_url: str, harness_home: Path
     project_dir = ensure_project_dir(harness_home, repo_name)
     default_dir = project_dir / "repo"
 
-    # If the repo/ subdir doesn't have a git clone yet, use it
-    if not default_dir.exists() or not (default_dir / ".git").exists():
+    # If the repo/ subdir doesn't have a git clone yet, use it.
+    # Check .git presence (not dir existence) since ensure_project_dir
+    # pre-creates the repo/ directory.
+    if not (default_dir / ".git").exists():
         return default_dir
 
     # Check if existing dir is the same repo
@@ -144,6 +151,7 @@ def _get_repo_dir(owner: str, repo_name: str, clone_url: str, harness_home: Path
         ["git", "-C", str(default_dir), "remote", "get-url", "origin"],
         capture_output=True,
         text=True,
+        timeout=120,
     )
     if result.returncode == 0:
         existing_url = result.stdout.strip()
@@ -183,6 +191,7 @@ def _clone_or_fetch(clone_url: str, repo_dir: Path, verbose: bool) -> None:
             ["git", "clone", clone_url, str(repo_dir)],
             capture_output=True,
             text=True,
+            timeout=600,
         )
         if result.returncode != 0:
             # Fallback: if HTTPS GitHub URL failed, try SSH
@@ -199,6 +208,7 @@ def _clone_or_fetch(clone_url: str, repo_dir: Path, verbose: bool) -> None:
                     ["git", "clone", ssh_url, str(repo_dir)],
                     capture_output=True,
                     text=True,
+                    timeout=600,
                 )
                 if ssh_result.returncode != 0:
                     raise ValidationError(
@@ -210,6 +220,7 @@ def _clone_or_fetch(clone_url: str, repo_dir: Path, verbose: bool) -> None:
                     ["git", "-C", str(repo_dir), "remote", "set-url", "origin", ssh_url],
                     capture_output=True,
                     text=True,
+                    timeout=120,
                 )
                 if set_url_result.returncode != 0:
                     typer.echo(
@@ -230,6 +241,7 @@ def _clone_or_fetch(clone_url: str, repo_dir: Path, verbose: bool) -> None:
             cwd=repo_dir,
             capture_output=True,
             text=True,
+            timeout=120,
         )
         if result.returncode != 0:
             typer.echo(f"[repo] warning: fetch failed: {result.stderr.strip()}", err=True)
@@ -262,10 +274,9 @@ def resolve_repo(repo_arg: str, harness_home: Path, verbose: bool = False) -> tu
 
     repo_dir = _get_repo_dir(owner, repo_name, clone_url, harness_home)
 
-    # Ensure parent directory exists (project_dir/repo/)
-    repo_dir.parent.mkdir(parents=True, exist_ok=True)
-
-    is_fresh_clone = not repo_dir.exists()
+    # Check .git presence (not dir existence) since ensure_project_dir
+    # pre-creates the repo/ directory
+    is_fresh_clone = not (repo_dir / ".git").exists()
 
     _clone_or_fetch(clone_url, repo_dir, verbose)
 

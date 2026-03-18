@@ -347,7 +347,10 @@ def run(
     if dry_run:
         profile = profile_repo(resolved_repo)
         if is_managed:
-            workspace_path = str(resolved_home / "projects" / repo_name / "workspaces" / task_label)
+            project_name = resolved_repo.parent.name
+            workspace_path = str(
+                resolved_home / "projects" / project_name / "workspaces" / task_label
+            )
         else:
             workspace_path = f"/tmp/action-harness-*/{task_label}"
         if issue is not None:
@@ -417,7 +420,7 @@ def run(
         permission_mode=permission_mode,
         verbose=verbose,
         harness_home=resolved_home if is_managed else None,
-        repo_name=repo_name if is_managed else None,
+        repo_name=resolved_repo.parent.name if is_managed else None,
         skip_review=skip_review,
         auto_merge=auto_merge,
         wait_for_ci=wait_for_ci,

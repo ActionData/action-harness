@@ -115,35 +115,81 @@ def test_write_project_config_no_overwrite(tmp_path: Path) -> None:
 # ── 9.3: Test workspace path for managed repo ───────────────────────
 
 
-def test_workspace_path_managed_repo(tmp_path: Path) -> None:
-    """9.3: Managed repo workspace path is projects/<name>/workspaces/<change>/."""
-    harness_home = tmp_path / "harness"
+def test_workspace_path_managed_repo_dry_run(tmp_path: Path) -> None:
+    """9.3: Dry-run shows workspace path under projects/<name>/workspaces/."""
+    from typer.testing import CliRunner
 
-    # Verify the path construction logic used by the pipeline:
-    #   workspace_dir = harness_home / "projects" / repo_name / "workspaces" / change_name
-    repo_name = "my-app"
-    change_name = "fix-bug"
-    workspace_dir = harness_home / "projects" / repo_name / "workspaces" / change_name
-    expected = harness_home / "projects" / "my-app" / "workspaces" / "fix-bug"
-    assert workspace_dir == expected
-    # Confirm it does NOT match the old layout
-    old_layout = harness_home / "workspaces" / repo_name / change_name
-    assert workspace_dir != old_layout
+    from action_harness.cli import app
+
+    runner = CliRunner()
+    harness_home = tmp_path / "harness"
+    project = harness_home / "projects" / "my-app" / "repo"
+    project.mkdir(parents=True)
+    # Init git repo
+    subprocess.run(["git", "init"], cwd=project, capture_output=True, timeout=120)
+    subprocess.run(
+        ["git", "commit", "--allow-empty", "-m", "init"],
+        cwd=project,
+        capture_output=True,
+        timeout=120,
+    )
+    # Create openspec change
+    change_dir = project / "openspec" / "changes" / "fix-bug"
+    change_dir.mkdir(parents=True)
+    (change_dir / "tasks.md").write_text("- [ ] task 1\n")
+    (change_dir / "proposal.md").write_text("# Proposal\n")
+
+    with patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"):
+        result = runner.invoke(
+            app,
+            [
+                "run",
+                "--repo",
+                str(project),
+                "--change",
+                "fix-bug",
+                "--dry-run",
+                "--harness-home",
+                str(harness_home),
+            ],
+        )
+
+    assert result.exit_code == 0
+    assert "projects/my-app/workspaces/fix-bug" in result.output
 
 
 # ── 9.4: Test workspace path for local repo ─────────────────────────
 
 
-def test_workspace_path_local_repo() -> None:
-    """9.4: Local repo (no harness_home) workspace goes to /tmp/."""
-    # When harness_home is None, workspace_dir stays None and the pipeline
-    # falls through to temp directory creation. This is unchanged behavior.
-    # We verify the conditional: harness_home is None => workspace_dir is None
-    harness_home = None
-    workspace_dir = None
-    if harness_home is not None:
-        workspace_dir = Path(harness_home) / "projects" / "repo" / "workspaces" / "change"
-    assert workspace_dir is None
+def test_workspace_path_local_repo_dry_run(tmp_path: Path) -> None:
+    """9.4: Dry-run for local repo shows /tmp/ workspace path."""
+    from typer.testing import CliRunner
+
+    from action_harness.cli import app
+
+    runner = CliRunner()
+    repo = tmp_path / "local-repo"
+    repo.mkdir()
+    subprocess.run(["git", "init"], cwd=repo, capture_output=True, timeout=120)
+    subprocess.run(
+        ["git", "commit", "--allow-empty", "-m", "init"],
+        cwd=repo,
+        capture_output=True,
+        timeout=120,
+    )
+    change_dir = repo / "openspec" / "changes" / "fix-bug"
+    change_dir.mkdir(parents=True)
+    (change_dir / "tasks.md").write_text("- [ ] task 1\n")
+    (change_dir / "proposal.md").write_text("# Proposal\n")
+
+    with patch("action_harness.cli.shutil.which", return_value="/usr/bin/mock"):
+        result = runner.invoke(
+            app,
+            ["run", "--repo", str(repo), "--change", "fix-bug", "--dry-run"],
+        )
+
+    assert result.exit_code == 0
+    assert "/tmp/" in result.output
 
 
 # ── 9.5: Test manifest written to project runs dir ───────────────────
@@ -274,18 +320,19 @@ def test_is_managed_repo_false_for_local(tmp_path: Path) -> None:
 
 
 def test_clean_workspace_project_dir(tmp_path: Path) -> None:
-    """9.9: Clean removes workspace from projects/<name>/workspaces/."""
-    import shutil
+    """9.9: clean --all removes workspaces from projects/ layout."""
+    from typer.testing import CliRunner
 
-    ws_dir = tmp_path / "projects" / "app" / "workspaces" / "fix-bug"
+    from action_harness.cli import app
+
+    runner = CliRunner()
+    harness_home = tmp_path / "harness"
+    ws_dir = harness_home / "projects" / "app" / "workspaces" / "fix-bug"
     ws_dir.mkdir(parents=True)
     (ws_dir / "some-file.txt").write_text("test")
 
-    # Verify it exists
-    assert ws_dir.exists()
-
-    # Clean it
-    shutil.rmtree(ws_dir)
+    result = runner.invoke(app, ["clean", "--all", "--harness-home", str(harness_home)])
+    assert result.exit_code == 0
     assert not ws_dir.exists()
 
 
@@ -324,7 +371,7 @@ def test_load_manifests_fallback_to_default(tmp_path: Path) -> None:
 
 
 def test_resolve_repo_returns_project_name(tmp_path: Path) -> None:
-    """resolve_repo returns the project directory name, not 'repo'."""
+    """resolve_repo returns the project directory name and writes config.yaml."""
     from action_harness.repo import resolve_repo
 
     harness_home = tmp_path / "harness"
@@ -340,6 +387,61 @@ def test_resolve_repo_returns_project_name(tmp_path: Path) -> None:
 
     assert name == "my-app"
     assert path == harness_home / "projects" / "my-app" / "repo"
+
+    # config.yaml must be written on fresh clone
+    config_path = harness_home / "projects" / "my-app" / "config.yaml"
+    assert config_path.is_file()
+    config = yaml.safe_load(config_path.read_text())
+    assert config["repo_name"] == "my-app"
+    assert config["remote_url"] == "https://github.com/user/my-app.git"
+
+
+def test_find_latest_event_log_with_runs_dir(tmp_path: Path) -> None:
+    """find_latest_event_log uses explicit runs_dir when provided."""
+    from action_harness.progress_feed import find_latest_event_log
+
+    runs_dir = tmp_path / "custom-runs"
+    runs_dir.mkdir()
+    (runs_dir / "run-1.events.jsonl").write_text('{"event": "test"}\n')
+
+    result = find_latest_event_log(tmp_path, runs_dir=runs_dir)
+    assert result is not None
+    assert result.name == "run-1.events.jsonl"
+
+
+def test_find_event_log_by_run_id_with_runs_dir(tmp_path: Path) -> None:
+    """find_event_log_by_run_id uses explicit runs_dir when provided."""
+    from action_harness.progress_feed import find_event_log_by_run_id
+
+    runs_dir = tmp_path / "custom-runs"
+    runs_dir.mkdir()
+    (runs_dir / "my-run.events.jsonl").write_text('{"event": "test"}\n')
+
+    result = find_event_log_by_run_id(tmp_path, "my-run", runs_dir=runs_dir)
+    assert result is not None
+    assert result.name == "my-run.events.jsonl"
+
+    # Non-existent run returns None
+    result = find_event_log_by_run_id(tmp_path, "nonexistent", runs_dir=runs_dir)
+    assert result is None
+
+
+def test_clone_or_fetch_precreated_dir_triggers_clone(tmp_path: Path) -> None:
+    """_clone_or_fetch clones (not fetches) when repo/ exists but has no .git."""
+    from action_harness.repo import _clone_or_fetch
+
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()  # Pre-created by ensure_project_dir, no .git
+
+    with patch("action_harness.repo.subprocess.run") as mock_run:
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="", stderr=""
+        )
+        _clone_or_fetch("https://github.com/user/app.git", repo_dir, verbose=False)
+
+    # Should have called git clone, not git fetch
+    clone_call = mock_run.call_args_list[0]
+    assert "clone" in clone_call.args[0]
 
 
 def test_resolve_repo_collision_returns_owner_repo_name(tmp_path: Path) -> None:

@@ -38,15 +38,15 @@
 
 ## 8. Tests
 
-- [ ] 8.1 Test `verify_signature`: create body `b"test"`, compute expected HMAC with secret `"mysecret"`. Assert `verify_signature(body, expected_sig, "mysecret")` returns True. Assert returns False for wrong signature. Assert returns False for empty signature.
-- [ ] 8.2 Test `parse_github_event` for `issues.opened`: payload `{"issue": {"number": 42, "title": "Bug"}}`. Assert returns `WebhookEvent` with prompt containing `"#42"` and `"Bug"` and `auto_dispatch=True`.
-- [ ] 8.3 Test `parse_github_event` for `pull_request.closed` with `payload["pull_request"]["merged"] = True`. Assert returns event. Test with `merged = False`. Assert returns None.
-- [ ] 8.4 Test `parse_github_event` for `issues.labeled` with matching label `"harness"`. Assert returns event. Test with non-matching label `"bug"`. Assert returns None.
-- [ ] 8.5 Test `parse_github_event` for unrecognized event type `"star"`. Assert returns None.
-- [ ] 8.6 Test webhook endpoint with FastAPI `TestClient`: POST valid payload with correct signature → assert 200. POST with invalid signature → assert 401. POST with missing signature → assert 401. POST with unrecognized event → assert 204. GET `/health` → assert 200 with `{"status": "ok"}`.
-- [ ] 8.7 Test per-repo config filtering: create config with `events: ["issues.opened"]`. Send `check_suite.completed` event. Assert no session queued (mock `dispatch_lead`, assert not called).
-- [ ] 8.8 Test `post_slack` with a mock server (or mock `httpx.post`). Assert POST was made with `{"text": "..."}`. Test with exception. Assert no exception propagated.
-- [ ] 8.9 Test `HARNESS_WEBHOOK_SECRET` missing: invoke `harness serve` without the env var set. Assert exit code 1 and stderr contains "HARNESS_WEBHOOK_SECRET".
+- [x] 8.1 Test `verify_signature`: create body `b"test"`, compute expected HMAC with secret `"mysecret"`. Assert `verify_signature(body, expected_sig, "mysecret")` returns True. Assert returns False for wrong signature. Assert returns False for empty signature.
+- [x] 8.2 Test `parse_github_event` for `issues.opened`: payload `{"issue": {"number": 42, "title": "Bug"}}`. Assert returns `WebhookEvent` with prompt containing `"#42"` and `"Bug"` and `auto_dispatch=True`.
+- [x] 8.3 Test `parse_github_event` for `pull_request.closed` with `payload["pull_request"]["merged"] = True`. Assert returns event. Test with `merged = False`. Assert returns None.
+- [x] 8.4 Test `parse_github_event` for `issues.labeled` with matching label `"harness"`. Assert returns event. Test with non-matching label `"bug"`. Assert returns None.
+- [x] 8.5 Test `parse_github_event` for unrecognized event type `"star"`. Assert returns None.
+- [x] 8.6 Test webhook endpoint with FastAPI `TestClient`: POST valid payload with correct signature → assert 200. POST with invalid signature → assert 401. POST with missing signature → assert 401. POST with unrecognized event → assert 204. GET `/health` → assert 200 with `{"status": "ok"}`.
+- [x] 8.7 Test per-repo config filtering: create config with `events: ["issues.opened"]`. Send `check_suite.completed` event. Assert no session queued (mock `dispatch_lead`, assert not called).
+- [x] 8.8 Test `post_slack` with a mock server (or mock `httpx.post`). Assert POST was made with `{"text": "..."}`. Test with exception. Assert no exception propagated.
+- [x] 8.9 Test `HARNESS_WEBHOOK_SECRET` missing: invoke `harness serve` without the env var set. Assert exit code 1 and stderr contains "HARNESS_WEBHOOK_SECRET".
 
 ## 9. Documentation
 

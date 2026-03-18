@@ -7,6 +7,8 @@ import hashlib
 import hmac
 import json
 import re
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Sequence
@@ -243,8 +245,8 @@ def load_webhook_configs(harness_home: Path) -> dict[str, WebhookConfig]:
             )
             continue
 
-        # Parse webhook section
-        webhook_raw = raw.get("webhook", {})
+        # Parse webhook section — skip projects without it
+        webhook_raw = raw.get("webhook")
         if not isinstance(webhook_raw, dict):
             continue
 
@@ -393,7 +395,22 @@ class QueueManager:
 # FastAPI application
 # ---------------------------------------------------------------------------
 
-app = FastAPI(title="action-harness webhook server")
+
+@asynccontextmanager
+async def lifespan(application: FastAPI) -> AsyncIterator[None]:
+    """Load webhook configs on startup."""
+    harness_home: Path = application.state.harness_home
+    configs = load_webhook_configs(harness_home)
+    application.state.webhook_configs = configs
+    application.state.queue_manager = QueueManager(configs)
+    typer.echo(
+        f"[server] started with {len(configs)} repo config(s)",
+        err=True,
+    )
+    yield
+
+
+app = FastAPI(title="action-harness webhook server", lifespan=lifespan)
 
 
 @app.get("/health")
@@ -473,16 +490,3 @@ async def handle_webhook(request: Request) -> JSONResponse:
 def _event_matches(event_key: str, allowed_events: Sequence[str]) -> bool:
     """Check if an event key matches any of the allowed events."""
     return event_key in allowed_events
-
-
-@app.on_event("startup")
-async def startup() -> None:
-    """Load webhook configs on startup."""
-    harness_home: Path = app.state.harness_home
-    configs = load_webhook_configs(harness_home)
-    app.state.webhook_configs = configs
-    app.state.queue_manager = QueueManager(configs)
-    typer.echo(
-        f"[server] started with {len(configs)} repo config(s)",
-        err=True,
-    )

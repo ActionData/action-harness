@@ -2,17 +2,18 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import json
 from pathlib import Path
-from typing import TYPE_CHECKING
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import yaml
 from fastapi.testclient import TestClient
 
 from action_harness.server import (
+    QueueManager,
     WebhookConfig,
     WebhookEvent,
     _extract_owner_repo,
@@ -21,9 +22,6 @@ from action_harness.server import (
     parse_github_event,
     verify_signature,
 )
-
-if TYPE_CHECKING:
-    pass
 
 SECRET = "mysecret"
 
@@ -36,9 +34,13 @@ def _sign(body: bytes, secret: str = SECRET) -> str:
 def _make_test_client(
     configs: dict[str, WebhookConfig] | None = None,
 ) -> TestClient:
-    """Create a TestClient with pre-configured app state."""
-    from action_harness.server import QueueManager
+    """Create a TestClient with pre-configured app state.
 
+    Sets webhook_configs on app.state BEFORE creating the TestClient so that
+    the lifespan handler sees it already present and skips config loading.
+    This ensures tests run against the provided configs, not an empty dict
+    from scanning a nonexistent projects directory.
+    """
     if configs is None:
         configs = {
             "owner/repo": WebhookConfig(
@@ -57,8 +59,15 @@ def _make_test_client(
     app.state.webhook_secret = SECRET
     app.state.harness_home = Path("/tmp/test-harness")
     app.state.webhook_configs = configs
-    app.state.queue_manager = QueueManager(configs)
+    app.state.queue_manager = QueueManager(configs, Path("/tmp/test-harness"))
     return TestClient(app, raise_server_exceptions=False)
+
+
+def _cleanup_app_state() -> None:
+    """Remove webhook_configs from app.state so lifespan runs normally next time."""
+    for attr in ("webhook_configs", "queue_manager", "webhook_secret", "harness_home"):
+        if hasattr(app.state, attr):
+            delattr(app.state, attr)
 
 
 # ---------------------------------------------------------------------------
@@ -178,83 +187,140 @@ class TestParseUnrecognized:
 
 
 class TestWebhookEndpoint:
-    def test_valid_payload(self) -> None:
+    def test_valid_payload_queued(self) -> None:
+        """Valid payload with matching config should be queued (200 + queued)."""
         client = _make_test_client()
-        payload = {
-            "action": "opened",
-            "issue": {"number": 42, "title": "Bug"},
-            "repository": {"full_name": "owner/repo"},
-        }
-        body = json.dumps(payload).encode()
-        response = client.post(
-            "/webhook",
-            content=body,
-            headers={
-                "X-Hub-Signature-256": _sign(body),
-                "X-GitHub-Event": "issues",
-                "Content-Type": "application/json",
-            },
-        )
-        assert response.status_code == 200
+        try:
+            payload = {
+                "action": "opened",
+                "issue": {"number": 42, "title": "Bug"},
+                "repository": {"full_name": "owner/repo"},
+            }
+            body = json.dumps(payload).encode()
+            response = client.post(
+                "/webhook",
+                content=body,
+                headers={
+                    "X-Hub-Signature-256": _sign(body),
+                    "X-GitHub-Event": "issues",
+                    "Content-Type": "application/json",
+                },
+            )
+            assert response.status_code == 200
+            assert response.json()["status"] == "queued"
+        finally:
+            _cleanup_app_state()
 
     def test_invalid_signature(self) -> None:
         client = _make_test_client()
-        payload = {
-            "action": "opened",
-            "issue": {"number": 1, "title": "X"},
-            "repository": {"full_name": "owner/repo"},
-        }
-        body = json.dumps(payload).encode()
-        response = client.post(
-            "/webhook",
-            content=body,
-            headers={
-                "X-Hub-Signature-256": "sha256=wrong",
-                "X-GitHub-Event": "issues",
-                "Content-Type": "application/json",
-            },
-        )
-        assert response.status_code == 401
+        try:
+            payload = {
+                "action": "opened",
+                "issue": {"number": 1, "title": "X"},
+                "repository": {"full_name": "owner/repo"},
+            }
+            body = json.dumps(payload).encode()
+            response = client.post(
+                "/webhook",
+                content=body,
+                headers={
+                    "X-Hub-Signature-256": "sha256=wrong",
+                    "X-GitHub-Event": "issues",
+                    "Content-Type": "application/json",
+                },
+            )
+            assert response.status_code == 401
+        finally:
+            _cleanup_app_state()
 
     def test_missing_signature(self) -> None:
         client = _make_test_client()
-        payload = {
-            "action": "opened",
-            "issue": {"number": 1, "title": "X"},
-            "repository": {"full_name": "owner/repo"},
-        }
-        body = json.dumps(payload).encode()
-        response = client.post(
-            "/webhook",
-            content=body,
-            headers={
-                "X-GitHub-Event": "issues",
-                "Content-Type": "application/json",
-            },
-        )
-        assert response.status_code == 401
+        try:
+            payload = {
+                "action": "opened",
+                "issue": {"number": 1, "title": "X"},
+                "repository": {"full_name": "owner/repo"},
+            }
+            body = json.dumps(payload).encode()
+            response = client.post(
+                "/webhook",
+                content=body,
+                headers={
+                    "X-GitHub-Event": "issues",
+                    "Content-Type": "application/json",
+                },
+            )
+            assert response.status_code == 401
+        finally:
+            _cleanup_app_state()
 
-    def test_unrecognized_event(self) -> None:
-        client = _make_test_client()
-        payload = {"repository": {"full_name": "owner/repo"}, "action": "created"}
-        body = json.dumps(payload).encode()
-        response = client.post(
-            "/webhook",
-            content=body,
-            headers={
-                "X-Hub-Signature-256": _sign(body),
-                "X-GitHub-Event": "star",
-                "Content-Type": "application/json",
-            },
-        )
-        # star.created not in config events, so returns 200 acknowledged
-        assert response.status_code == 200
+    def test_unrecognized_event_returns_204(self) -> None:
+        """Event in config's events list but unrecognized by parser → 204."""
+        configs = {
+            "owner/repo": WebhookConfig(
+                enabled=True,
+                events=["star.created"],
+                project_dir=Path("/tmp/test"),
+            ),
+        }
+        client = _make_test_client(configs)
+        try:
+            payload = {
+                "repository": {"full_name": "owner/repo"},
+                "action": "created",
+            }
+            body = json.dumps(payload).encode()
+            response = client.post(
+                "/webhook",
+                content=body,
+                headers={
+                    "X-Hub-Signature-256": _sign(body),
+                    "X-GitHub-Event": "star",
+                    "Content-Type": "application/json",
+                },
+            )
+            assert response.status_code == 204
+        finally:
+            _cleanup_app_state()
+
+    def test_event_not_in_config_returns_acknowledged(self) -> None:
+        """Event not in config's events list → 200 acknowledged."""
+        configs = {
+            "owner/repo": WebhookConfig(
+                enabled=True,
+                events=["issues.opened"],
+                project_dir=Path("/tmp/test"),
+            ),
+        }
+        client = _make_test_client(configs)
+        try:
+            payload = {
+                "repository": {"full_name": "owner/repo"},
+                "action": "created",
+            }
+            body = json.dumps(payload).encode()
+            response = client.post(
+                "/webhook",
+                content=body,
+                headers={
+                    "X-Hub-Signature-256": _sign(body),
+                    "X-GitHub-Event": "star",
+                    "Content-Type": "application/json",
+                },
+            )
+            assert response.status_code == 200
+            assert response.json()["action"] == "none"
+        finally:
+            _cleanup_app_state()
 
     def test_health_endpoint(self) -> None:
         client = _make_test_client()
-        response = client.get("/health")
-        assert response.status_code == 200
-        assert response.json() == {"status": "ok"}
+        try:
+            response = client.get("/health")
+            assert response.status_code == 200
+            assert response.json() == {"status": "ok"}
+        finally:
+            _cleanup_app_state()
 
 
 # ---------------------------------------------------------------------------
@@ -273,25 +339,28 @@ class TestConfigFiltering:
             ),
         }
         client = _make_test_client(configs)
-        payload = {
-            "action": "completed",
-            "check_suite": {"head_branch": "main"},
-            "repository": {"full_name": "owner/repo"},
-        }
-        body = json.dumps(payload).encode()
+        try:
+            payload = {
+                "action": "completed",
+                "check_suite": {"head_branch": "main"},
+                "repository": {"full_name": "owner/repo"},
+            }
+            body = json.dumps(payload).encode()
 
-        with patch("action_harness.server.QueueManager.get_or_create") as mock_get:
-            response = client.post(
-                "/webhook",
-                content=body,
-                headers={
-                    "X-Hub-Signature-256": _sign(body),
-                    "X-GitHub-Event": "check_suite",
-                    "Content-Type": "application/json",
-                },
-            )
-            assert response.status_code == 200
-            mock_get.assert_not_called()
+            with patch("action_harness.server.QueueManager.get_or_create") as mock_get:
+                response = client.post(
+                    "/webhook",
+                    content=body,
+                    headers={
+                        "X-Hub-Signature-256": _sign(body),
+                        "X-GitHub-Event": "check_suite",
+                        "Content-Type": "application/json",
+                    },
+                )
+                assert response.status_code == 200
+                mock_get.assert_not_called()
+        finally:
+            _cleanup_app_state()
 
 
 # ---------------------------------------------------------------------------
@@ -315,7 +384,10 @@ class TestPostSlack:
     def test_exception_does_not_propagate(self) -> None:
         from action_harness.notifications import post_slack
 
-        with patch("action_harness.notifications.httpx.post", side_effect=OSError("network error")):
+        with patch(
+            "action_harness.notifications.httpx.post",
+            side_effect=OSError("network error"),
+        ):
             # Should not raise
             post_slack("https://hooks.slack.com/test", "Hello")
 
@@ -405,3 +477,124 @@ class TestLoadWebhookConfigs:
 
         result = load_webhook_configs(tmp_path)
         assert len(result) == 0
+
+
+# ---------------------------------------------------------------------------
+# Worker dispatch path test (test-reviewer finding)
+# ---------------------------------------------------------------------------
+
+
+class TestRepoQueueWorker:
+    async def test_worker_dispatches_lead(self) -> None:
+        """Worker should call gather_lead_context and dispatch_lead."""
+        from action_harness.server import RepoQueue
+
+        configs = {
+            "owner/repo": WebhookConfig(
+                enabled=True,
+                events=["issues.opened"],
+                project_dir=Path("/tmp/test-project"),
+                slack_webhook_url="https://hooks.slack.com/test",
+                permission_mode="bypassPermissions",
+            ),
+        }
+
+        mock_context = MagicMock()
+        mock_context.full_text = "gathered context"
+
+        with (
+            patch(
+                "action_harness.lead.gather_lead_context",
+                return_value=mock_context,
+            ) as mock_gather,
+            patch(
+                "action_harness.lead.dispatch_lead",
+                return_value="{}",
+            ) as mock_dispatch,
+            patch(
+                "action_harness.agents.resolve_harness_agents_dir",
+                return_value=Path("/tmp/agents"),
+            ),
+            patch(
+                "action_harness.server.post_slack",
+            ) as mock_slack,
+        ):
+            queue = RepoQueue("owner/repo", configs, Path("/tmp/test-harness"))
+            queue.start()
+
+            event = WebhookEvent(
+                repo_full_name="owner/repo",
+                event_type="issues",
+                action="opened",
+                prompt="Triage issue #1",
+                auto_dispatch=True,
+            )
+            await queue.enqueue(event)
+            await asyncio.wait_for(queue._queue.join(), timeout=5)
+
+            # Verify gather_lead_context was called with harness_home
+            mock_gather.assert_called_once_with(
+                Path("/tmp/test-project/repo"),
+                harness_home=Path("/tmp/test-harness"),
+            )
+
+            # Verify dispatch_lead was called with correct args
+            mock_dispatch.assert_called_once_with(
+                repo_path=Path("/tmp/test-project/repo"),
+                prompt="Triage issue #1",
+                context="gathered context",
+                harness_agents_dir=Path("/tmp/agents"),
+                permission_mode="bypassPermissions",
+            )
+
+            # Verify Slack was called (start + completion)
+            assert mock_slack.call_count == 2
+            start_msg = mock_slack.call_args_list[0][0][1]
+            assert "Triaging" in start_msg
+            done_msg = mock_slack.call_args_list[1][0][1]
+            assert "completed" in done_msg
+
+    async def test_worker_posts_slack_on_failure(self) -> None:
+        """Worker should post Slack failure notification on exception."""
+        from action_harness.server import RepoQueue
+
+        configs = {
+            "owner/repo": WebhookConfig(
+                enabled=True,
+                events=["issues.opened"],
+                project_dir=Path("/tmp/test-project"),
+                slack_webhook_url="https://hooks.slack.com/test",
+            ),
+        }
+
+        with (
+            patch(
+                "action_harness.lead.gather_lead_context",
+                side_effect=RuntimeError("context error"),
+            ),
+            patch(
+                "action_harness.agents.resolve_harness_agents_dir",
+                return_value=Path("/tmp/agents"),
+            ),
+            patch(
+                "action_harness.server.post_slack",
+            ) as mock_slack,
+        ):
+            queue = RepoQueue("owner/repo", configs, Path("/tmp/test-harness"))
+            queue.start()
+
+            event = WebhookEvent(
+                repo_full_name="owner/repo",
+                event_type="issues",
+                action="opened",
+                prompt="Triage issue #1",
+                auto_dispatch=True,
+            )
+            await queue.enqueue(event)
+            await asyncio.wait_for(queue._queue.join(), timeout=5)
+
+            # Verify Slack was called (start + failure)
+            assert mock_slack.call_count == 2
+            fail_msg = mock_slack.call_args_list[1][0][1]
+            assert "failed" in fail_msg
+            assert "context error" in fail_msg

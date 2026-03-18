@@ -293,15 +293,37 @@ def load_webhook_configs(harness_home: Path) -> dict[str, WebhookConfig]:
 class RepoQueue:
     """In-memory serial queue for a single repo's webhook events."""
 
-    def __init__(self, repo_name: str, configs: dict[str, WebhookConfig]) -> None:
+    def __init__(
+        self,
+        repo_name: str,
+        configs: dict[str, WebhookConfig],
+        harness_home: Path,
+    ) -> None:
         self.repo_name = repo_name
         self._queue: asyncio.Queue[WebhookEvent] = asyncio.Queue()
         self._configs = configs
+        self._harness_home = harness_home
         self._task: asyncio.Task[None] | None = None
 
     def start(self) -> None:
         """Start the background worker task."""
         self._task = asyncio.create_task(self._worker())
+        self._task.add_done_callback(self._on_worker_done)
+
+    def _on_worker_done(self, task: asyncio.Task[None]) -> None:
+        """Log and restart if the worker task exits unexpectedly."""
+        exc = task.exception() if not task.cancelled() else None
+        if exc is not None:
+            typer.echo(
+                f"[server] worker for {self.repo_name} died: {exc}; restarting",
+                err=True,
+            )
+            self.start()
+        elif task.cancelled():
+            typer.echo(
+                f"[server] worker for {self.repo_name} was cancelled",
+                err=True,
+            )
 
     async def enqueue(self, event: WebhookEvent) -> None:
         """Add an event to the queue."""
@@ -341,7 +363,7 @@ class RepoQueue:
                 project_dir = config.project_dir if config else Path(".")
                 repo_path = project_dir / "repo"
 
-                context = gather_lead_context(repo_path)
+                context = gather_lead_context(repo_path, harness_home=self._harness_home)
                 await asyncio.to_thread(
                     dispatch_lead,
                     repo_path=repo_path,
@@ -357,7 +379,9 @@ class RepoQueue:
                 )
                 if slack_url:
                     await asyncio.to_thread(
-                        post_slack, slack_url, f"Lead session completed on {self.repo_name}"
+                        post_slack,
+                        slack_url,
+                        f"Lead session completed on {self.repo_name}",
                     )
             except Exception as exc:
                 typer.echo(
@@ -378,14 +402,15 @@ class RepoQueue:
 class QueueManager:
     """Manages per-repo queues."""
 
-    def __init__(self, configs: dict[str, WebhookConfig]) -> None:
+    def __init__(self, configs: dict[str, WebhookConfig], harness_home: Path) -> None:
         self._queues: dict[str, RepoQueue] = {}
         self._configs = configs
+        self._harness_home = harness_home
 
     def get_or_create(self, repo_name: str) -> RepoQueue:
         """Get existing queue or create a new one with a started worker."""
         if repo_name not in self._queues:
-            queue = RepoQueue(repo_name, self._configs)
+            queue = RepoQueue(repo_name, self._configs, self._harness_home)
             queue.start()
             self._queues[repo_name] = queue
         return self._queues[repo_name]
@@ -398,15 +423,20 @@ class QueueManager:
 
 @asynccontextmanager
 async def lifespan(application: FastAPI) -> AsyncIterator[None]:
-    """Load webhook configs on startup."""
-    harness_home: Path = application.state.harness_home
-    configs = load_webhook_configs(harness_home)
-    application.state.webhook_configs = configs
-    application.state.queue_manager = QueueManager(configs)
-    typer.echo(
-        f"[server] started with {len(configs)} repo config(s)",
-        err=True,
-    )
+    """Load webhook configs on startup.
+
+    Skipped when app.state.webhook_configs is already set (e.g., in tests
+    that configure state before creating the TestClient).
+    """
+    if not hasattr(application.state, "webhook_configs"):
+        harness_home: Path = application.state.harness_home
+        configs = load_webhook_configs(harness_home)
+        application.state.webhook_configs = configs
+        application.state.queue_manager = QueueManager(configs, harness_home)
+        typer.echo(
+            f"[server] started with {len(configs)} repo config(s)",
+            err=True,
+        )
     yield
 
 

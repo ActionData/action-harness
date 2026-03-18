@@ -155,7 +155,9 @@ def dispatch_worker(
         user_prompt: str = feedback
         if progress_contents:
             user_prompt = f"{progress_contents}\n\n{user_prompt}"
-        session_name = f"[action-harness] Worker: {change_name} (repo: {worktree_path.name})"
+        session_name = (
+            f"[action-harness] Worker: {change_name} (repo: {worktree_path.name})"
+        )
         cmd = [
             "claude",
             "-p",
@@ -200,7 +202,8 @@ def dispatch_worker(
         if progress_contents:
             user_prompt = f"{progress_contents}\n\n{user_prompt}"
         session_name = (
-            f"[action-harness] Worker: {change_name or 'freeform'} (repo: {worktree_path.name})"
+            f"[action-harness] Worker: {change_name or 'freeform'}"
+            f" (repo: {worktree_path.name})"
         )
         cmd = [
             "claude",

@@ -10,6 +10,35 @@ import typer
 from action_harness.models import ValidationError
 
 
+def ensure_project_dir(harness_home: Path, repo_name: str) -> Path:
+    """Create and return the project directory for a managed repo.
+
+    Creates ``projects/<repo_name>/`` with subdirectories ``repo/``,
+    ``workspaces/``, ``runs/``, ``knowledge/`` if they don't exist.
+    Returns the project directory path.
+    """
+    project_dir = harness_home / "projects" / repo_name
+    for subdir in ("repo", "workspaces", "runs", "knowledge"):
+        (project_dir / subdir).mkdir(parents=True, exist_ok=True)
+    return project_dir
+
+
+def write_project_config(project_dir: Path, repo_name: str, remote_url: str | None) -> None:
+    """Write ``config.yaml`` with repo metadata if it doesn't already exist.
+
+    Only writes on first creation — subsequent calls are no-ops to avoid
+    overwriting user edits.
+    """
+    import yaml
+
+    config_path = project_dir / "config.yaml"
+    if config_path.exists():
+        return
+
+    config = {"repo_name": repo_name, "remote_url": remote_url}
+    config_path.write_text(yaml.dump(config, default_flow_style=False), encoding="utf-8")
+
+
 def _detect_gh_protocol() -> str:
     """Detect whether to use HTTPS or SSH for GitHub clones.
 
@@ -100,12 +129,14 @@ def _normalize_github_identity(url: str) -> str | None:
 def _get_repo_dir(owner: str, repo_name: str, clone_url: str, harness_home: Path) -> Path:
     """Return the directory to clone into, handling name collisions.
 
-    Default: harness_home/repos/<repo_name>/
-    Collision: harness_home/repos/<owner>-<repo_name>/
+    Default: harness_home/projects/<repo_name>/repo/
+    Collision: harness_home/projects/<owner>-<repo_name>/repo/
     """
-    default_dir = harness_home / "repos" / repo_name
+    project_dir = ensure_project_dir(harness_home, repo_name)
+    default_dir = project_dir / "repo"
 
-    if not default_dir.exists():
+    # If the repo/ subdir doesn't have a git clone yet, use it
+    if not default_dir.exists() or not (default_dir / ".git").exists():
         return default_dir
 
     # Check if existing dir is the same repo
@@ -127,10 +158,11 @@ def _get_repo_dir(owner: str, repo_name: str, clone_url: str, harness_home: Path
             return default_dir
 
     # Collision — use owner-repo
-    fallback_dir = harness_home / "repos" / f"{owner}-{repo_name}"
+    fallback_project = ensure_project_dir(harness_home, f"{owner}-{repo_name}")
+    fallback_dir = fallback_project / "repo"
     typer.echo(
         f"[repo] name collision: {repo_name} already exists with different origin, "
-        f"using {fallback_dir.name}",
+        f"using {fallback_project.name}",
         err=True,
     )
     return fallback_dir
@@ -139,9 +171,13 @@ def _get_repo_dir(owner: str, repo_name: str, clone_url: str, harness_home: Path
 def _clone_or_fetch(clone_url: str, repo_dir: Path, verbose: bool) -> None:
     """Clone a repo or fetch if already cloned.
 
+    Uses .git presence (not just directory existence) to distinguish fresh
+    clone targets from existing clones — the project layout pre-creates
+    the repo/ directory.
+
     Raises ValidationError if clone fails.
     """
-    if not repo_dir.exists():
+    if not (repo_dir / ".git").exists():
         typer.echo(f"[repo] cloning {clone_url} to {repo_dir}", err=True)
         result = subprocess.run(
             ["git", "clone", clone_url, str(repo_dir)],
@@ -206,7 +242,7 @@ def resolve_repo(repo_arg: str, harness_home: Path, verbose: bool = False) -> tu
 
     If repo_arg is an existing local directory, return it directly.
     If it's a GitHub shorthand, HTTPS URL, or SSH URL, clone or locate
-    the repo under harness_home/repos/ and return the clone path.
+    the repo under harness_home/projects/<name>/repo/ and return the clone path.
 
     Raises ValidationError if the repo cannot be resolved or cloned.
     """
@@ -226,10 +262,18 @@ def resolve_repo(repo_arg: str, harness_home: Path, verbose: bool = False) -> tu
 
     repo_dir = _get_repo_dir(owner, repo_name, clone_url, harness_home)
 
-    # Ensure repos directory exists
+    # Ensure parent directory exists (project_dir/repo/)
     repo_dir.parent.mkdir(parents=True, exist_ok=True)
+
+    is_fresh_clone = not repo_dir.exists()
 
     _clone_or_fetch(clone_url, repo_dir, verbose)
 
-    # Use repo_dir.name (not repo_name) so collision fallback (owner-repo) is reflected
-    return repo_dir, repo_dir.name
+    # Write project config after successful clone
+    if is_fresh_clone:
+        project_dir = repo_dir.parent
+        write_project_config(project_dir, repo_name, clone_url)
+
+    # Use the project directory name (parent of repo/) as the repo name
+    # so collision fallback (owner-repo) is reflected
+    return repo_dir, repo_dir.parent.name

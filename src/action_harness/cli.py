@@ -347,7 +347,7 @@ def run(
     if dry_run:
         profile = profile_repo(resolved_repo)
         if is_managed:
-            workspace_path = str(resolved_home / "workspaces" / repo_name / task_label)
+            workspace_path = str(resolved_home / "projects" / repo_name / "workspaces" / task_label)
         else:
             workspace_path = f"/tmp/action-harness-*/{task_label}"
         if issue is not None:
@@ -436,9 +436,9 @@ def run(
 
 
 def _is_managed_repo(repo_path: Path, harness_home: Path) -> bool:
-    """Check if a repo path is under harness_home/repos/ (i.e., managed)."""
+    """Check if a repo path is under harness_home/projects/ (i.e., managed)."""
     try:
-        repo_path.resolve().relative_to(harness_home.resolve() / "repos")
+        repo_path.resolve().relative_to(harness_home.resolve() / "projects")
         return True
     except ValueError:
         return False
@@ -473,15 +473,15 @@ def clean(
         raise typer.Exit(code=1)
 
     resolved_home = _resolve_harness_home(harness_home)
-    workspaces_root = resolved_home / "workspaces"
+    projects_root = resolved_home / "projects"
 
-    if not workspaces_root.exists():
-        typer.echo("[clean] no workspaces directory found", err=True)
+    if not projects_root.exists():
+        typer.echo("[clean] no projects directory found", err=True)
         raise typer.Exit(code=0)
 
     if all_workspaces:
         # Remove all workspaces
-        _clean_all_workspaces(workspaces_root, resolved_home)
+        _clean_all_workspaces(projects_root)
     elif repo is not None:
         # Resolve repo name
         from action_harness.repo import resolve_repo
@@ -492,7 +492,13 @@ def clean(
             typer.echo(f"Error: {e}", err=True)
             raise typer.Exit(code=1) from None
 
-        repo_ws_dir = workspaces_root / repo_name
+        # For managed repos (under projects/), use the project directory name
+        if _is_managed_repo(resolved_repo, resolved_home):
+            project_name = resolved_repo.parent.name
+        else:
+            project_name = repo_name
+
+        repo_ws_dir = projects_root / project_name / "workspaces"
         if not repo_ws_dir.exists():
             typer.echo(f"[clean] no workspaces found for {repo_name}", err=True)
             raise typer.Exit(code=0)
@@ -701,29 +707,31 @@ def assess(
     typer.echo(f"[assess] complete: overall score = {overall}", err=True)
 
 
-def _clean_all_workspaces(workspaces_root: Path, harness_home: Path) -> None:
-    """Remove all workspaces across all repos."""
-    repos_dir = harness_home / "repos"
-    for repo_dir in sorted(workspaces_root.iterdir()):
-        if not repo_dir.is_dir():
+def _clean_all_workspaces(projects_root: Path) -> None:
+    """Remove all workspaces across all projects."""
+    for project_dir in sorted(projects_root.iterdir()):
+        if not project_dir.is_dir():
+            continue
+        ws_root = project_dir / "workspaces"
+        if not ws_root.is_dir():
             continue
         # Find the corresponding clone for worktree pruning
-        clone_dir = repos_dir / repo_dir.name if repos_dir.exists() else None
-        for ws_path in sorted(repo_dir.iterdir()):
+        clone_dir = project_dir / "repo"
+        for ws_path in sorted(ws_root.iterdir()):
             if ws_path.is_dir():
-                if clone_dir and clone_dir.exists():
+                if clone_dir.exists():
                     _remove_workspace(ws_path, clone_dir)
                 else:
                     shutil.rmtree(ws_path, ignore_errors=True)
                 typer.echo(
-                    f"[clean] removed workspace {repo_dir.name}/{ws_path.name}",
+                    f"[clean] removed workspace {project_dir.name}/{ws_path.name}",
                     err=True,
                 )
-        # Remove the repo workspace directory if empty
-        if repo_dir.exists() and not any(repo_dir.iterdir()):
-            repo_dir.rmdir()
+        # Remove the workspaces directory if empty
+        if ws_root.exists() and not any(ws_root.iterdir()):
+            ws_root.rmdir()
         # Prune worktrees if clone exists
-        if clone_dir and clone_dir.exists():
+        if clone_dir.exists():
             _prune_worktrees(clone_dir)
     typer.echo("[clean] all workspaces removed", err=True)
 
@@ -784,8 +792,15 @@ def report(
         raise typer.Exit(code=1)
     typer.echo(f"[report] starting report for {repo}", err=True)
 
+    # For managed repos, load manifests from project runs dir
+    resolved_home = _resolve_harness_home(harness_home)
+    runs_dir: Path | None = None
+    if _is_managed_repo(repo, resolved_home):
+        # repo is projects/<name>/repo/ — project name is the parent
+        runs_dir = resolved_home / "projects" / repo.parent.name / "runs"
+
     # Load manifests
-    manifests = load_manifests(repo, since=since)
+    manifests = load_manifests(repo, since=since, runs_dir=runs_dir)
     if not manifests:
         if json_output:
             typer.echo('{"error": "No runs found"}')
@@ -795,14 +810,18 @@ def report(
 
     # Load catalog frequency from harness home
     catalog_frequency: dict[str, int] | None = None
-    resolved_home = _resolve_harness_home(harness_home)
     # For local repos, repo.name is the directory name. For managed repos
-    # (cloned to harness_home/repos/), the directory name matches what
-    # resolve_repo produced. This won't find catalog data if the user passes
+    # (cloned to harness_home/projects/<name>/repo/), the project name is
+    # the parent directory. This won't find catalog data if the user passes
     # a local path that differs from the managed repo directory name — that's
     # acceptable since catalog frequency is best-effort context, not required.
-    repo_name = repo.name
-    freq_path = resolved_home / "repos" / repo_name / "knowledge" / "findings-frequency.json"
+    if _is_managed_repo(repo, resolved_home):
+        freq_repo_name = repo.parent.name
+    else:
+        freq_repo_name = repo.name
+    freq_path = (
+        resolved_home / "projects" / freq_repo_name / "knowledge" / "findings-frequency.json"
+    )
     typer.echo(f"[report] checking catalog frequency at {freq_path}", err=True)
 
     if freq_path.is_file():
@@ -981,10 +1000,10 @@ def show(
 
     resolved_home = _resolve_harness_home(harness_home)
 
-    # Check repo exists before calling
-    repo_dir = resolved_home / "repos" / name
-    if not repo_dir.is_dir():
-        typer.echo(f"Repo '{name}' not found in {resolved_home}/repos/", err=True)
+    # Check repo exists before calling — project must have config.yaml
+    project_dir = resolved_home / "projects" / name
+    if not project_dir.is_dir() or not (project_dir / "config.yaml").is_file():
+        typer.echo(f"Repo '{name}' not found in {resolved_home}/projects/", err=True)
         raise typer.Exit(code=1)
 
     try:

@@ -1537,8 +1537,15 @@ def ready(
             typer.echo(f"  {item['name']}  (unmet: {unmet_str})")
 
 
-@app.command()
-def lead(
+# ── Lead sub-app ─────────────────────────────────────────────────────
+
+lead_app = typer.Typer(name="lead", help="Manage repo lead agents.")
+app.add_typer(lead_app, name="lead")
+
+
+@lead_app.callback(invoke_without_command=True)
+def lead_callback(
+    ctx: typer.Context,
     repo: Path = typer.Option(
         ...,
         help="Path to the target repository",
@@ -1564,9 +1571,20 @@ def lead(
         "--harness-home",
         help="Harness home directory (default: HARNESS_HOME env or ~/harness/)",
     ),
-    prompt: str = typer.Argument(
+    initial_prompt: str = typer.Option(
         "Review the repo state and recommend what to work on next",
-        help="Prompt for the lead agent",
+        "--initial-prompt",
+        help="Initial prompt for the lead agent",
+    ),
+    name: str = typer.Option(
+        "default",
+        "--name",
+        help="Lead name — creates a named lead with its own clone",
+    ),
+    purpose: str = typer.Option(
+        "",
+        "--purpose",
+        help="Purpose description for the lead",
     ),
 ) -> None:
     """Spawn a repo lead agent to review state and plan next actions.
@@ -1585,12 +1603,86 @@ def lead(
 
         action-harness lead --repo .
 
-        action-harness lead --repo . "Focus on test coverage gaps"
+        action-harness lead start --repo . --name infra --purpose "Infrastructure work"
 
-        action-harness lead --repo . --no-interactive
+        action-harness lead list --repo .
 
-        action-harness lead --repo . --dispatch
+        action-harness lead retire my-lead --repo .
     """
+    if ctx.invoked_subcommand is not None:
+        return
+
+    # Bare `harness lead --repo .` — forward to start
+    lead_start(
+        repo=repo,
+        interactive=interactive,
+        dispatch=dispatch,
+        permission_mode=permission_mode,
+        harness_home=harness_home,
+        initial_prompt=initial_prompt,
+        name=name,
+        purpose=purpose,
+    )
+
+
+@lead_app.command(name="start")
+def lead_start(
+    repo: Path = typer.Option(
+        ...,
+        help="Path to the target repository",
+    ),
+    interactive: bool = typer.Option(
+        True,
+        "--interactive/--no-interactive",
+        help="Spawn an interactive Claude Code session (default). "
+        "Use --no-interactive for one-shot JSON plan.",
+    ),
+    dispatch: bool = typer.Option(
+        False,
+        "--dispatch",
+        help="Auto-dispatch recommended changes via harness run (implies --no-interactive)",
+    ),
+    permission_mode: str = typer.Option(
+        "default",
+        "--permission-mode",
+        help="Claude Code permission mode (default, plan, bypassPermissions)",
+    ),
+    harness_home: Path | None = typer.Option(
+        None,
+        "--harness-home",
+        help="Harness home directory (default: HARNESS_HOME env or ~/harness/)",
+    ),
+    initial_prompt: str = typer.Option(
+        "Review the repo state and recommend what to work on next",
+        "--initial-prompt",
+        help="Initial prompt for the lead agent",
+    ),
+    name: str = typer.Option(
+        "default",
+        "--name",
+        help="Lead name — creates a named lead with its own clone",
+    ),
+    purpose: str = typer.Option(
+        "",
+        "--purpose",
+        help="Purpose description for the lead",
+    ),
+) -> None:
+    """Start or resume a named lead agent session.
+
+    Resolves (or creates) a named lead, provisions a clone for non-default
+    leads, acquires a single-instance lock, and spawns a Claude Code session
+    with session resume support.
+
+    Examples:
+
+        action-harness lead start --repo .
+
+        action-harness lead start --repo . --name infra --purpose "Infrastructure"
+
+        action-harness lead start --repo . --initial-prompt "Focus on test gaps"
+    """
+    import uuid as uuid_mod
 
     from action_harness.agents import resolve_harness_agents_dir
     from action_harness.lead import (
@@ -1598,6 +1690,12 @@ def lead(
         dispatch_lead_interactive,
         gather_lead_context,
         parse_lead_plan,
+    )
+    from action_harness.lead_registry import (
+        acquire_lock,
+        release_lock,
+        resolve_or_create_lead,
+        save_lead_state,
     )
 
     # Detect if --interactive was explicitly provided via click context
@@ -1624,123 +1722,322 @@ def lead(
 
     resolved_home = _resolve_harness_home(harness_home)
 
+    # Resolve or create the lead
+    state = resolve_or_create_lead(
+        harness_home=resolved_home,
+        repo_path=repo,
+        lead_name=name,
+        purpose=purpose,
+        provision_clone_flag=(name != "default"),
+    )
+
+    # Determine if this is a resume (lead already existed on disk)
+    # We detect this by checking if created_at != last_active (updated by resolve_or_create_lead)
+    # More precisely: if the state was loaded from disk, it's a resume
+    from action_harness.lead_registry import load_lead_state
+
+    is_resume = load_lead_state(resolved_home, state.repo_name, name) is not None
+
+    # Determine effective repo path: use clone if available
+    effective_repo = repo
+    if state.clone_path is not None and Path(state.clone_path).is_dir():
+        effective_repo = Path(state.clone_path)
+        typer.echo(f"[lead] using clone at {effective_repo}", err=True)
+    elif state.clone_path is not None:
+        typer.echo(
+            f"[lead] warning: clone path {state.clone_path} does not exist, using repo directly",
+            err=True,
+        )
+
     harness_agents_dir = resolve_harness_agents_dir()
 
     # 1. Gather context
     typer.echo("Gathering repo context...", err=True)
-    context = gather_lead_context(repo, harness_home=resolved_home)
+    context = gather_lead_context(effective_repo, harness_home=resolved_home)
 
-    # Interactive mode: spawn conversational session and return
-    if interactive:
-        # Detect if user explicitly provided a prompt (not the default)
-        prompt_source = ctx.get_parameter_source("prompt")
-        explicit_prompt = prompt_source not in (None, click.core.ParameterSource.DEFAULT)
-        interactive_prompt = prompt if explicit_prompt else None
+    # Acquire lock
+    try:
+        acquire_lock(
+            harness_home=resolved_home,
+            repo_name=state.repo_name,
+            lead_name=name,
+            pid=os.getpid(),
+            session_id=state.session_id,
+        )
+    except RuntimeError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=1) from None
 
-        typer.echo("Spawning interactive lead session...", err=True)
-        exit_code = dispatch_lead_interactive(
-            repo_path=repo,
-            prompt=interactive_prompt,
-            context=context,
+    try:
+        # Interactive mode: spawn conversational session and return
+        if interactive:
+            # Detect if user explicitly provided a prompt (not the default)
+            prompt_source = ctx.get_parameter_source("initial_prompt")
+            explicit_prompt = prompt_source not in (None, click.core.ParameterSource.DEFAULT)
+            interactive_prompt = initial_prompt if explicit_prompt else None
+
+            typer.echo("Spawning interactive lead session...", err=True)
+
+            # Determine session mode
+            resume_session = is_resume and state.session_id is not None
+            exit_code = dispatch_lead_interactive(
+                repo_path=effective_repo,
+                prompt=interactive_prompt,
+                context=context,
+                harness_agents_dir=harness_agents_dir,
+                permission_mode=permission_mode,
+                session_id=state.session_id,
+                resume=resume_session,
+            )
+
+            # Resume fallback: if resume failed, try fresh session with new ID
+            if resume_session and exit_code != 0:
+                new_session_id = str(uuid_mod.uuid4())
+                typer.echo(
+                    f"[lead] resume failed (exit {exit_code}), "
+                    f"falling back to new session {new_session_id}",
+                    err=True,
+                )
+                state.session_id = new_session_id
+                save_lead_state(state, resolved_home)
+                exit_code = dispatch_lead_interactive(
+                    repo_path=effective_repo,
+                    prompt=interactive_prompt,
+                    context=context,
+                    harness_agents_dir=harness_agents_dir,
+                    permission_mode=permission_mode,
+                    session_id=state.session_id,
+                    resume=False,
+                )
+
+            raise typer.Exit(code=exit_code)
+
+        # Non-interactive mode: one-shot dispatch + plan parsing
+        # 2. Dispatch lead agent
+        typer.echo("Dispatching lead agent...", err=True)
+        raw_output = dispatch_lead(
+            repo_path=effective_repo,
+            prompt=initial_prompt,
+            context=context.full_text,
             harness_agents_dir=harness_agents_dir,
             permission_mode=permission_mode,
         )
-        raise typer.Exit(code=exit_code)
 
-    # Non-interactive mode: one-shot dispatch + plan parsing
-    # 2. Dispatch lead agent
-    typer.echo("Dispatching lead agent...", err=True)
-    raw_output = dispatch_lead(
-        repo_path=repo,
-        prompt=prompt,
-        context=context.full_text,
-        harness_agents_dir=harness_agents_dir,
-        permission_mode=permission_mode,
-    )
+        # 3. Parse plan
+        plan = parse_lead_plan(raw_output)
 
-    # 3. Parse plan
-    plan = parse_lead_plan(raw_output)
-
-    # 4. Display plan
-    typer.echo("\n## Lead Plan\n")
-    if plan.summary:
-        typer.echo(f"**Summary:** {plan.summary}\n")
-
-    if plan.proposals:
-        typer.echo(f"### Proposals ({len(plan.proposals)})")
-        for p in plan.proposals:
-            typer.echo(f"  - [{p.priority}] **{p.name}**: {p.description}")
-        typer.echo("")
-
-    if plan.issues:
-        typer.echo(f"### Issues ({len(plan.issues)})")
-        for i in plan.issues:
-            labels = f" [{', '.join(i.labels)}]" if i.labels else ""
-            typer.echo(f"  - **{i.title}**{labels}: {i.body[:200]}")
-        typer.echo("")
-
-    if plan.dispatches:
-        typer.echo(f"### Dispatches ({len(plan.dispatches)})")
-        for d in plan.dispatches:
-            typer.echo(f"  - {d.change}")
-        typer.echo("")
-
-    if not plan.proposals and not plan.issues and not plan.dispatches:
-        typer.echo("No actionable items in plan.")
+        # 4. Display plan
+        typer.echo("\n## Lead Plan\n")
         if plan.summary:
-            typer.echo(f"\nRaw summary: {plan.summary}")
+            typer.echo(f"**Summary:** {plan.summary}\n")
 
-    # 5. Auto-dispatch if requested
-    if dispatch and plan.dispatches:
-        typer.echo("\n--- Auto-dispatching recommended changes ---\n", err=True)
-        dispatch_results: list[tuple[str, bool, str]] = []
+        if plan.proposals:
+            typer.echo(f"### Proposals ({len(plan.proposals)})")
+            for p in plan.proposals:
+                typer.echo(f"  - [{p.priority}] **{p.name}**: {p.description}")
+            typer.echo("")
 
-        for d in plan.dispatches:
-            change_dir = repo / "openspec" / "changes" / d.change
-            tasks_path = change_dir / "tasks.md"
-            if not change_dir.is_dir() or not tasks_path.is_file():
-                typer.echo(
-                    f"[lead] warning: skipping dispatch '{d.change}' — "
-                    f"no tasks.md found at {tasks_path}",
-                    err=True,
-                )
-                dispatch_results.append((d.change, False, "no tasks.md"))
-                continue
+        if plan.issues:
+            typer.echo(f"### Issues ({len(plan.issues)})")
+            for i in plan.issues:
+                labels = f" [{', '.join(i.labels)}]" if i.labels else ""
+                typer.echo(f"  - **{i.title}**{labels}: {i.body[:200]}")
+            typer.echo("")
 
-            typer.echo(f"[lead] dispatching: harness run --change {d.change}", err=True)
-            try:
-                result = subprocess.run(
-                    [
-                        "action-harness",
-                        "run",
-                        "--change",
-                        d.change,
-                        "--repo",
-                        str(repo),
-                    ],
-                    capture_output=True,
-                    text=True,
-                    timeout=7200,
-                )
-                if result.returncode != 0:
+        if plan.dispatches:
+            typer.echo(f"### Dispatches ({len(plan.dispatches)})")
+            for d in plan.dispatches:
+                typer.echo(f"  - {d.change}")
+            typer.echo("")
+
+        if not plan.proposals and not plan.issues and not plan.dispatches:
+            typer.echo("No actionable items in plan.")
+            if plan.summary:
+                typer.echo(f"\nRaw summary: {plan.summary}")
+
+        # 5. Auto-dispatch if requested
+        if dispatch and plan.dispatches:
+            typer.echo("\n--- Auto-dispatching recommended changes ---\n", err=True)
+            dispatch_results: list[tuple[str, bool, str]] = []
+
+            for d in plan.dispatches:
+                change_dir = effective_repo / "openspec" / "changes" / d.change
+                tasks_path = change_dir / "tasks.md"
+                if not change_dir.is_dir() or not tasks_path.is_file():
                     typer.echo(
-                        f"[lead] dispatch '{d.change}' failed (exit {result.returncode}): "
-                        f"{result.stderr[:200]}",
+                        f"[lead] warning: skipping dispatch '{d.change}' — "
+                        f"no tasks.md found at {tasks_path}",
                         err=True,
                     )
-                    dispatch_results.append((d.change, False, f"exit {result.returncode}"))
-                else:
-                    typer.echo(f"[lead] dispatch '{d.change}' succeeded", err=True)
-                    dispatch_results.append((d.change, True, "success"))
-            except subprocess.TimeoutExpired:
-                typer.echo(f"[lead] dispatch '{d.change}' timed out after 7200s", err=True)
-                dispatch_results.append((d.change, False, "timeout"))
-            except (FileNotFoundError, OSError) as exc:
-                typer.echo(f"[lead] dispatch '{d.change}' failed to launch: {exc}", err=True)
-                dispatch_results.append((d.change, False, f"launch error: {exc}"))
+                    dispatch_results.append((d.change, False, "no tasks.md"))
+                    continue
 
-        # Report results
-        typer.echo("\n### Dispatch Results\n")
-        for change_name, success, detail in dispatch_results:
-            status = "success" if success else f"failed ({detail})"
-            typer.echo(f"  - {change_name}: {status}")
+                typer.echo(f"[lead] dispatching: harness run --change {d.change}", err=True)
+                try:
+                    result = subprocess.run(
+                        [
+                            "action-harness",
+                            "run",
+                            "--change",
+                            d.change,
+                            "--repo",
+                            str(effective_repo),
+                        ],
+                        capture_output=True,
+                        text=True,
+                        timeout=7200,
+                    )
+                    if result.returncode != 0:
+                        typer.echo(
+                            f"[lead] dispatch '{d.change}' failed (exit {result.returncode}): "
+                            f"{result.stderr[:200]}",
+                            err=True,
+                        )
+                        dispatch_results.append(
+                            (d.change, False, f"exit {result.returncode}")
+                        )
+                    else:
+                        typer.echo(f"[lead] dispatch '{d.change}' succeeded", err=True)
+                        dispatch_results.append((d.change, True, "success"))
+                except subprocess.TimeoutExpired:
+                    typer.echo(
+                        f"[lead] dispatch '{d.change}' timed out after 7200s", err=True
+                    )
+                    dispatch_results.append((d.change, False, "timeout"))
+                except (FileNotFoundError, OSError) as exc:
+                    typer.echo(
+                        f"[lead] dispatch '{d.change}' failed to launch: {exc}", err=True
+                    )
+                    dispatch_results.append((d.change, False, f"launch error: {exc}"))
+
+            # Report results
+            typer.echo("\n### Dispatch Results\n")
+            for change_name, success, detail in dispatch_results:
+                status = "success" if success else f"failed ({detail})"
+                typer.echo(f"  - {change_name}: {status}")
+    finally:
+        release_lock(
+            harness_home=resolved_home,
+            repo_name=state.repo_name,
+            lead_name=name,
+        )
+
+
+@lead_app.command(name="list")
+def lead_list(
+    repo: Path = typer.Option(
+        ...,
+        help="Path to the target repository",
+    ),
+    harness_home: Path | None = typer.Option(
+        None,
+        "--harness-home",
+        help="Harness home directory (default: HARNESS_HOME env or ~/harness/)",
+    ),
+) -> None:
+    """List all leads for a repo with status.
+
+    Shows each lead's name, purpose, status (active/idle), last active
+    timestamp, and whether it has a clone.
+
+    Examples:
+
+        action-harness lead list --repo .
+    """
+    from action_harness.lead_registry import (
+        derive_repo_name,
+        is_lead_active,
+        list_leads,
+    )
+
+    resolved_home = _resolve_harness_home(harness_home)
+    repo_name = derive_repo_name(repo.resolve(), resolved_home)
+    leads = list_leads(resolved_home, repo_name)
+
+    if not leads:
+        typer.echo(f"No leads found for {repo_name}")
+        return
+
+    # Table header
+    typer.echo(f"{'Name':<20} {'Purpose':<30} {'Status':<8} {'Last Active':<28} {'Clone':<5}")
+    typer.echo("─" * 91)
+
+    for lead_state in leads:
+        active = is_lead_active(resolved_home, repo_name, lead_state.name)
+        status = "active" if active else "idle"
+        clone = "yes" if lead_state.clone_path else "no"
+        typer.echo(
+            f"{lead_state.name:<20} "
+            f"{lead_state.purpose:<30} "
+            f"{status:<8} "
+            f"{lead_state.last_active:<28} "
+            f"{clone:<5}"
+        )
+
+
+@lead_app.command(name="retire")
+def lead_retire(
+    name: str = typer.Argument(help="Name of the lead to retire"),
+    repo: Path = typer.Option(
+        ...,
+        help="Path to the target repository",
+    ),
+    harness_home: Path | None = typer.Option(
+        None,
+        "--harness-home",
+        help="Harness home directory (default: HARNESS_HOME env or ~/harness/)",
+    ),
+) -> None:
+    """Retire a named lead, removing its clone and state.
+
+    Refuses to retire an active (locked) lead. Use Ctrl+C to stop the
+    lead session first.
+
+    Examples:
+
+        action-harness lead retire my-lead --repo .
+    """
+    from action_harness.lead_registry import (
+        derive_repo_name,
+        is_lead_active,
+        lead_state_dir,
+        load_lead_state,
+    )
+
+    resolved_home = _resolve_harness_home(harness_home)
+    repo_name = derive_repo_name(repo.resolve(), resolved_home)
+    state = load_lead_state(resolved_home, repo_name, name)
+
+    if state is None:
+        typer.echo(f"Lead '{name}' not found for repo {repo_name}", err=True)
+        raise typer.Exit(code=1)
+
+    if is_lead_active(resolved_home, repo_name, name):
+        # Read lock to get PID for error message
+        lock_path = lead_state_dir(resolved_home, repo_name, name) / "lock"
+        pid_str = "unknown"
+        if lock_path.is_file():
+            try:
+                content = lock_path.read_text(encoding="utf-8")
+                pid_str = content.strip().split("\n")[0]
+            except (OSError, IndexError):
+                pass
+        typer.echo(
+            f"Cannot retire lead '{name}': currently active (PID {pid_str})",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    # Delete clone if it exists
+    if state.clone_path is not None:
+        clone_path = Path(state.clone_path)
+        if clone_path.is_dir():
+            shutil.rmtree(clone_path)
+            typer.echo(f"[lead] removed clone at {clone_path}", err=True)
+
+    # Delete lead state directory
+    state_dir = lead_state_dir(resolved_home, repo_name, name)
+    if state_dir.is_dir():
+        shutil.rmtree(state_dir)
+
+    typer.echo(f"[lead] retired lead '{name}' for repo {repo_name}", err=True)

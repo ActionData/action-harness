@@ -507,6 +507,9 @@ def dispatch_lead_interactive(
     context: LeadContext,
     harness_agents_dir: Path,
     permission_mode: str = "default",
+    *,
+    session_id: str | None = None,
+    resume: bool = False,
 ) -> int:
     """Dispatch the lead agent as an interactive Claude Code session.
 
@@ -516,6 +519,11 @@ def dispatch_lead_interactive(
     When *prompt* is provided, it is passed as a positional argument so the
     conversation starts with that message. When *prompt* is ``None``, a
     deterministic greeting built from the gathered context is used instead.
+
+    When *resume* is True and *session_id* is provided, passes
+    ``--resume <session_id>`` to resume an existing session.
+    When *session_id* is provided but *resume* is False, passes
+    ``--session-id <session_id>`` for a controlled first-start session.
 
     Uses subprocess.run with inherited stdio (no capture_output) so the human
     can interact naturally with the Claude Code session.
@@ -546,6 +554,14 @@ def dispatch_lead_interactive(
         "--name",
         session_name,
     ]
+
+    # Session management: --resume or --session-id
+    if resume and session_id is not None:
+        cmd.extend(["--resume", session_id])
+        typer.echo(f"[lead] session mode: resume (session_id={session_id})", err=True)
+    elif session_id is not None:
+        cmd.extend(["--session-id", session_id])
+        typer.echo(f"[lead] session mode: new (session_id={session_id})", err=True)
 
     # When the user explicitly provides a prompt, use it as-is.
     # Otherwise, build a deterministic greeting from the gathered context.

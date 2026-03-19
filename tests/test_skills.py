@@ -30,7 +30,8 @@ class TestResolveHarnessSkillsDir:
         """resolve_harness_skills_dir returns a path that exists and contains skills."""
         result = resolve_harness_skills_dir()
         assert result.name == "skills"
-        assert result.parent.name == ".claude"
+        # Plugin root: skills/ is directly under the repo root, not .claude/
+        assert result.parent.name != ".claude"
         # Verify we got the source-checkout path (not the fallback)
         assert result.is_dir(), "resolved skills dir should exist"
         # Should contain at least one skill subdirectory with SKILL.md

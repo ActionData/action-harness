@@ -28,17 +28,17 @@
 
 ## 5. Verify Pipeline Agents Unchanged
 
-- [ ] 5.1 Verify `.harness/agents/` still contains all pipeline agent definitions: `bug-hunter.md`, `test-reviewer.md`, `quality-reviewer.md`, `spec-compliance-reviewer.md`, `openspec-reviewer.md`, `spec-writer.md`, `lead.md`. No files should have been moved or modified.
-- [ ] 5.2 Verify `src/action_harness/agents.py` `resolve_harness_agents_dir()` still resolves to `.harness/agents/` — no code changes needed.
+- [x] 5.1 Verify `.harness/agents/` still contains all pipeline agent definitions: `bug-hunter.md`, `test-reviewer.md`, `quality-reviewer.md`, `spec-compliance-reviewer.md`, `openspec-reviewer.md`, `spec-writer.md`, `lead.md`. No files should have been moved or modified.
+- [x] 5.2 Verify `src/action_harness/agents.py` `resolve_harness_agents_dir()` still resolves to `.harness/agents/` — no code changes needed.
 
 ## 6. Validation
 
-- [ ] 6.1 Run `uv run pytest -v` — all tests must pass (no code changes, just file moves and reference updates).
-- [ ] 6.2 Run `uv run ruff check .` — no lint violations.
-- [ ] 6.3 Run `uv run ruff format --check .` — formatting must be clean.
-- [ ] 6.4 Run `uv run mypy src/` — no type errors.
-- [ ] 6.5 Verify `.claude-plugin/plugin.json` exists and contains valid JSON with `"name": "action"`.
-- [ ] 6.6 Verify `skills/` directory contains exactly 5 skill directories: `opsx-propose`, `opsx-apply`, `opsx-review`, `opsx-explore`, `opsx-archive`. Each must contain a `SKILL.md` with valid frontmatter.
-- [ ] 6.7 Verify `agents/` directory contains `spec-reviewer.md`.
-- [ ] 6.8 Verify `.claude/skills/`, `.claude/commands/opsx/`, and `.claude/agents/` do NOT exist.
-- [ ] 6.9 Verify `.harness/agents/` still contains all 7 pipeline agent files.
+- [x] 6.1 Run `uv run pytest -v` — all tests must pass (no code changes, just file moves and reference updates).
+- [x] 6.2 Run `uv run ruff check .` — no lint violations.
+- [x] 6.3 Run `uv run ruff format --check .` — formatting must be clean.
+- [x] 6.4 Run `uv run mypy src/` — no type errors.
+- [x] 6.5 Verify `.claude-plugin/plugin.json` exists and contains valid JSON with `"name": "action"`.
+- [x] 6.6 Verify `skills/` directory contains exactly 5 skill directories: `opsx-propose`, `opsx-apply`, `opsx-review`, `opsx-explore`, `opsx-archive`. Each must contain a `SKILL.md` with valid frontmatter.
+- [x] 6.7 Verify `agents/` directory contains `spec-reviewer.md`.
+- [x] 6.8 Verify `.claude/skills/`, `.claude/commands/opsx/`, and `.claude/agents/` do NOT exist.
+- [x] 6.9 Verify `.harness/agents/` still contains all 7 pipeline agent files.

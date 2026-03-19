@@ -79,7 +79,19 @@ When ready to implement, run /opsx:apply
       - Use **AskUserQuestion tool** to clarify
       - Then continue with creation
 
-5. **Show final status**
+5. **Validate the change**
+   ```bash
+   openspec validate "<name>"
+   ```
+   This checks that delta specs exist, use correct headers, and have valid scenarios.
+
+   **If validation fails:**
+   - Read the error output carefully — it tells you exactly what's wrong
+   - Fix the issues (common problems: flat spec file instead of nested `specs/<capability>/spec.md`, missing delta headers, missing scenarios)
+   - Re-run `openspec validate "<name>"` until it passes
+   - Do NOT proceed to the output step until validation is clean
+
+6. **Show final status**
    ```bash
    openspec status --change "<name>"
    ```
@@ -89,6 +101,7 @@ When ready to implement, run /opsx:apply
 After completing all artifacts, summarize:
 - Change name and location
 - List of artifacts created with brief descriptions
+- Validation result (must be passing)
 - What's ready: "All artifacts created! Ready for implementation."
 - Prompt: "Run `/opsx:apply` or ask me to implement to start working on the tasks."
 
@@ -102,9 +115,30 @@ After completing all artifacts, summarize:
   - Do NOT copy `<context>`, `<rules>`, `<project_context>` blocks into the artifact
   - These guide what you write, but should never appear in the output
 
+**Delta Spec Format (critical — validation will reject incorrect format)**
+
+Specs MUST follow this exact structure:
+- **Directory**: `specs/<capability-name>/spec.md` (nested in a capability directory, NOT a flat file like `specs/my-spec.md`)
+- **Headers**: Use delta operation headers — `## ADDED Requirements`, `## MODIFIED Requirements`, `## REMOVED Requirements`, or `## RENAMED Requirements`. Never use plain `## Requirements`.
+- **Requirements**: `### Requirement: <descriptive name>` followed by normative prose using SHALL/MUST/SHOULD/MAY
+- **Scenarios**: `#### Scenario: <name>` (exactly 4 hashes) with `- **WHEN** <condition>` and `- **THEN** <expected result>` bullet points
+- Every requirement MUST have at least one scenario
+- One spec file per capability. Multiple capabilities = multiple directories under `specs/`
+
+Example structure:
+```
+specs/
+  my-capability/
+    spec.md          ← ## ADDED Requirements, ### Requirement:, #### Scenario:
+  another-capability/
+    spec.md
+```
+
 **Guardrails**
 - Create ALL artifacts needed for implementation (as defined by schema's `apply.requires`)
 - Always read dependency artifacts before creating a new one
 - If context is critically unclear, ask the user - but prefer making reasonable decisions to keep momentum
 - If a change with that name already exists, ask if user wants to continue it or create a new one
 - Verify each artifact file exists after writing before proceeding to next
+- NEVER declare a change ready without `openspec validate` passing — this is the most common failure mode
+- Specs must be in nested directories (`specs/<capability>/spec.md`), never flat files (`specs/my-spec.md`)

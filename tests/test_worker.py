@@ -132,7 +132,7 @@ class TestBuildSystemPrompt:
 
     def test_includes_opsx_apply(self) -> None:
         prompt = build_system_prompt("test-change")
-        assert "opsx:apply" in prompt
+        assert "action:opsx-apply" in prompt
 
     def test_includes_commit_instruction(self) -> None:
         prompt = build_system_prompt("test-change")
@@ -160,7 +160,7 @@ class TestBuildSystemPrompt:
 
     def test_none_change_name_no_opsx_apply(self) -> None:
         prompt = build_system_prompt(None)
-        assert "opsx:apply" not in prompt
+        assert "action:opsx-apply" not in prompt
 
     def test_none_change_name_generic_prompt(self) -> None:
         prompt = build_system_prompt(None)
@@ -168,7 +168,7 @@ class TestBuildSystemPrompt:
 
     def test_change_name_still_has_opsx_apply(self) -> None:
         prompt = build_system_prompt("my-change")
-        assert "opsx:apply" in prompt
+        assert "action:opsx-apply" in prompt
 
     def test_none_change_name_with_harness_md(self) -> None:
         prompt = build_system_prompt(None, harness_md="Run tests first.")
@@ -485,7 +485,7 @@ class TestDispatchWorkerPromptMode:
             dispatch_worker("prompt-fix-bug", tmp_path, prompt="Fix bug")
 
         system_prompt = get_claude_system_prompt(mock)
-        assert "opsx:apply" not in system_prompt
+        assert "action:opsx-apply" not in system_prompt
         assert "implementing a task" in system_prompt
 
     def test_no_prompt_uses_opsx_apply(self, tmp_path: Path) -> None:
@@ -494,7 +494,7 @@ class TestDispatchWorkerPromptMode:
             dispatch_worker("my-change", tmp_path)
 
         user_prompt = get_claude_prompt(mock)
-        assert "opsx:apply" in user_prompt
+        assert "action:opsx-apply" in user_prompt
 
     def test_prompt_with_feedback_appends(self, tmp_path: Path) -> None:
         """In prompt mode with feedback (retry), feedback is appended to prompt."""
@@ -556,7 +556,7 @@ class TestProgressFileInjection:
 
         prompt = get_claude_prompt(mock)
         assert prompt.startswith(progress_content)
-        assert "opsx:apply" in prompt
+        assert "action:opsx-apply" in prompt
 
     def test_prompt_unchanged_when_no_progress(self, tmp_path: Path) -> None:
         mock = make_mock_subprocess(claude_stdout=_OK_JSON)
@@ -577,7 +577,7 @@ class TestProgressFileInjection:
 
         prompt = get_claude_prompt(mock)
         progress_pos = prompt.index("Harness Progress")
-        task_pos = prompt.index("opsx:apply")
+        task_pos = prompt.index("action:opsx-apply")
         assert progress_pos < task_pos
 
     def test_progress_prepended_in_resume_mode(self, tmp_path: Path) -> None:

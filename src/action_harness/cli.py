@@ -208,7 +208,7 @@ def run(
 
     Provide exactly one of `--change`, `--prompt`, or `--issue`:
 
-    - `--change NAME` implements an OpenSpec change via opsx:apply. The change
+    - `--change NAME` implements an OpenSpec change via action:opsx-apply. The change
       must exist at REPO/openspec/changes/NAME/.
     - `--prompt TEXT` sends a freeform task description directly to the worker.
       No OpenSpec artifacts are needed. The pipeline skips the OpenSpec review

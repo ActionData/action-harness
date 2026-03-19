@@ -100,7 +100,7 @@ Agent prompts are stored as markdown files with YAML frontmatter. Two directorie
 | `openspec-reviewer.md` | OpenSpec lifecycle validation, structural checks, semantic review |
 | `spec-writer.md` | Writes and reviews proposals, specs, designs, task breakdowns |
 
-**`.claude/agents/`** — agents available to Claude Code in interactive sessions. These appear in Claude Code's agent picker and run in the current working directory (not in worktrees).
+**`agents/`** — plugin agents available to Claude Code in interactive sessions. These appear in Claude Code's agent picker when the plugin is installed and run in the current working directory (not in worktrees).
 
 | Agent | Purpose |
 |-------|---------|
@@ -108,7 +108,7 @@ Agent prompts are stored as markdown files with YAML frontmatter. Two directorie
 
 **When to add agents:**
 - Pipeline agents (autonomous, dispatched by harness) → `.harness/agents/`
-- Interactive agents (conversational, invoked by human via Claude Code) → `.claude/agents/`
+- Interactive agents (conversational, invoked by human via Claude Code) → `agents/`
 
 ## HARNESS.md convention
 

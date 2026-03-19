@@ -21,10 +21,10 @@
 
 ## 4. Update References
 
-- [ ] 4.1 In `CLAUDE.md`, update the "Agent definitions" section to document the new layout: plugin agents in `agents/` (interactive), pipeline agents in `.harness/agents/` (autonomous). Update the table listing `.claude/agents/` to reference `agents/` instead.
-- [ ] 4.2 In `CLAUDE.md`, update any references to `.claude/skills/` or `.claude/commands/opsx/` to reference the plugin `skills/` directory and `/action:` namespace.
-- [ ] 4.3 In `HARNESS.md`, update any skill invocation references to use the `/action:` prefix if they reference the old `/opsx:` names.
-- [ ] 4.4 Search the codebase (`grep -rn 'opsx:' src/ tests/ .harness/`) for any references to old skill names in Python code or agent prompts. Update any found to use the `/action:` prefixed names.
+- [x] 4.1 In `CLAUDE.md`, update the "Agent definitions" section to document the new layout: plugin agents in `agents/` (interactive), pipeline agents in `.harness/agents/` (autonomous). Update the table listing `.claude/agents/` to reference `agents/` instead.
+- [x] 4.2 In `CLAUDE.md`, update any references to `.claude/skills/` or `.claude/commands/opsx/` to reference the plugin `skills/` directory and `/action:` namespace.
+- [x] 4.3 In `HARNESS.md`, update any skill invocation references to use the `/action:` prefix if they reference the old `/opsx:` names.
+- [x] 4.4 Search the codebase (`grep -rn 'opsx:' src/ tests/ .harness/`) for any references to old skill names in Python code or agent prompts. Update any found to use the `/action:` prefixed names.
 
 ## 5. Verify Pipeline Agents Unchanged
 

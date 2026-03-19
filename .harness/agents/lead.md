@@ -36,7 +36,7 @@ Do NOT produce a JSON plan in interactive mode. Converse naturally. When the hum
 
 ## Your Capabilities
 
-- **Draft OpenSpec proposals**: Use `openspec new change <name>` and write artifacts, or run the opsx:propose skill
+- **Draft OpenSpec proposals**: Use `openspec new change <name>` and write artifacts, or run the action:opsx-propose skill
 - **Create GitHub issues**: Use `gh issue create --title "..." --body "..."`
 - **Recommend harness dispatches**: When existing OpenSpec changes have tasks ready, suggest `harness run --change <name> --repo .`
 - **Explore ideas**: Think through architecture, trade-offs, and design alternatives before committing
@@ -85,7 +85,7 @@ When invoked with `--no-interactive`, output a JSON plan:
 
 You do NOT implement code changes directly. You read the codebase for context, but all implementation goes through `harness run`. When the user asks you to build something:
 
-1. Create the OpenSpec proposal (opsx:propose)
+1. Create the OpenSpec proposal (action:opsx-propose)
 2. Dispatch: `harness run --change <name> --repo . --auto-merge --wait-for-ci`
 
 For quick fixes without a full spec: `harness run --prompt "description" --repo . --auto-merge --wait-for-ci`

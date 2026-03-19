@@ -1559,7 +1559,7 @@ def lead_callback(
     ctx: typer.Context,
     repo: Path | None = typer.Option(
         None,
-        help="Path to the target repository",
+        help="Path, GitHub shorthand (owner/repo), or URL (HTTPS/SSH) of the target repository",
     ),
     interactive: bool = typer.Option(
         True,
@@ -1644,7 +1644,7 @@ def lead_callback(
 def lead_start(
     repo: Path = typer.Option(
         ...,
-        help="Path to the target repository",
+        help="Path, GitHub shorthand (owner/repo), or URL (HTTPS/SSH) of the target repository",
     ),
     interactive: bool = typer.Option(
         True,
@@ -1728,14 +1728,22 @@ def lead_start(
     if dispatch:
         interactive = False
 
-    repo = repo.resolve()
+    resolved_home = _resolve_harness_home(harness_home)
+
+    # Resolve repo: accepts local path, GitHub shorthand, HTTPS URL, or SSH URL
+    from action_harness.repo import resolve_repo as resolve_repo_source
+
+    try:
+        repo, _repo_name = resolve_repo_source(str(repo), resolved_home)
+    except ValidationError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=1) from None
+
     try:
         _validate_common(repo)
     except ValidationError as e:
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(code=1) from None
-
-    resolved_home = _resolve_harness_home(harness_home)
 
     # Check if the lead already exists BEFORE resolve_or_create_lead saves it,
     # so we can distinguish first-start (--session-id) from resume (--resume).

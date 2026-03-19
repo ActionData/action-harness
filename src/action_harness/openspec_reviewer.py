@@ -72,6 +72,7 @@ def dispatch_openspec_review(
         f"run structural checks, perform semantic review, and archive if ready."
     )
 
+    session_name = f"[action-harness] OpenSpec Review: {change_name} (repo: {worktree_path.name})"
     cmd = [
         "claude",
         "-p",
@@ -84,6 +85,8 @@ def dispatch_openspec_review(
         str(max_turns),
         "--permission-mode",
         permission_mode,
+        "--name",
+        session_name,
     ]
     if model is not None:
         cmd.extend(["--model", model])

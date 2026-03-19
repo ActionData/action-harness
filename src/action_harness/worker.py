@@ -155,6 +155,7 @@ def dispatch_worker(
         user_prompt: str = feedback
         if progress_contents:
             user_prompt = f"{progress_contents}\n\n{user_prompt}"
+        session_name = f"[action-harness] Worker: {change_name} (repo: {worktree_path.name})"
         cmd = [
             "claude",
             "-p",
@@ -167,6 +168,8 @@ def dispatch_worker(
             str(max_turns),
             "--permission-mode",
             permission_mode,
+            "--name",
+            session_name,
         ]
     else:
         # Fresh dispatch
@@ -196,6 +199,9 @@ def dispatch_worker(
             user_prompt = f"{user_prompt}\n\n{feedback}"
         if progress_contents:
             user_prompt = f"{progress_contents}\n\n{user_prompt}"
+        session_name = (
+            f"[action-harness] Worker: {change_name or 'freeform'} (repo: {worktree_path.name})"
+        )
         cmd = [
             "claude",
             "-p",
@@ -208,6 +214,8 @@ def dispatch_worker(
             str(max_turns),
             "--permission-mode",
             permission_mode,
+            "--name",
+            session_name,
         ]
     if model is not None:
         cmd.extend(["--model", model])

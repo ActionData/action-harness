@@ -533,6 +533,8 @@ def dispatch_lead_interactive(
         typer.echo(f"[lead] agent file not found: {exc}", err=True)
         return 1
 
+    session_name = f"[action-harness] Lead (repo: {context.repo_name or repo_path.name})"
+
     cmd = [
         "claude",
         "--system-prompt",
@@ -541,6 +543,8 @@ def dispatch_lead_interactive(
         context.full_text,
         "--permission-mode",
         permission_mode,
+        "--name",
+        session_name,
     ]
 
     # When the user explicitly provides a prompt, use it as-is.
@@ -611,6 +615,8 @@ def dispatch_lead(
     system_prompt = persona
     user_prompt = f"{context}\n\n## Your Task\n\n{prompt}"
 
+    session_name = f"[action-harness] Lead (repo: {repo_path.name})"
+
     cmd = [
         "claude",
         "-p",
@@ -623,6 +629,8 @@ def dispatch_lead(
         str(max_turns),
         "--permission-mode",
         permission_mode,
+        "--name",
+        session_name,
     ]
 
     start_time = time.monotonic()

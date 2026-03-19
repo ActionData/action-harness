@@ -293,7 +293,7 @@ def test_list_repos_projects_with_config_gating(tmp_path: Path) -> None:
 # ── 9.8: Test _is_managed_repo ──────────────────────────────────────
 
 
-def testis_managed_repo(tmp_path: Path) -> None:
+def test_is_managed_repo(tmp_path: Path) -> None:
     """9.8: _is_managed_repo returns True for projects/<name>/repo/ path."""
     from action_harness.cli import is_managed_repo
 

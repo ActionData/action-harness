@@ -1726,6 +1726,13 @@ def lead_start(
 
     resolved_home = _resolve_harness_home(harness_home)
 
+    # Check if the lead already exists BEFORE resolve_or_create_lead saves it,
+    # so we can distinguish first-start (--session-id) from resume (--resume).
+    from action_harness.lead_registry import derive_repo_name, load_lead_state
+
+    pre_existing_repo_name = derive_repo_name(repo, resolved_home)
+    is_resume = load_lead_state(resolved_home, pre_existing_repo_name, name) is not None
+
     # Resolve or create the lead
     state = resolve_or_create_lead(
         harness_home=resolved_home,
@@ -1734,13 +1741,6 @@ def lead_start(
         purpose=purpose,
         provision_clone_flag=(name != "default"),
     )
-
-    # Determine if this is a resume (lead already existed on disk)
-    # We detect this by checking if created_at != last_active (updated by resolve_or_create_lead)
-    # More precisely: if the state was loaded from disk, it's a resume
-    from action_harness.lead_registry import load_lead_state
-
-    is_resume = load_lead_state(resolved_home, state.repo_name, name) is not None
 
     # Determine effective repo path: use clone if available
     effective_repo = repo

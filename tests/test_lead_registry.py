@@ -581,6 +581,55 @@ class TestResumeFallback:
                 assert loaded is not None
                 assert loaded.session_id == session_ids[1]
 
+    def test_new_lead_uses_session_id_not_resume(self, tmp_path: Path) -> None:
+        """A brand-new lead uses --session-id, not --resume."""
+        (tmp_path / ".git").mkdir()
+        resume_flags: list[bool] = []
+
+        def mock_dispatch(
+            repo_path: Path,
+            prompt: str | None,
+            context: object,
+            harness_agents_dir: Path,
+            permission_mode: str = "default",
+            *,
+            session_id: str | None = None,
+            resume: bool = False,
+        ) -> int:
+            resume_flags.append(resume)
+            return 0
+
+        with (
+            patch("action_harness.lead.dispatch_lead_interactive", side_effect=mock_dispatch),
+            patch("action_harness.lead.gather_lead_context") as mock_context,
+            patch("shutil.which", return_value="/usr/bin/fake"),
+            patch("action_harness.lead_registry.subprocess.run") as mock_subp,
+        ):
+            mock_subp.side_effect = FileNotFoundError("no git")
+            mock_ctx = MagicMock()
+            mock_ctx.full_text = "test context"
+            mock_ctx.repo_name = "test-repo"
+            mock_context.return_value = mock_ctx
+
+            harness_home = tmp_path / "harness"
+            # Do NOT pre-save any state — this is a brand-new lead
+
+            result = runner.invoke(
+                app,
+                [
+                    "lead",
+                    "start",
+                    "--repo",
+                    str(tmp_path),
+                    "--harness-home",
+                    str(harness_home),
+                ],
+            )
+            assert result.exit_code == 0
+            # Should be called exactly once with resume=False
+            assert len(resume_flags) == 1
+            assert resume_flags[0] is False
+
 
 # ---------------------------------------------------------------------------
 # 5.12: Integration smoke test

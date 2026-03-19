@@ -194,6 +194,11 @@ def run(
         "--resume",
         help='Resume from a checkpoint: "latest" or a specific run ID',
     ),
+    skip_preflight: bool = typer.Option(
+        False,
+        "--skip-preflight",
+        help="Skip pre-dispatch preflight checks (worktree clean, git remote, eval tools, prerequisites)",
+    ),
     dry_run: bool = typer.Option(
         False, "--dry-run", help="Validate and print plan without executing"
     ),
@@ -429,6 +434,7 @@ def run(
         review_cycle=review_cycle_list,
         max_findings_per_retry=max_findings_per_retry,
         checkpoint=resolved_checkpoint,
+        skip_preflight=skip_preflight,
     )
 
     if manifest.manifest_path:

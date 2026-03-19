@@ -17,7 +17,7 @@
 
 ## 4. CLI Flag
 
-- [ ] 4.1 Add `--skip-preflight` flag to the `run` command in `cli.py`. Pass it through to `run_pipeline()`. Update the help text to describe what preflight checks do.
+- [x] 4.1 Add `--skip-preflight` flag to the `run` command in `cli.py`. Pass it through to `run_pipeline()`. Update the help text to describe what preflight checks do.
 
 ## 5. Tests
 

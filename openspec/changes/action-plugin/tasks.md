@@ -15,9 +15,9 @@
 
 ## 3. Migrate Interactive Agents
 
-- [ ] 3.1 Create `agents/` directory at the repo root (the plugin agents directory).
-- [ ] 3.2 Move `.claude/agents/spec-reviewer.md` to `agents/spec-reviewer.md`. Preserve all frontmatter and content.
-- [ ] 3.3 Remove the empty `.claude/agents/` directory after migration.
+- [x] 3.1 Create `agents/` directory at the repo root (the plugin agents directory).
+- [x] 3.2 Move `.claude/agents/spec-reviewer.md` to `agents/spec-reviewer.md`. Preserve all frontmatter and content.
+- [x] 3.3 Remove the empty `.claude/agents/` directory after migration.
 
 ## 4. Update References
 

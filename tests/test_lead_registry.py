@@ -445,12 +445,15 @@ class TestCLILeadList:
         acquire_lock(tmp_path, "fake-repo", "default", os.getpid(), "sess-1")
 
         try:
-            with patch(
-                "action_harness.lead_registry.derive_repo_name",
-                return_value="fake-repo",
-            ), patch(
-                "action_harness.repo.resolve_repo",
-                return_value=(Path("/tmp/fake"), "fake-repo"),
+            with (
+                patch(
+                    "action_harness.lead_registry.derive_repo_name",
+                    return_value="fake-repo",
+                ),
+                patch(
+                    "action_harness.repo.resolve_repo",
+                    return_value=(Path("/tmp/fake"), "fake-repo"),
+                ),
             ):
                 result = runner.invoke(
                     app,
@@ -476,12 +479,15 @@ class TestCLILeadRetire:
         state = _make_state(name="old-lead", repo_name="fake-repo")
         save_lead_state(state, tmp_path)
 
-        with patch(
-            "action_harness.lead_registry.derive_repo_name",
-            return_value="fake-repo",
-        ), patch(
-            "action_harness.repo.resolve_repo",
-            return_value=(Path("/tmp/fake"), "fake-repo"),
+        with (
+            patch(
+                "action_harness.lead_registry.derive_repo_name",
+                return_value="fake-repo",
+            ),
+            patch(
+                "action_harness.repo.resolve_repo",
+                return_value=(Path("/tmp/fake"), "fake-repo"),
+            ),
         ):
             result = runner.invoke(
                 app,
@@ -501,12 +507,15 @@ class TestCLILeadRetire:
 
     def test_retire_nonexistent(self, tmp_path: Path) -> None:
         """lead retire of nonexistent lead returns exit code 1."""
-        with patch(
-            "action_harness.lead_registry.derive_repo_name",
-            return_value="fake-repo",
-        ), patch(
-            "action_harness.repo.resolve_repo",
-            return_value=(Path("/tmp/fake"), "fake-repo"),
+        with (
+            patch(
+                "action_harness.lead_registry.derive_repo_name",
+                return_value="fake-repo",
+            ),
+            patch(
+                "action_harness.repo.resolve_repo",
+                return_value=(Path("/tmp/fake"), "fake-repo"),
+            ),
         ):
             result = runner.invoke(
                 app,
@@ -529,12 +538,15 @@ class TestCLILeadRetire:
         acquire_lock(tmp_path, "fake-repo", "busy-lead", os.getpid(), "sess-1")
 
         try:
-            with patch(
-                "action_harness.lead_registry.derive_repo_name",
-                return_value="fake-repo",
-            ), patch(
-                "action_harness.repo.resolve_repo",
-                return_value=(Path("/tmp/fake"), "fake-repo"),
+            with (
+                patch(
+                    "action_harness.lead_registry.derive_repo_name",
+                    return_value="fake-repo",
+                ),
+                patch(
+                    "action_harness.repo.resolve_repo",
+                    return_value=(Path("/tmp/fake"), "fake-repo"),
+                ),
             ):
                 result = runner.invoke(
                     app,

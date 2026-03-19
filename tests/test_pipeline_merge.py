@@ -144,6 +144,11 @@ def _standard_patches(
     return patched()
 
 
+@pytest.fixture(autouse=True)
+def _mock_preflight(mock_preflight: None) -> None:
+    """Auto-apply shared mock_preflight fixture from conftest."""
+
+
 class TestAutoMerge:
     def test_all_gates_pass_merged(self, test_repo: Path) -> None:
         """auto-merge enabled + all gates pass → MergeResult(merged=True)."""

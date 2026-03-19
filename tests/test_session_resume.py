@@ -19,6 +19,11 @@ from action_harness.models import (
 from action_harness.pipeline import _run_pipeline_inner, _run_review_fix_retry
 
 
+@pytest.fixture(autouse=True)
+def _mock_preflight(mock_preflight: None) -> None:
+    """Auto-apply shared mock_preflight fixture from conftest."""
+
+
 def _make_worker_result(
     success: bool = True,
     session_id: str | None = "sess_a",

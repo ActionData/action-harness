@@ -117,6 +117,11 @@ def _make_claude_mock(
     return mock
 
 
+@pytest.fixture(autouse=True)
+def _mock_preflight(mock_preflight: None) -> None:
+    """Auto-apply shared mock_preflight fixture from conftest."""
+
+
 class TestShouldRunStage:
     def test_no_checkpoint_runs_all(self) -> None:
         assert _should_run_stage("worktree", None) is True

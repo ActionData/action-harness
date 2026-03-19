@@ -223,6 +223,11 @@ def _make_claude_mock(
     return MagicMock(side_effect=side_effect)
 
 
+@pytest.fixture(autouse=True)
+def _mock_preflight(mock_preflight: None) -> None:
+    """Auto-apply shared mock_preflight fixture from conftest."""
+
+
 class TestPipelineWithReviewAgents:
     def test_review_results_in_manifest(self, test_repo: Path) -> None:
         """ReviewResults appear after PrResult and before OpenSpecReviewResult."""

@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from action_harness.models import (
     OpenSpecReviewResult,
 )
@@ -85,6 +87,11 @@ def _get_claude_system_prompt(cmd: list[str]) -> str | None:
         return None
     idx = cmd.index("--system-prompt")
     return cmd[idx + 1]
+
+
+@pytest.fixture(autouse=True)
+def _mock_preflight(mock_preflight: None) -> None:
+    """Auto-apply shared mock_preflight fixture from conftest."""
 
 
 class TestPipelinePromptMode:

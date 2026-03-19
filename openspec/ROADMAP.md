@@ -56,6 +56,8 @@ Priority order. Each is an OpenSpec change the harness implements on itself.
 - [x] `repo-lead` — `harness lead` interactive planning agent with context gathering, plan parsing, and `--dispatch` for auto-executing recommendations.
 
 - [x] `openspec-prerequisites` — `harness ready` command with machine-readable prerequisites in `.openspec.yaml`. Dependency graph computation, lead context integration.
+- [x] `harness-skills` — Skill discovery and injection into target repo worktrees before worker dispatch. Lead persona integration for dispatch, repo, and assessment skills.
+- [x] `dispatch-preflight` — Pre-dispatch checks: archived changes, merged PRs, stale remote branches, eval tool availability, prerequisite satisfaction. Stale branch suffixing.
 
 ### In progress
 

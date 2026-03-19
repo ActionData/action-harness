@@ -76,9 +76,9 @@
 
 ## 6. Validation
 
-- [ ] 6.1 Run `uv run pytest tests/test_lead_registry.py -v` — all tests pass.
-- [ ] 6.2 Run `uv run pytest tests/test_lead.py -v` — existing lead tests still pass (no regressions).
-- [ ] 6.3 Run `uv run ruff check src/action_harness/lead_registry.py src/action_harness/lead.py src/action_harness/cli.py` — no lint errors.
-- [ ] 6.4 Run `uv run ruff format --check src/action_harness/lead_registry.py src/action_harness/lead.py src/action_harness/cli.py` — properly formatted.
-- [ ] 6.5 Run `uv run mypy src/action_harness/lead_registry.py src/action_harness/lead.py` — no type errors.
-- [ ] 6.6 Run `uv run pytest -v` — full test suite passes.
+- [x] 6.1 Run `uv run pytest tests/test_lead_registry.py -v` — all tests pass.
+- [x] 6.2 Run `uv run pytest tests/test_lead.py -v` — existing lead tests still pass (no regressions).
+- [x] 6.3 Run `uv run ruff check src/action_harness/lead_registry.py src/action_harness/lead.py src/action_harness/cli.py` — no lint errors.
+- [x] 6.4 Run `uv run ruff format --check src/action_harness/lead_registry.py src/action_harness/lead.py src/action_harness/cli.py` — properly formatted.
+- [x] 6.5 Run `uv run mypy src/action_harness/lead_registry.py src/action_harness/lead.py` — no type errors.
+- [x] 6.6 Run `uv run pytest -v` — full test suite passes.

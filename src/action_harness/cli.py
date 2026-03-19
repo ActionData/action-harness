@@ -1897,21 +1897,15 @@ def lead_start(
                             f"{result.stderr[:200]}",
                             err=True,
                         )
-                        dispatch_results.append(
-                            (d.change, False, f"exit {result.returncode}")
-                        )
+                        dispatch_results.append((d.change, False, f"exit {result.returncode}"))
                     else:
                         typer.echo(f"[lead] dispatch '{d.change}' succeeded", err=True)
                         dispatch_results.append((d.change, True, "success"))
                 except subprocess.TimeoutExpired:
-                    typer.echo(
-                        f"[lead] dispatch '{d.change}' timed out after 7200s", err=True
-                    )
+                    typer.echo(f"[lead] dispatch '{d.change}' timed out after 7200s", err=True)
                     dispatch_results.append((d.change, False, "timeout"))
                 except (FileNotFoundError, OSError) as exc:
-                    typer.echo(
-                        f"[lead] dispatch '{d.change}' failed to launch: {exc}", err=True
-                    )
+                    typer.echo(f"[lead] dispatch '{d.change}' failed to launch: {exc}", err=True)
                     dispatch_results.append((d.change, False, f"launch error: {exc}"))
 
             # Report results

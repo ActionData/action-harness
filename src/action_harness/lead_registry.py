@@ -5,13 +5,12 @@ from __future__ import annotations
 import os
 import subprocess
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import typer
 import yaml
 from pydantic import BaseModel
-
 
 # ---------------------------------------------------------------------------
 # LeadState model (task 1.1)
@@ -51,9 +50,7 @@ def derive_repo_name(repo_path: Path, harness_home: Path) -> str:
         # Path is harness_home / "projects" / <name> / "repo" / ...
         # The project name is the parent of "repo"
         try:
-            relative = repo_path.resolve().relative_to(
-                harness_home.resolve() / "projects"
-            )
+            relative = repo_path.resolve().relative_to(harness_home.resolve() / "projects")
             # relative is like <name>/repo or <name>/repo/subdir
             project_name = relative.parts[0]
             typer.echo(
@@ -128,15 +125,11 @@ def save_lead_state(state: LeadState, harness_home: Path) -> Path:
             encoding="utf-8",
         )
     except OSError as exc:
-        raise RuntimeError(
-            f"Failed to write lead state to {yaml_path}: {exc}"
-        ) from exc
+        raise RuntimeError(f"Failed to write lead state to {yaml_path}: {exc}") from exc
     return yaml_path
 
 
-def load_lead_state(
-    harness_home: Path, repo_name: str, lead_name: str
-) -> LeadState | None:
+def load_lead_state(harness_home: Path, repo_name: str, lead_name: str) -> LeadState | None:
     """Load lead state from lead.yaml. Returns None if not found or on error."""
     yaml_path = lead_state_dir(harness_home, repo_name, lead_name) / "lead.yaml"
     if not yaml_path.is_file():
@@ -192,12 +185,12 @@ def resolve_or_create_lead(
             f"[lead-registry] resolve_or_create_lead: existing lead '{lead_name}'",
             err=True,
         )
-        existing.last_active = datetime.now(timezone.utc).isoformat()
+        existing.last_active = datetime.now(UTC).isoformat()
         save_lead_state(existing, harness_home)
         return existing
 
     # Create new lead
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     state = LeadState(
         name=lead_name,
         repo_name=repo_name,
@@ -255,9 +248,7 @@ def acquire_lock(
             try:
                 os.kill(existing_pid, 0)
                 # Process is alive — refuse
-                raise RuntimeError(
-                    f"Lead '{lead_name}' is already running (PID {existing_pid})"
-                )
+                raise RuntimeError(f"Lead '{lead_name}' is already running (PID {existing_pid})")
             except OSError:
                 # Process is dead — stale lock
                 typer.echo(
@@ -276,9 +267,7 @@ def acquire_lock(
     lock_path.write_text(f"{pid}\n{session_id}\n", encoding="utf-8")
 
 
-def release_lock(
-    harness_home: Path, repo_name: str, lead_name: str
-) -> None:
+def release_lock(harness_home: Path, repo_name: str, lead_name: str) -> None:
     """Release the lead lock. Never raises — safe for finally blocks."""
     lock_path = lead_state_dir(harness_home, repo_name, lead_name) / "lock"
     try:
@@ -291,9 +280,7 @@ def release_lock(
         )
 
 
-def is_lead_active(
-    harness_home: Path, repo_name: str, lead_name: str
-) -> bool:
+def is_lead_active(harness_home: Path, repo_name: str, lead_name: str) -> bool:
     """Check if a lead is currently active (lock held by a live process)."""
     lock_path = lead_state_dir(harness_home, repo_name, lead_name) / "lock"
     if not lock_path.is_file():
@@ -362,14 +349,11 @@ def provision_clone(state: LeadState, harness_home: Path) -> Path:
             timeout=600,
         )
     except (FileNotFoundError, OSError, subprocess.TimeoutExpired) as exc:
-        raise RuntimeError(
-            f"Failed to clone from {source} to {clone_dir}: {exc}"
-        ) from exc
+        raise RuntimeError(f"Failed to clone from {source} to {clone_dir}: {exc}") from exc
 
     if clone_result.returncode != 0:
         raise RuntimeError(
-            f"git clone failed (exit {clone_result.returncode}): "
-            f"{clone_result.stderr.strip()}"
+            f"git clone failed (exit {clone_result.returncode}): {clone_result.stderr.strip()}"
         )
 
     typer.echo(

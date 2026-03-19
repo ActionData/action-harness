@@ -342,7 +342,7 @@ def run(
         raise typer.Exit(code=1) from None
 
     # Determine if this is a managed repo (cloned to harness home)
-    is_managed = _is_managed_repo(resolved_repo, resolved_home)
+    is_managed = is_managed_repo(resolved_repo, resolved_home)
 
     if dry_run:
         profile = profile_repo(resolved_repo)
@@ -438,7 +438,7 @@ def run(
         raise typer.Exit(code=1)
 
 
-def _is_managed_repo(repo_path: Path, harness_home: Path) -> bool:
+def is_managed_repo(repo_path: Path, harness_home: Path) -> bool:
     """Check if a repo path is under harness_home/projects/ (i.e., managed)."""
     try:
         repo_path.resolve().relative_to(harness_home.resolve() / "projects")
@@ -496,7 +496,7 @@ def clean(
             raise typer.Exit(code=1) from None
 
         # For managed repos (under projects/), use the project directory name
-        if _is_managed_repo(resolved_repo, resolved_home):
+        if is_managed_repo(resolved_repo, resolved_home):
             project_name = resolved_repo.parent.name
         else:
             project_name = repo_name
@@ -798,7 +798,7 @@ def report(
     # For managed repos, load manifests from project runs dir
     resolved_home = _resolve_harness_home(harness_home)
     runs_dir: Path | None = None
-    if _is_managed_repo(repo, resolved_home):
+    if is_managed_repo(repo, resolved_home):
         # repo is projects/<name>/repo/ — project name is the parent
         runs_dir = resolved_home / "projects" / repo.parent.name / "runs"
 
@@ -818,7 +818,7 @@ def report(
     # the parent directory. This won't find catalog data if the user passes
     # a local path that differs from the managed repo directory name — that's
     # acceptable since catalog frequency is best-effort context, not required.
-    if _is_managed_repo(repo, resolved_home):
+    if is_managed_repo(repo, resolved_home):
         freq_repo_name = repo.parent.name
     else:
         freq_repo_name = repo.name

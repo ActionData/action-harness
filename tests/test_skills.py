@@ -1,7 +1,12 @@
 """Tests for skill discovery and injection."""
 
+import json
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
+import pytest
+
+import action_harness.skills as skills_mod
 from action_harness.skills import (
     INJECTED_MARKER,
     SKILL_FILENAME,
@@ -20,12 +25,29 @@ def _make_skill(skills_dir: Path, name: str, content: str = "---\nname: test\n--
 
 
 class TestResolveHarnessSkillsDir:
-    def test_returns_valid_path(self) -> None:
-        """resolve_harness_skills_dir returns a path to .claude/skills/."""
+    def test_returns_valid_path_with_skills(self) -> None:
+        """resolve_harness_skills_dir returns a path that exists and contains skills."""
         result = resolve_harness_skills_dir()
-        # In source checkout, this should find the repo's .claude/skills/
         assert result.name == "skills"
         assert result.parent.name == ".claude"
+        # Verify we got the source-checkout path (not the fallback)
+        assert result.is_dir(), "resolved skills dir should exist"
+        # Should contain at least one skill subdirectory with SKILL.md
+        skill_dirs = [d for d in result.iterdir() if d.is_dir() and (d / SKILL_FILENAME).is_file()]
+        assert len(skill_dirs) > 0, "skills dir should contain at least one skill"
+
+    def test_fallback_when_source_tree_missing(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Falls back to importlib.resources when no source checkout found."""
+        fake_file = tmp_path / "src" / "action_harness" / "skills.py"
+        fake_file.parent.mkdir(parents=True)
+        fake_file.write_text("")
+        monkeypatch.setattr(skills_mod, "__file__", str(fake_file))
+
+        result = resolve_harness_skills_dir()
+        # Should fall through to importlib.resources fallback
+        assert "default_skills" in str(result)
 
 
 class TestDiscoverSkills:
@@ -136,6 +158,43 @@ class TestInjectSkills:
         assert "skill-a" in content
         assert "skill-b" in content
 
+    def test_writes_gitignore_for_injected_skills(self, tmp_path: Path) -> None:
+        """inject_skills writes .gitignore to prevent injected skills from being committed."""
+        source = tmp_path / "source" / "skills"
+        source.mkdir(parents=True)
+        _make_skill(source, "skill-a")
+        _make_skill(source, "skill-b")
+
+        worktree = tmp_path / "worktree"
+        worktree.mkdir()
+
+        inject_skills(source, worktree)
+
+        gitignore = worktree / ".claude" / "skills" / ".gitignore"
+        assert gitignore.exists()
+        content = gitignore.read_text()
+        assert "skill-a/" in content
+        assert "skill-b/" in content
+        assert INJECTED_MARKER in content
+
+    def test_appends_to_existing_gitignore(self, tmp_path: Path) -> None:
+        """inject_skills appends to existing .gitignore without clobbering."""
+        source = tmp_path / "source" / "skills"
+        source.mkdir(parents=True)
+        _make_skill(source, "new-skill")
+
+        worktree = tmp_path / "worktree"
+        target_skills = worktree / ".claude" / "skills"
+        target_skills.mkdir(parents=True)
+        gitignore = target_skills / ".gitignore"
+        gitignore.write_text("existing-pattern/\n")
+
+        inject_skills(source, worktree)
+
+        content = gitignore.read_text()
+        assert "existing-pattern/" in content
+        assert "new-skill/" in content
+
     def test_no_marker_when_nothing_injected(self, tmp_path: Path) -> None:
         """inject_skills does not write marker when no skills were injected."""
         source = tmp_path / "source" / "skills"
@@ -195,3 +254,64 @@ class TestInjectSkills:
 
         assert result == ["my-skill"]
         assert (worktree / ".claude" / "skills" / "my-skill").is_dir()
+
+
+class TestPipelineSkillInjection:
+    """Verify inject_skills is called during pipeline execution."""
+
+    def test_inject_skills_called_with_worktree_path(self, tmp_path: Path) -> None:
+        """Pipeline calls inject_skills with the worktree path before dispatch."""
+        from action_harness.pipeline import run_pipeline
+
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        (repo / ".git").mkdir()
+
+        mock = MagicMock()
+
+        def side_effect(cmd: list[str], **kwargs: object) -> MagicMock:
+            result = MagicMock()
+            result.returncode = 0
+            result.stderr = ""
+            if cmd[0] == "claude":
+                result.stdout = json.dumps({"cost_usd": 0.01, "result": "ok"})
+            elif cmd[0] == "git" and "rev-list" in cmd:
+                result.stdout = "1\n"
+            elif cmd[0] == "git" and "symbolic-ref" in cmd:
+                result.stdout = "refs/remotes/origin/main\n"
+            elif cmd[0] == "gh" and "pr" in cmd and "create" in cmd:
+                result.stdout = "https://github.com/test/repo/pull/1\n"
+            else:
+                result.stdout = ""
+            return result
+
+        mock.side_effect = side_effect
+
+        with (
+            patch("action_harness.pipeline.subprocess.run", mock),
+            patch("action_harness.worker.subprocess.run", mock),
+            patch("action_harness.evaluator.subprocess.run", mock),
+            patch("action_harness.pr.subprocess.run", mock),
+            patch("action_harness.worktree.subprocess.run", mock),
+            patch("action_harness.protection.load_protected_patterns", return_value=[]),
+            patch(
+                "action_harness.pipeline.inject_skills", return_value=["test-skill"]
+            ) as mock_inject,
+            patch("action_harness.pipeline.resolve_harness_skills_dir") as mock_resolve,
+        ):
+            mock_resolve.return_value = tmp_path / "fake-skills"
+            run_pipeline(
+                change_name="test-change",
+                repo=repo,
+                max_retries=0,
+                max_turns=10,
+                skip_review=True,
+                prompt="Test prompt",
+            )
+
+        mock_inject.assert_called_once()
+        call_args = mock_inject.call_args
+        # First positional arg is the source dir
+        assert call_args[0][0] == tmp_path / "fake-skills"
+        # Second positional arg is the worktree path (a Path object)
+        assert isinstance(call_args[0][1], Path)

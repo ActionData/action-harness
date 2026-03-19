@@ -602,7 +602,10 @@ def _run_pipeline_inner(
     # Resolve agent definitions directory once for all review dispatches
     harness_agents_dir = resolve_harness_agents_dir()
 
-    # Inject harness skills into worktree so workers can use them
+    # Inject harness skills into worktree so workers can use them.
+    # Intentionally outside _should_run_stage() guard: inject_skills is
+    # idempotent (skips existing dirs), and review fix-retry dispatches
+    # also need skills available in the worktree.
     harness_skills_dir = resolve_harness_skills_dir()
     injected = inject_skills(harness_skills_dir, worktree_path, verbose=verbose)
     if injected:

@@ -133,17 +133,44 @@ def inject_skills(
                 err=True,
             )
 
-    # Write marker file
+    # Write marker file and .gitignore to prevent injected skills from
+    # being committed to the target repo by workers running `git add`.
     if injected:
         marker_path = target_skills_dir / INJECTED_MARKER
+        gitignore_path = target_skills_dir / ".gitignore"
+        gitignore_entries = [INJECTED_MARKER] + injected
         try:
             marker_path.write_text(
                 "\n".join(injected) + "\n",
                 encoding="utf-8",
             )
+            # Only write .gitignore if we created it (don't clobber existing)
+            if not gitignore_path.exists():
+                gitignore_path.write_text(
+                    "# Harness-injected skills — do not commit\n"
+                    + "\n".join(f"{e}/" if e != INJECTED_MARKER else e for e in gitignore_entries)
+                    + "\n",
+                    encoding="utf-8",
+                )
+            else:
+                # Append our entries to existing .gitignore
+                existing = gitignore_path.read_text(encoding="utf-8")
+                new_entries = [
+                    e
+                    for e in gitignore_entries
+                    if (f"{e}/" if e != INJECTED_MARKER else e) not in existing
+                ]
+                if new_entries:
+                    gitignore_path.write_text(
+                        existing.rstrip("\n")
+                        + "\n# Harness-injected skills — do not commit\n"
+                        + "\n".join(f"{e}/" if e != INJECTED_MARKER else e for e in new_entries)
+                        + "\n",
+                        encoding="utf-8",
+                    )
         except OSError as exc:
             typer.echo(
-                f"[skills] warning: could not write marker file: {exc}",
+                f"[skills] warning: could not write marker/gitignore: {exc}",
                 err=True,
             )
 

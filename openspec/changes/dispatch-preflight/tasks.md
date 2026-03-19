@@ -12,8 +12,8 @@
 
 ## 3. Pipeline Integration
 
-- [ ] 3.1 Import `run_preflight` in `pipeline.py` and insert a preflight block in `_run_pipeline_inner` between worktree creation/restore and baseline eval. Guard with `skip_preflight` parameter. On failure, emit `preflight.failed` event, log the failed checks, and return early with `PrResult(success=False, stage="pipeline", error=...)`. On success, emit `preflight.passed` event. Append `PreflightResult` to `stages` list.
-- [ ] 3.2 Add `skip_preflight: bool = False` parameter to `_run_pipeline_inner` and `run_pipeline`. Thread it through from `run_pipeline` to `_run_pipeline_inner`.
+- [x] 3.1 Import `run_preflight` in `pipeline.py` and insert a preflight block in `_run_pipeline_inner` between worktree creation/restore and baseline eval. Guard with `skip_preflight` parameter. On failure, emit `preflight.failed` event, log the failed checks, and return early with `PrResult(success=False, stage="pipeline", error=...)`. On success, emit `preflight.passed` event. Append `PreflightResult` to `stages` list.
+- [x] 3.2 Add `skip_preflight: bool = False` parameter to `_run_pipeline_inner` and `run_pipeline`. Thread it through from `run_pipeline` to `_run_pipeline_inner`.
 
 ## 4. CLI Flag
 

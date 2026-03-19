@@ -21,6 +21,7 @@ from action_harness.models import (
     MergeResult,
     OpenSpecReviewResult,
     PipelineCheckpoint,
+    PreflightResult,
     PrResult,
     ReviewFinding,
     ReviewResult,
@@ -28,6 +29,7 @@ from action_harness.models import (
     StageResultUnion,
     WorkerResult,
 )
+from action_harness.preflight import run_preflight
 from action_harness.openspec_reviewer import (
     dispatch_openspec_review,
     parse_review_result,
@@ -255,6 +257,7 @@ def run_pipeline(
     review_cycle: list[str] | None = None,
     max_findings_per_retry: int = 5,
     checkpoint: PipelineCheckpoint | None = None,
+    skip_preflight: bool = False,
 ) -> tuple[PrResult, RunManifest]:
     """Run the full pipeline: worktree -> worker -> eval -> retry -> PR.
 
@@ -423,6 +426,7 @@ def run_pipeline(
             run_id=run_id,
             checkpoint=checkpoint,
             baseline_eval_out=baseline_eval_out,
+            skip_preflight=skip_preflight,
         )
     except Exception as e:
         typer.echo(f"[pipeline] unexpected error: {e}", err=True)
@@ -495,6 +499,7 @@ def _run_pipeline_inner(
     run_id: str = "",
     checkpoint: PipelineCheckpoint | None = None,
     baseline_eval_out: dict[str, bool] | None = None,
+    skip_preflight: bool = False,
 ) -> PrResult:
     """Inner pipeline logic. Appends to stages list as side effect.
 
@@ -553,6 +558,46 @@ def _run_pipeline_inner(
         worktree_path = Path(checkpoint.worktree_path)
         branch = checkpoint.branch or f"harness/{change_name}"
         typer.echo(f"[pipeline] skipping worktree stage (resumed: {worktree_path})", err=True)
+
+    # Pre-dispatch preflight checks
+    if skip_preflight:
+        typer.echo("[pipeline] skipping preflight checks (--skip-preflight)", err=True)
+    else:
+        actual_eval_cmds = eval_commands or list(BOOTSTRAP_EVAL_COMMANDS)
+        # In prompt mode, change_name is used as a label but there are no
+        # OpenSpec artifacts — pass None to skip prerequisite checks.
+        preflight_change = None if prompt is not None else change_name
+        preflight_result = run_preflight(
+            worktree_path=worktree_path,
+            eval_commands=actual_eval_cmds,
+            change_name=preflight_change,
+            repo_path=repo,
+            verbose=verbose,
+        )
+        stages.append(preflight_result)
+        if not preflight_result.success:
+            logger.emit(
+                "preflight.failed",
+                stage="preflight",
+                checks=preflight_result.checks,
+                failed_checks=preflight_result.failed_checks,
+            )
+            typer.echo(
+                f"[pipeline] preflight failed: {', '.join(preflight_result.failed_checks)}",
+                err=True,
+            )
+            cleanup_worktree(repo, worktree_path, branch, verbose=verbose)
+            return PrResult(
+                success=False,
+                stage="pipeline",
+                error=f"Preflight failed: {', '.join(preflight_result.failed_checks)}",
+                branch=branch,
+            )
+        logger.emit(
+            "preflight.passed",
+            stage="preflight",
+            checks=preflight_result.checks,
+        )
 
     # Run baseline eval before worker dispatch (only on fresh worktree).
     # On checkpoint resume the worktree already has worker commits, so

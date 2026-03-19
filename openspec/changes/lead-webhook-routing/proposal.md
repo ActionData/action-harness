@@ -5,7 +5,7 @@ With named leads and an inbox system, the missing piece is connecting GitHub web
 ## What Changes
 
 - Default lead remains the catch-all for unrouted events
-- Default lead can triage and route via /action:inbox:send to named leads
+- Default lead can triage and route via /action:inbox-send to named leads
 - Optional direct routing config in project config.yaml (event type + label → named lead)
 - Auto-wake integration: routed messages trigger lead startup when auto_wake=true
 

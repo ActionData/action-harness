@@ -76,7 +76,7 @@ Persistent, purpose-built lead agents that accumulate expertise over time. Inspi
 
 1. ~~`named-lead-registry`~~ — ✅ Complete.
 2. `lead-memory` — Per-lead `memory.md` self-updated by the lead. Injected on session start via `gather_lead_context`. Post-compaction re-injection via two-hook pattern (PostCompact flag + UserPromptSubmit injection).
-3. `lead-inbox` — Per-lead inbox for async messaging between leads. Skills (`/action:inbox:check/clear/send/history`). Configurable `auto_wake` per lead. *(stub — design after phases 1-2)*
+3. `lead-inbox` — Per-lead inbox for async messaging between leads. Skills (`/action:inbox-check`, `/action:inbox-clear`, `/action:inbox-send`, `/action:inbox-history`). Configurable `auto_wake` per lead. *(stub — design after phases 1-2)*
 4. `lead-webhook-routing` — Route webhook events to named leads via default-lead triage or direct config mapping. *(stub — design after inbox)*
 
 #### Future

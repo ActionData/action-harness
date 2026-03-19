@@ -274,13 +274,22 @@ class TestProvisionClone:
         # Create a source git repo
         source = tmp_path / "source-repo"
         source.mkdir()
+        subprocess.run(["git", "init"], cwd=source, capture_output=True, timeout=120)
         subprocess.run(
-            ["git", "init"], cwd=source, capture_output=True, timeout=120
-        )
-        subprocess.run(
-            ["git", "-c", "user.name=Test", "-c", "user.email=test@test.com",
-             "commit", "--allow-empty", "-m", "init"],
-            cwd=source, capture_output=True, timeout=120,
+            [
+                "git",
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@test.com",
+                "commit",
+                "--allow-empty",
+                "-m",
+                "init",
+            ],
+            cwd=source,
+            capture_output=True,
+            timeout=120,
         )
 
         harness_home = tmp_path / "harness"
@@ -294,7 +303,9 @@ class TestProvisionClone:
         # Verify HEAD is valid
         result = subprocess.run(
             ["git", "-C", str(clone_dir), "rev-parse", "HEAD"],
-            capture_output=True, text=True, timeout=120,
+            capture_output=True,
+            text=True,
+            timeout=120,
         )
         assert result.returncode == 0
 
@@ -302,13 +313,22 @@ class TestProvisionClone:
         """Calling provision_clone twice returns same path without error."""
         source = tmp_path / "source-repo"
         source.mkdir()
+        subprocess.run(["git", "init"], cwd=source, capture_output=True, timeout=120)
         subprocess.run(
-            ["git", "init"], cwd=source, capture_output=True, timeout=120
-        )
-        subprocess.run(
-            ["git", "-c", "user.name=Test", "-c", "user.email=test@test.com",
-             "commit", "--allow-empty", "-m", "init"],
-            cwd=source, capture_output=True, timeout=120,
+            [
+                "git",
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@test.com",
+                "commit",
+                "--allow-empty",
+                "-m",
+                "init",
+            ],
+            cwd=source,
+            capture_output=True,
+            timeout=120,
         )
 
         harness_home = tmp_path / "harness"
@@ -353,6 +373,7 @@ class TestResolveOrCreateLead:
             original_session = state1.session_id
 
             import time
+
             time.sleep(0.01)  # Ensure time difference
 
             state2 = resolve_or_create_lead(tmp_path, repo, "test-lead", "Testing")
@@ -416,9 +437,13 @@ class TestCLILeadRetire:
             result = runner.invoke(
                 app,
                 [
-                    "lead", "retire", "old-lead",
-                    "--repo", "/tmp/fake",
-                    "--harness-home", str(tmp_path),
+                    "lead",
+                    "retire",
+                    "old-lead",
+                    "--repo",
+                    "/tmp/fake",
+                    "--harness-home",
+                    str(tmp_path),
                 ],
             )
         assert result.exit_code == 0
@@ -434,9 +459,13 @@ class TestCLILeadRetire:
             result = runner.invoke(
                 app,
                 [
-                    "lead", "retire", "nope",
-                    "--repo", "/tmp/fake",
-                    "--harness-home", str(tmp_path),
+                    "lead",
+                    "retire",
+                    "nope",
+                    "--repo",
+                    "/tmp/fake",
+                    "--harness-home",
+                    str(tmp_path),
                 ],
             )
         assert result.exit_code == 1
@@ -467,8 +496,10 @@ class TestCLIBackwardCompat:
                 app,
                 [
                     "lead",
-                    "--repo", str(tmp_path),
-                    "--harness-home", str(tmp_path / "harness"),
+                    "--repo",
+                    str(tmp_path),
+                    "--harness-home",
+                    str(tmp_path / "harness"),
                 ],
             )
             # The command should have tried to dispatch
@@ -527,9 +558,12 @@ class TestResumeFallback:
             result = runner.invoke(
                 app,
                 [
-                    "lead", "start",
-                    "--repo", str(tmp_path),
-                    "--harness-home", str(harness_home),
+                    "lead",
+                    "start",
+                    "--repo",
+                    str(tmp_path),
+                    "--harness-home",
+                    str(harness_home),
                 ],
             )
             assert result.exit_code == 0

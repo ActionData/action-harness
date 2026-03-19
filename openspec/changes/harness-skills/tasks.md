@@ -10,8 +10,8 @@
 
 ## 3. Tests
 
-- [ ] 3.1 Add `tests/test_skills.py` with tests for: `resolve_harness_skills_dir()` returns a valid path, `discover_skills()` finds skill directories, `discover_skills()` ignores directories without SKILL.md, `inject_skills()` copies skills into target, `inject_skills()` skips existing skills (precedence), `inject_skills()` writes `.harness-injected` marker, `inject_skills()` handles missing source dir gracefully.
+- [x] 3.1 Add `tests/test_skills.py` with tests for: `resolve_harness_skills_dir()` returns a valid path, `discover_skills()` finds skill directories, `discover_skills()` ignores directories without SKILL.md, `inject_skills()` copies skills into target, `inject_skills()` skips existing skills (precedence), `inject_skills()` writes `.harness-injected` marker, `inject_skills()` handles missing source dir gracefully.
 
 ## 4. Validation
 
-- [ ] 4.1 Run full validation suite: `uv run pytest -v`, `uv run ruff check .`, `uv run ruff format --check .`, `uv run mypy src/` — all must pass with no errors.
+- [x] 4.1 Run full validation suite: `uv run pytest -v`, `uv run ruff check .`, `uv run ruff format --check .`, `uv run mypy src/` — all must pass with no errors.

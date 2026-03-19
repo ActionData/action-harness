@@ -8,7 +8,6 @@ from typing import Literal
 import typer
 
 from action_harness.agents import resolve_harness_agents_dir
-from action_harness.skills import inject_skills, resolve_harness_skills_dir
 from action_harness.catalog.frequency import update_frequency
 from action_harness.catalog.loader import load_catalog
 from action_harness.checkpoint import delete_checkpoint, write_checkpoint
@@ -50,6 +49,7 @@ from action_harness.review_agents import (
     match_findings,
     triage_findings,
 )
+from action_harness.skills import inject_skills, resolve_harness_skills_dir
 from action_harness.tags import tag_pre_merge
 from action_harness.worker import count_commits_ahead, dispatch_worker
 from action_harness.worktree import cleanup_worktree, create_worktree

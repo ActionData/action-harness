@@ -105,8 +105,7 @@ def inject_skills(
         target_skills_dir.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
         typer.echo(
-            f"[skills] warning: could not create target skills dir "
-            f"{target_skills_dir}: {exc}",
+            f"[skills] warning: could not create target skills dir {target_skills_dir}: {exc}",
             err=True,
         )
         return []

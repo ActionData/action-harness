@@ -21,8 +21,8 @@
 
 ## 5. Tests
 
-- [ ] 5.1 Create `tests/test_preflight.py` with unit tests: (a) `check_worktree_clean` returns True on clean worktree, False on dirty; (b) `check_git_remote` returns True on reachable remote, False on unreachable; (c) `check_eval_tools` returns True when all tools found, False with correct missing list when tool absent; (d) `check_prerequisites` returns True when satisfied or no prereqs, False when unmet; (e) `run_preflight` returns success=True when all pass, success=False with correct failed_checks when any fail.
-- [ ] 5.2 Add a pipeline integration test verifying that preflight failure short-circuits before worker dispatch (worker should not be called).
+- [x] 5.1 Create `tests/test_preflight.py` with unit tests: (a) `check_worktree_clean` returns True on clean worktree, False on dirty; (b) `check_git_remote` returns True on reachable remote, False on unreachable; (c) `check_eval_tools` returns True when all tools found, False with correct missing list when tool absent; (d) `check_prerequisites` returns True when satisfied or no prereqs, False when unmet; (e) `run_preflight` returns success=True when all pass, success=False with correct failed_checks when any fail.
+- [x] 5.2 Add a pipeline integration test verifying that preflight failure short-circuits before worker dispatch (worker should not be called).
 
 ## 6. Validation
 

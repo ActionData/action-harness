@@ -1,8 +1,8 @@
 ## 1. Skill Discovery Module
 
-- [ ] 1.1 Create `src/action_harness/skills.py` with `resolve_harness_skills_dir()` that walks up from `__file__` to find `.claude/skills/` in the harness repo root (same pattern as `resolve_harness_agents_dir()` in `agents.py`). Returns the path. Falls back to importlib.resources.
-- [ ] 1.2 Add `discover_skills(skills_dir: Path) -> list[str]` that scans a directory for subdirectories containing `SKILL.md` and returns their names sorted.
-- [ ] 1.3 Add `inject_skills(source_dir: Path, worktree_path: Path, verbose: bool = False) -> list[str]` that copies skill directories from source to `worktree_path/.claude/skills/`, skipping existing ones. Writes `.harness-injected` marker. Returns list of injected skill names. Logs entry/exit to stderr. Catches OSError gracefully.
+- [x] 1.1 Create `src/action_harness/skills.py` with `resolve_harness_skills_dir()` that walks up from `__file__` to find `.claude/skills/` in the harness repo root (same pattern as `resolve_harness_agents_dir()` in `agents.py`). Returns the path. Falls back to importlib.resources.
+- [x] 1.2 Add `discover_skills(skills_dir: Path) -> list[str]` that scans a directory for subdirectories containing `SKILL.md` and returns their names sorted.
+- [x] 1.3 Add `inject_skills(source_dir: Path, worktree_path: Path, verbose: bool = False) -> list[str]` that copies skill directories from source to `worktree_path/.claude/skills/`, skipping existing ones. Writes `.harness-injected` marker. Returns list of injected skill names. Logs entry/exit to stderr. Catches OSError gracefully.
 
 ## 2. Pipeline Integration
 

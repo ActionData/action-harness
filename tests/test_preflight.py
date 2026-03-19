@@ -4,9 +4,7 @@ import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
-from action_harness.models import PreflightResult
+from action_harness.models import PreflightResult, WorkerResult
 from action_harness.preflight import (
     check_eval_tools,
     check_git_remote,
@@ -14,7 +12,6 @@ from action_harness.preflight import (
     check_worktree_clean,
     run_preflight,
 )
-
 
 # --- check_worktree_clean ---
 
@@ -423,20 +420,17 @@ def test_skip_preflight_bypasses_checks(tmp_path: Path) -> None:
     with (
         patch("action_harness.pipeline.run_preflight") as mock_preflight,
         patch("action_harness.pipeline.dispatch_worker") as mock_worker,
-        patch("action_harness.pipeline.run_eval") as mock_eval,
-        patch("action_harness.pipeline.create_pr") as mock_pr,
+        patch("action_harness.pipeline.run_eval"),
+        patch("action_harness.pipeline.create_pr"),
         patch("action_harness.pipeline.cleanup_worktree"),
     ):
         # Make worker fail so we don't have to mock the whole pipeline
-        mock_worker.return_value = MagicMock(
+        mock_worker.return_value = WorkerResult(
             success=False,
+            stage="worker",
             error="mock failure",
             duration_seconds=1.0,
             commits_ahead=0,
-            cost_usd=None,
-            session_id=None,
-            context_usage_pct=None,
-            stage="worker",
         )
 
         from action_harness.pipeline import run_pipeline

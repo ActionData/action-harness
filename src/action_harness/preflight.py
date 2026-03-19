@@ -84,8 +84,7 @@ def check_git_remote(worktree_path: Path, verbose: bool = False) -> bool:
 
     if result.returncode != 0:
         typer.echo(
-            f"[preflight] git_remote: FAILED — exit {result.returncode}: "
-            f"{result.stderr.strip()}",
+            f"[preflight] git_remote: FAILED — exit {result.returncode}: {result.stderr.strip()}",
             err=True,
         )
         return False

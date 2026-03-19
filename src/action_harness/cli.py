@@ -197,7 +197,8 @@ def run(
     skip_preflight: bool = typer.Option(
         False,
         "--skip-preflight",
-        help="Skip pre-dispatch preflight checks (worktree clean, git remote, eval tools, prerequisites)",
+        help="Skip pre-dispatch preflight checks "
+        "(worktree clean, git remote, eval tools, prerequisites)",
     ),
     dry_run: bool = typer.Option(
         False, "--dry-run", help="Validate and print plan without executing"

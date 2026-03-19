@@ -2,6 +2,7 @@
 
 import json
 import subprocess
+from collections.abc import Generator
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -12,6 +13,7 @@ from action_harness.models import (
     EvalResult,
     OpenSpecReviewResult,
     PipelineCheckpoint,
+    PreflightResult,
     WorkerResult,
     WorktreeResult,
 )
@@ -115,6 +117,23 @@ def _make_claude_mock(
 
     mock = MagicMock(side_effect=side_effect)
     return mock
+
+
+def _passing_preflight() -> PreflightResult:
+    """Return a pre-built passing PreflightResult for mocking."""
+    return PreflightResult(
+        success=True,
+        stage="preflight",
+        checks={"worktree_clean": True, "git_remote": True, "eval_tools": True},
+        failed_checks=[],
+    )
+
+
+@pytest.fixture(autouse=True)
+def _mock_preflight() -> Generator[None]:
+    """Auto-mock preflight to pass — test repos have no remote."""
+    with patch("action_harness.pipeline.run_preflight", return_value=_passing_preflight()):
+        yield
 
 
 class TestShouldRunStage:

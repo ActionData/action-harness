@@ -21,7 +21,6 @@ from action_harness.models import (
     MergeResult,
     OpenSpecReviewResult,
     PipelineCheckpoint,
-    PreflightResult,
     PrResult,
     ReviewFinding,
     ReviewResult,
@@ -29,13 +28,13 @@ from action_harness.models import (
     StageResultUnion,
     WorkerResult,
 )
-from action_harness.preflight import run_preflight
 from action_harness.openspec_reviewer import (
     dispatch_openspec_review,
     parse_review_result,
     push_archive_if_needed,
 )
 from action_harness.pr import create_pr
+from action_harness.preflight import run_preflight
 from action_harness.profiler import BOOTSTRAP_EVAL_COMMANDS, RepoProfile, profile_repo
 from action_harness.progress import write_progress
 from action_harness.protection import (

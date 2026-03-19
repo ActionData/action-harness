@@ -26,4 +26,4 @@
 
 ## 6. Validation
 
-- [ ] 6.1 Run full validation suite: `uv run pytest -v`, `uv run ruff check .`, `uv run ruff format --check .`, `uv run mypy src/` — all must pass with no regressions.
+- [x] 6.1 Run full validation suite: `uv run pytest -v`, `uv run ruff check .`, `uv run ruff format --check .`, `uv run mypy src/` — all must pass with no regressions.

@@ -579,6 +579,12 @@ class TestCLIBackwardCompat:
             assert result.exit_code == 0
             assert mock_dispatch.called
 
+            # Verify lock is released after session ends (typer.Exit triggers finally block)
+            lock_path = lead_state_dir(
+                tmp_path / "harness", tmp_path.name, "default"
+            ) / "lock"
+            assert not lock_path.exists(), "Lock file should be released after session ends"
+
 
 # ---------------------------------------------------------------------------
 # 5.11: Resume fallback test

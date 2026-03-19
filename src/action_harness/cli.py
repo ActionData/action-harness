@@ -1814,6 +1814,8 @@ def lead_start(
                     resume=False,
                 )
 
+            # typer.Exit inherits from SystemExit, so the finally block
+            # below still executes and releases the lock.
             raise typer.Exit(code=exit_code)
 
         # Non-interactive mode: one-shot dispatch + plan parsing

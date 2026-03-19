@@ -16,6 +16,11 @@ from action_harness.pipeline import run_pipeline
 # ruff: noqa: E501
 
 
+@pytest.fixture(autouse=True)
+def _mock_preflight(mock_preflight: None) -> None:
+    """Auto-apply shared mock_preflight fixture from conftest."""
+
+
 def _approved_review_result() -> OpenSpecReviewResult:
     """Return a pre-built approved OpenSpecReviewResult for mocking."""
     review_json = {

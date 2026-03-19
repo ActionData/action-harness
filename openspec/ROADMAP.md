@@ -56,6 +56,16 @@ Priority order. Each is an OpenSpec change the harness implements on itself.
 - [x] `repo-lead` — `harness lead` interactive planning agent with context gathering, plan parsing, and `--dispatch` for auto-executing recommendations.
 
 - [x] `openspec-prerequisites` — `harness ready` command with machine-readable prerequisites in `.openspec.yaml`. Dependency graph computation, lead context integration.
+- [x] `harness-skills` — Skill discovery and injection into target repo worktrees before worker dispatch. Lead persona integration for dispatch, repo, and assessment skills.
+- [x] `dispatch-preflight` — Pre-dispatch checks: archived changes, merged PRs, stale remote branches, eval tool availability, prerequisite satisfaction. Stale branch suffixing.
+
+### In progress
+
+- `always-on-webhook` — GitHub webhook server (`harness serve`), HMAC verification, event routing, serial queue per repo, Slack notifications. PR #58.
+- `composable-stages` — Extract pipeline stages into a composable protocol with typed inputs/outputs.
+- `flow-templates` — Declarative YAML pipeline definitions for different task shapes.
+- `stage-hooks` — Pre/post hooks on pipeline stages for observability and custom logic.
+- `deduplicate-run-stats` — Consolidate duplicate run stat computation in lead context gathering.
 
 ### In progress
 

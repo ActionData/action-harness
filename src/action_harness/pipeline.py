@@ -34,6 +34,7 @@ from action_harness.openspec_reviewer import (
     push_archive_if_needed,
 )
 from action_harness.pr import create_pr
+from action_harness.preflight import run_preflight
 from action_harness.profiler import BOOTSTRAP_EVAL_COMMANDS, RepoProfile, profile_repo
 from action_harness.progress import write_progress
 from action_harness.protection import (
@@ -49,6 +50,7 @@ from action_harness.review_agents import (
     match_findings,
     triage_findings,
 )
+from action_harness.skills import inject_skills, resolve_harness_skills_dir
 from action_harness.tags import tag_pre_merge
 from action_harness.worker import count_commits_ahead, dispatch_worker
 from action_harness.worktree import cleanup_worktree, create_worktree
@@ -255,6 +257,7 @@ def run_pipeline(
     review_cycle: list[str] | None = None,
     max_findings_per_retry: int = 5,
     checkpoint: PipelineCheckpoint | None = None,
+    skip_preflight: bool = False,
 ) -> tuple[PrResult, RunManifest]:
     """Run the full pipeline: worktree -> worker -> eval -> retry -> PR.
 
@@ -423,6 +426,7 @@ def run_pipeline(
             run_id=run_id,
             checkpoint=checkpoint,
             baseline_eval_out=baseline_eval_out,
+            skip_preflight=skip_preflight,
         )
     except Exception as e:
         typer.echo(f"[pipeline] unexpected error: {e}", err=True)
@@ -495,6 +499,7 @@ def _run_pipeline_inner(
     run_id: str = "",
     checkpoint: PipelineCheckpoint | None = None,
     baseline_eval_out: dict[str, bool] | None = None,
+    skip_preflight: bool = False,
 ) -> PrResult:
     """Inner pipeline logic. Appends to stages list as side effect.
 
@@ -554,6 +559,60 @@ def _run_pipeline_inner(
         branch = checkpoint.branch or f"harness/{change_name}"
         typer.echo(f"[pipeline] skipping worktree stage (resumed: {worktree_path})", err=True)
 
+    # Pre-dispatch preflight checks.
+    # Skip on checkpoint resume — preflight already passed on the original run,
+    # and transient issues (e.g., git remote flake) should not kill a resumed pipeline.
+    # When preflight is skipped (flag or resume), no PreflightResult is added to
+    # stages. This is intentional — the manifest accurately reflects what ran.
+    if skip_preflight:
+        typer.echo("[pipeline] skipping preflight checks (--skip-preflight)", err=True)
+    elif checkpoint is not None:
+        typer.echo("[pipeline] skipping preflight checks (resumed from checkpoint)", err=True)
+    else:
+        actual_eval_cmds = eval_commands or list(BOOTSTRAP_EVAL_COMMANDS)
+        # In prompt mode, change_name is used as a label but there are no
+        # OpenSpec artifacts — pass None to skip prerequisite checks.
+        # This is also correct for --issue mode: if the issue references an
+        # OpenSpec change, prompt is None and prerequisites are checked; if
+        # the issue falls back to prompt mode, prompt is set and prereqs are
+        # correctly skipped.
+        preflight_change = None if prompt is not None else change_name
+        preflight_result = run_preflight(
+            worktree_path=worktree_path,
+            eval_commands=actual_eval_cmds,
+            change_name=preflight_change,
+            repo_path=repo,
+            verbose=verbose,
+        )
+        stages.append(preflight_result)
+        if not preflight_result.success:
+            logger.emit(
+                "preflight.failed",
+                stage="preflight",
+                checks=preflight_result.checks,
+                failed_checks=preflight_result.failed_checks,
+            )
+            typer.echo(
+                f"[pipeline] preflight failed: {', '.join(preflight_result.failed_checks)}",
+                err=True,
+            )
+            # cleanup_worktree removes the worktree dir but preserves the
+            # branch ref by default, consistent with other early-exit paths
+            # (eval failure, worker failure). The branch can be inspected or
+            # garbage-collected by `git worktree prune` / `harness clean`.
+            cleanup_worktree(repo, worktree_path, branch, verbose=verbose)
+            return PrResult(
+                success=False,
+                stage="pipeline",
+                error=f"Preflight failed: {', '.join(preflight_result.failed_checks)}",
+                branch=branch,
+            )
+        logger.emit(
+            "preflight.passed",
+            stage="preflight",
+            checks=preflight_result.checks,
+        )
+
     # Run baseline eval before worker dispatch (only on fresh worktree).
     # On checkpoint resume the worktree already has worker commits, so
     # re-running baseline would measure the wrong state. Instead, restore
@@ -600,6 +659,20 @@ def _run_pipeline_inner(
 
     # Resolve agent definitions directory once for all review dispatches
     harness_agents_dir = resolve_harness_agents_dir()
+
+    # Inject harness skills into worktree so workers can use them.
+    # Intentionally outside _should_run_stage() guard: inject_skills is
+    # idempotent (skips existing dirs), and review fix-retry dispatches
+    # also need skills available in the worktree.
+    harness_skills_dir = resolve_harness_skills_dir()
+    injected = inject_skills(harness_skills_dir, worktree_path, verbose=verbose)
+    if injected:
+        logger.emit(
+            "skills.injected",
+            stage="skills",
+            count=len(injected),
+            skills=injected,
+        )
 
     # Label issue as in-progress (best-effort)
     if issue_number is not None:

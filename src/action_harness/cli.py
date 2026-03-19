@@ -194,6 +194,12 @@ def run(
         "--resume",
         help='Resume from a checkpoint: "latest" or a specific run ID',
     ),
+    skip_preflight: bool = typer.Option(
+        False,
+        "--skip-preflight",
+        help="Skip pre-dispatch preflight checks "
+        "(worktree clean, git remote, eval tools, prerequisites)",
+    ),
     dry_run: bool = typer.Option(
         False, "--dry-run", help="Validate and print plan without executing"
     ),
@@ -382,6 +388,10 @@ def run(
         cycle_str = ",".join(review_cycle_list)
         typer.echo(f"  review-cycle: {cycle_str} ({len(review_cycle_list)} round(s))")
         typer.echo(f"  pr title: [harness] {task_label}")
+        # Dry-run shows the skip-preflight flag but not individual check names.
+        # The checks are deterministic from the config shown (eval commands,
+        # repo state) so listing them here would add noise without value.
+        typer.echo(f"  skip-preflight: {'yes' if skip_preflight else 'no'}")
         typer.echo(f"  auto-merge: {'enabled' if auto_merge else 'disabled'}")
         typer.echo(f"  wait-for-ci: {'enabled' if wait_for_ci else 'disabled'}")
         typer.echo(f"  max retries: {max_retries}")
@@ -429,6 +439,7 @@ def run(
         review_cycle=review_cycle_list,
         max_findings_per_retry=max_findings_per_retry,
         checkpoint=resolved_checkpoint,
+        skip_preflight=skip_preflight,
     )
 
     if manifest.manifest_path:
@@ -2041,3 +2052,46 @@ def lead_retire(
         shutil.rmtree(state_dir)
 
     typer.echo(f"[lead] retired lead '{name}' for repo {repo_name}", err=True)
+
+
+# ---------------------------------------------------------------------------
+# serve — webhook server
+# ---------------------------------------------------------------------------
+
+
+@app.command()
+def serve(
+    port: int = typer.Option(8080, help="Port to listen on."),
+    host: str = typer.Option("0.0.0.0", help="Host to bind to."),
+    harness_home: Path | None = typer.Option(
+        None,
+        envvar="HARNESS_HOME",
+        help="Path to the harness home directory.",
+    ),
+) -> None:
+    """Start the webhook server for receiving GitHub events.
+
+    Listens for GitHub webhook events and dispatches lead sessions
+    for configured repos. Requires the HARNESS_WEBHOOK_SECRET
+    environment variable to be set.
+    """
+    import uvicorn
+
+    from action_harness.server import app as webhook_app
+
+    secret = os.environ.get("HARNESS_WEBHOOK_SECRET", "")
+    if not secret:
+        typer.echo(
+            "Error: HARNESS_WEBHOOK_SECRET environment variable is required",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    resolved_home = _resolve_harness_home(harness_home)
+    typer.echo(f"[serve] starting webhook server on {host}:{port}", err=True)
+    typer.echo(f"[serve] harness home: {resolved_home}", err=True)
+
+    webhook_app.state.harness_home = resolved_home
+    webhook_app.state.webhook_secret = secret
+
+    uvicorn.run(webhook_app, host=host, port=port)

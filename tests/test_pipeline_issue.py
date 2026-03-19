@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from action_harness.pipeline import run_pipeline
 
 
@@ -83,6 +85,11 @@ def _get_call_index(mock: MagicMock, cmd_fragment: str) -> int:
         if cmd_fragment in str(c[0][0]):
             return i
     return -1
+
+
+@pytest.fixture(autouse=True)
+def _mock_preflight(mock_preflight: None) -> None:
+    """Auto-apply shared mock_preflight fixture from conftest."""
 
 
 class TestPipelineIssueLabeling:

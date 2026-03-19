@@ -1546,8 +1546,8 @@ app.add_typer(lead_app, name="lead")
 @lead_app.callback(invoke_without_command=True)
 def lead_callback(
     ctx: typer.Context,
-    repo: Path = typer.Option(
-        ...,
+    repo: Path | None = typer.Option(
+        None,
         help="Path to the target repository",
     ),
     interactive: bool = typer.Option(
@@ -1613,6 +1613,10 @@ def lead_callback(
         return
 
     # Bare `harness lead --repo .` — forward to start
+    if repo is None:
+        typer.echo("Error: Missing option '--repo'.", err=True)
+        raise typer.Exit(code=2)
+
     lead_start(
         repo=repo,
         interactive=interactive,

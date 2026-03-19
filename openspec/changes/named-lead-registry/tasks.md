@@ -50,29 +50,29 @@
 
 ## 5. Tests
 
-- [ ] 5.1 Create `tests/test_lead_registry.py`. Test `LeadState` model: construct a `LeadState` with all fields, call `model_dump()`, verify all keys present, call `LeadState.model_validate(state.model_dump())` and assert all fields match the original (roundtrip test). Verify `clone_path=None` serializes correctly.
+- [x] 5.1 Create `tests/test_lead_registry.py`. Test `LeadState` model: construct a `LeadState` with all fields, call `model_dump()`, verify all keys present, call `LeadState.model_validate(state.model_dump())` and assert all fields match the original (roundtrip test). Verify `clone_path=None` serializes correctly.
 
-- [ ] 5.2 Test `derive_repo_name` in `test_lead_registry.py`: (a) with a path under `harness_home / "projects" / "my-proj" / "repo"` — assert returns `"my-proj"`; (b) mock `subprocess.run` to return `git@github.com:org/my-app.git` — assert returns `"my-app"`; (c) mock `subprocess.run` to return `https://github.com/org/my-app/` (trailing slash, no `.git`) — assert returns `"my-app"`; (d) mock `subprocess.run` to raise `FileNotFoundError` — assert returns the directory basename.
+- [x] 5.2 Test `derive_repo_name` in `test_lead_registry.py`: (a) with a path under `harness_home / "projects" / "my-proj" / "repo"` — assert returns `"my-proj"`; (b) mock `subprocess.run` to return `git@github.com:org/my-app.git` — assert returns `"my-app"`; (c) mock `subprocess.run` to return `https://github.com/org/my-app/` (trailing slash, no `.git`) — assert returns `"my-app"`; (d) mock `subprocess.run` to raise `FileNotFoundError` — assert returns the directory basename.
 
-- [ ] 5.3 Test `save_lead_state` and `load_lead_state` in `test_lead_registry.py` using `tmp_path`. Create a `LeadState`, save it, load it back, assert all fields match. Also test `load_lead_state` returns `None` for nonexistent lead.
+- [x] 5.3 Test `save_lead_state` and `load_lead_state` in `test_lead_registry.py` using `tmp_path`. Create a `LeadState`, save it, load it back, assert all fields match. Also test `load_lead_state` returns `None` for nonexistent lead.
 
-- [ ] 5.4 Test `list_leads` in `test_lead_registry.py` using `tmp_path`. Save two leads, call `list_leads`, assert returns both. Call `list_leads` for a nonexistent repo, assert returns empty list.
+- [x] 5.4 Test `list_leads` in `test_lead_registry.py` using `tmp_path`. Save two leads, call `list_leads`, assert returns both. Call `list_leads` for a nonexistent repo, assert returns empty list.
 
-- [ ] 5.5 Test lock management in `test_lead_registry.py`: (a) `acquire_lock` creates lock file with correct content (PID and session_id); (b) `release_lock` deletes the lock file; (c) `acquire_lock` raises `RuntimeError` when lock is held by current process (use `os.getpid()`) — assert the error message contains the lead name and the PID; (d) `acquire_lock` reclaims stale lock — write a lock file with PID `999999999` (unlikely to be alive), call `acquire_lock`, assert it succeeds; (e) `is_lead_active` returns `False` when no lock, `True` when current PID holds lock.
+- [x] 5.5 Test lock management in `test_lead_registry.py`: (a) `acquire_lock` creates lock file with correct content (PID and session_id); (b) `release_lock` deletes the lock file; (c) `acquire_lock` raises `RuntimeError` when lock is held by current process (use `os.getpid()`) — assert the error message contains the lead name and the PID; (d) `acquire_lock` reclaims stale lock — write a lock file with PID `999999999` (unlikely to be alive), call `acquire_lock`, assert it succeeds; (e) `is_lead_active` returns `False` when no lock, `True` when current PID holds lock.
 
-- [ ] 5.6 Test `provision_clone` in `test_lead_registry.py` using `tmp_path`. Create a git repo with `git init` and an initial commit (`git commit --allow-empty -m "init"`), create a `LeadState` pointing to it, call `provision_clone`. Assert clone directory exists, is a git repo (`(clone_dir / ".git").is_dir()`), and `subprocess.run(['git', '-C', str(clone_dir), 'rev-parse', 'HEAD'])` succeeds. Call `provision_clone` again and assert it returns immediately (no error, same path).
+- [x] 5.6 Test `provision_clone` in `test_lead_registry.py` using `tmp_path`. Create a git repo with `git init` and an initial commit (`git commit --allow-empty -m "init"`), create a `LeadState` pointing to it, call `provision_clone`. Assert clone directory exists, is a git repo (`(clone_dir / ".git").is_dir()`), and `subprocess.run(['git', '-C', str(clone_dir), 'rev-parse', 'HEAD'])` succeeds. Call `provision_clone` again and assert it returns immediately (no error, same path).
 
-- [ ] 5.7 Test `resolve_or_create_lead` in `test_lead_registry.py` using `tmp_path`. (a) First call creates state with correct fields (check `created_at` is set, `session_id` is a UUID). (b) Second call with same name loads existing and updates `last_active` (assert `last_active` changed, `created_at` unchanged, `session_id` unchanged).
+- [x] 5.7 Test `resolve_or_create_lead` in `test_lead_registry.py` using `tmp_path`. (a) First call creates state with correct fields (check `created_at` is set, `session_id` is a UUID). (b) Second call with same name loads existing and updates `last_active` (assert `last_active` changed, `created_at` unchanged, `session_id` unchanged).
 
-- [ ] 5.8 Test CLI `lead list` in `test_lead_registry.py` using `CliRunner`. Mock `derive_repo_name` to return a fixed name. Save two lead states to `tmp_path`. Acquire a lock for one of the leads. Invoke `lead list --repo /tmp/fake --harness-home <tmp_path>`. Assert exit code 0, both lead names appear in output, one shows "active" and the other shows "idle".
+- [x] 5.8 Test CLI `lead list` in `test_lead_registry.py` using `CliRunner`. Mock `derive_repo_name` to return a fixed name. Save two lead states to `tmp_path`. Acquire a lock for one of the leads. Invoke `lead list --repo /tmp/fake --harness-home <tmp_path>`. Assert exit code 0, both lead names appear in output, one shows "active" and the other shows "idle".
 
-- [ ] 5.9 Test CLI `lead retire` in `test_lead_registry.py` using `CliRunner`. Save a lead state to `tmp_path`. Invoke `lead retire <name> --repo /tmp/fake --harness-home <tmp_path>`. Assert exit code 0 and the lead directory is deleted. Test retire of nonexistent lead returns exit code 1.
+- [x] 5.9 Test CLI `lead retire` in `test_lead_registry.py` using `CliRunner`. Save a lead state to `tmp_path`. Invoke `lead retire <name> --repo /tmp/fake --harness-home <tmp_path>`. Assert exit code 0 and the lead directory is deleted. Test retire of nonexistent lead returns exit code 1.
 
-- [ ] 5.10 Test CLI backward compatibility in `test_lead_registry.py`. Mock `dispatch_lead_interactive` and `gather_lead_context`. Invoke `harness lead --repo <tmp_path>` (no `start` subcommand). Assert that `dispatch_lead_interactive` was called (proving the bare command still works).
+- [x] 5.10 Test CLI backward compatibility in `test_lead_registry.py`. Mock `dispatch_lead_interactive` and `gather_lead_context`. Invoke `harness lead --repo <tmp_path>` (no `start` subcommand). Assert that `dispatch_lead_interactive` was called (proving the bare command still works).
 
-- [ ] 5.11 Test resume fallback: mock `dispatch_lead_interactive` to return exit code 1 on first call (resume=True) and exit code 0 on second call (resume=False). Verify that after the first failure, a new session_id is generated, saved to lead.yaml, and the second call uses `resume=False` with the new session_id.
+- [x] 5.11 Test resume fallback: mock `dispatch_lead_interactive` to return exit code 1 on first call (resume=True) and exit code 0 on second call (resume=False). Verify that after the first failure, a new session_id is generated, saved to lead.yaml, and the second call uses `resume=False` with the new session_id.
 
-- [ ] 5.12 Integration smoke test: invoke `harness lead list --repo . --harness-home <tmp_path>` via CliRunner. Assert exit code 0 and output contains "No leads found".
+- [x] 5.12 Integration smoke test: invoke `harness lead list --repo . --harness-home <tmp_path>` via CliRunner. Assert exit code 0 and output contains "No leads found".
 
 ## 6. Validation
 

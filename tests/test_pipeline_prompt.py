@@ -179,10 +179,10 @@ class TestPipelinePromptMode:
         # First claude call should be the worker dispatch
         user_prompt = _get_claude_user_prompt(claude_calls[0])
         assert "Fix the bug" in user_prompt
-        # System prompt should be generic, not action:opsx-apply
+        # System prompt should be generic, not opsx-apply
         sys_prompt = _get_claude_system_prompt(claude_calls[0])
         assert sys_prompt is not None
-        assert "action:opsx-apply" not in sys_prompt
+        assert "opsx-apply" not in sys_prompt
         assert "implementing a task" in sys_prompt
 
     def test_prompt_forwarded_on_retry(self, tmp_path: Path) -> None:

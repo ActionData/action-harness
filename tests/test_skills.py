@@ -52,6 +52,21 @@ class TestResolveHarnessSkillsDir:
         # Should fall through to importlib.resources fallback
         assert "default_skills" in str(result)
 
+    def test_skills_dir_without_plugin_json_is_skipped(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A skills/ dir without sibling .claude-plugin/plugin.json is ignored."""
+        fake_file = tmp_path / "src" / "action_harness" / "skills.py"
+        fake_file.parent.mkdir(parents=True)
+        fake_file.write_text("")
+        # Create skills/ with a valid skill but no plugin.json marker
+        _make_skill(tmp_path / "skills", "decoy-skill")
+        monkeypatch.setattr(skills_mod, "__file__", str(fake_file))
+
+        result = resolve_harness_skills_dir()
+        # Should skip the decoy skills/ and fall back to importlib
+        assert "default_skills" in str(result)
+
 
 class TestDiscoverSkills:
     def test_finds_skill_directories(self, tmp_path: Path) -> None:

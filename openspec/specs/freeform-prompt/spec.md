@@ -23,15 +23,15 @@ The `harness run` command SHALL accept a `--prompt` flag that provides a freefor
 - **THEN** the CLI SHALL exit with an error message: "Specify either --change or --prompt"
 
 ### Requirement: Worker receives freeform prompt directly
-When `--prompt` is used, the worker SHALL receive the prompt as its user prompt. The system prompt SHALL be a generic implementation role, not the opsx:apply instruction.
+When `--prompt` is used, the worker SHALL receive the prompt as its user prompt. The system prompt SHALL be a generic implementation role, not the opsx-apply instruction.
 
 #### Scenario: Worker prompt in freeform mode
 - **WHEN** the pipeline runs with `--prompt "Add retry logic to the API client"`
-- **THEN** the worker's user prompt SHALL be "Add retry logic to the API client" and the system prompt SHALL NOT contain "opsx:apply" or reference an OpenSpec change
+- **THEN** the worker's user prompt SHALL be "Add retry logic to the API client" and the system prompt SHALL NOT contain "opsx-apply" or reference an OpenSpec change
 
 #### Scenario: Worker prompt in change mode
 - **WHEN** the pipeline runs with `--change add-logging`
-- **THEN** the worker's user prompt and system prompt SHALL be identical to current behavior (opsx:apply instruction)
+- **THEN** the worker's user prompt and system prompt SHALL be identical to current behavior (opsx-apply instruction)
 
 ### Requirement: Validation skips OpenSpec directory check for --prompt
 When `--prompt` is used, the harness SHALL NOT validate that an OpenSpec change directory exists. All other validations (git repo, claude CLI, gh CLI) SHALL still apply.

@@ -1,6 +1,5 @@
 """Tests for session resume in the pipeline retry loop and review fix-retry."""
 
-from collections.abc import Generator
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -10,7 +9,6 @@ from action_harness.event_log import EventLogger
 from action_harness.models import (
     EvalResult,
     OpenSpecReviewResult,
-    PreflightResult,
     PrResult,
     ReviewFinding,
     ReviewResult,
@@ -21,21 +19,9 @@ from action_harness.models import (
 from action_harness.pipeline import _run_pipeline_inner, _run_review_fix_retry
 
 
-def _passing_preflight() -> PreflightResult:
-    """Return a pre-built passing PreflightResult for mocking."""
-    return PreflightResult(
-        success=True,
-        stage="preflight",
-        checks={"worktree_clean": True, "git_remote": True, "eval_tools": True},
-        failed_checks=[],
-    )
-
-
 @pytest.fixture(autouse=True)
-def _mock_preflight() -> Generator[None]:
-    """Auto-mock preflight to pass — test repos have no remote."""
-    with patch("action_harness.pipeline.run_preflight", return_value=_passing_preflight()):
-        yield
+def _mock_preflight(mock_preflight: None) -> None:
+    """Auto-apply shared mock_preflight fixture from conftest."""
 
 
 def _make_worker_result(

@@ -558,9 +558,13 @@ def _run_pipeline_inner(
         branch = checkpoint.branch or f"harness/{change_name}"
         typer.echo(f"[pipeline] skipping worktree stage (resumed: {worktree_path})", err=True)
 
-    # Pre-dispatch preflight checks
+    # Pre-dispatch preflight checks.
+    # Skip on checkpoint resume — preflight already passed on the original run,
+    # and transient issues (e.g., git remote flake) should not kill a resumed pipeline.
     if skip_preflight:
         typer.echo("[pipeline] skipping preflight checks (--skip-preflight)", err=True)
+    elif checkpoint is not None:
+        typer.echo("[pipeline] skipping preflight checks (resumed from checkpoint)", err=True)
     else:
         actual_eval_cmds = eval_commands or list(BOOTSTRAP_EVAL_COMMANDS)
         # In prompt mode, change_name is used as a label but there are no

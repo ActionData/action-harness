@@ -165,6 +165,27 @@ def test_eval_tools_empty_commands() -> None:
     assert missing == []
 
 
+def test_eval_tools_malformed_command_skipped() -> None:
+    """Malformed shell command is skipped with a warning, not a crash."""
+    with patch("action_harness.preflight.shutil.which", return_value="/usr/bin/uv"):
+        ok, missing = check_eval_tools(["uv run pytest", "unclosed 'quote"])
+    # The valid command's tool is found; the malformed one is skipped
+    assert ok is True
+    assert missing == []
+
+
+def test_eval_tools_all_malformed_passes_vacuously() -> None:
+    """All malformed commands means no tools checked — passes vacuously.
+
+    This is a known edge case: if every eval command is unparseable,
+    preflight won't catch it. The eval stage itself will surface the
+    real error when it tries to run the commands.
+    """
+    ok, missing = check_eval_tools(["unclosed 'quote", "another 'bad"])
+    assert ok is True
+    assert missing == []
+
+
 # --- check_prerequisites ---
 
 

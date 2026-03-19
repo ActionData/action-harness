@@ -388,6 +388,7 @@ def run(
         cycle_str = ",".join(review_cycle_list)
         typer.echo(f"  review-cycle: {cycle_str} ({len(review_cycle_list)} round(s))")
         typer.echo(f"  pr title: [harness] {task_label}")
+        typer.echo(f"  skip-preflight: {'yes' if skip_preflight else 'no'}")
         typer.echo(f"  auto-merge: {'enabled' if auto_merge else 'disabled'}")
         typer.echo(f"  wait-for-ci: {'enabled' if wait_for_ci else 'disabled'}")
         typer.echo(f"  max retries: {max_retries}")

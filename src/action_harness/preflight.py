@@ -89,10 +89,7 @@ def check_git_remote(worktree_path: Path, verbose: bool = False) -> bool:
         )
         return False
 
-    if verbose:
-        typer.echo("[preflight] git_remote: passed", err=True)
-    else:
-        typer.echo("[preflight] git_remote: passed", err=True)
+    typer.echo("[preflight] git_remote: passed", err=True)
     return True
 
 

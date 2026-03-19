@@ -9,33 +9,16 @@ from unittest.mock import MagicMock, patch
 import pytest
 from helpers import cleanup_worktrees
 
-from action_harness.models import EvalResult, OpenSpecReviewResult, PreflightResult, RunManifest
+from action_harness.models import EvalResult, OpenSpecReviewResult, RunManifest
 from action_harness.openspec_reviewer import parse_review_result
 from action_harness.pipeline import run_pipeline
 
 # ruff: noqa: E501
 
 
-def _passing_preflight() -> PreflightResult:
-    """Return a pre-built passing PreflightResult for mocking."""
-    return PreflightResult(
-        success=True,
-        stage="preflight",
-        checks={"worktree_clean": True, "git_remote": True, "eval_tools": True},
-        failed_checks=[],
-    )
-
-
 @pytest.fixture(autouse=True)
-def _mock_preflight() -> Generator[None]:
-    """Auto-mock preflight to pass in all integration tests.
-
-    Integration tests use local git repos without remotes, which would
-    fail the git_remote preflight check. Preflight behavior is tested
-    independently in test_preflight.py.
-    """
-    with patch("action_harness.pipeline.run_preflight", return_value=_passing_preflight()):
-        yield
+def _mock_preflight(mock_preflight: None) -> None:
+    """Auto-apply shared mock_preflight fixture from conftest."""
 
 
 def _approved_review_result() -> OpenSpecReviewResult:

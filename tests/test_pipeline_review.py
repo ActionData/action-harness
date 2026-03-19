@@ -12,7 +12,6 @@ from helpers import cleanup_worktrees
 from action_harness.models import (
     EvalResult,
     OpenSpecReviewResult,
-    PreflightResult,
     ReviewResult,
     WorkerResult,
 )
@@ -224,21 +223,9 @@ def _make_claude_mock(
     return MagicMock(side_effect=side_effect)
 
 
-def _passing_preflight() -> PreflightResult:
-    """Return a pre-built passing PreflightResult for mocking."""
-    return PreflightResult(
-        success=True,
-        stage="preflight",
-        checks={"worktree_clean": True, "git_remote": True, "eval_tools": True},
-        failed_checks=[],
-    )
-
-
 @pytest.fixture(autouse=True)
-def _mock_preflight() -> Generator[None]:
-    """Auto-mock preflight to pass — test repos have no remote."""
-    with patch("action_harness.pipeline.run_preflight", return_value=_passing_preflight()):
-        yield
+def _mock_preflight(mock_preflight: None) -> None:
+    """Auto-apply shared mock_preflight fixture from conftest."""
 
 
 class TestPipelineWithReviewAgents:

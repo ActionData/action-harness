@@ -1,7 +1,6 @@
 """Tests for pipeline behavior in prompt mode (no OpenSpec change)."""
 
 import json
-from collections.abc import Generator
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -9,7 +8,6 @@ import pytest
 
 from action_harness.models import (
     OpenSpecReviewResult,
-    PreflightResult,
 )
 from action_harness.pipeline import run_pipeline
 
@@ -91,21 +89,9 @@ def _get_claude_system_prompt(cmd: list[str]) -> str | None:
     return cmd[idx + 1]
 
 
-def _passing_preflight() -> PreflightResult:
-    """Return a pre-built passing PreflightResult for mocking."""
-    return PreflightResult(
-        success=True,
-        stage="preflight",
-        checks={"worktree_clean": True, "git_remote": True, "eval_tools": True},
-        failed_checks=[],
-    )
-
-
 @pytest.fixture(autouse=True)
-def _mock_preflight() -> Generator[None]:
-    """Auto-mock preflight to pass — test repos have no remote."""
-    with patch("action_harness.pipeline.run_preflight", return_value=_passing_preflight()):
-        yield
+def _mock_preflight(mock_preflight: None) -> None:
+    """Auto-apply shared mock_preflight fixture from conftest."""
 
 
 class TestPipelinePromptMode:

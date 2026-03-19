@@ -6,7 +6,7 @@
 
 ## 2. Pipeline Integration
 
-- [ ] 2.1 In `pipeline.py`, import `inject_skills` and `resolve_harness_skills_dir` from `skills.py`. After the worktree is created and before `dispatch_worker()`, call `inject_skills()` to copy harness skills into the worktree. Pass `verbose` flag through. Log the count of injected skills.
+- [x] 2.1 In `pipeline.py`, import `inject_skills` and `resolve_harness_skills_dir` from `skills.py`. After the worktree is created and before `dispatch_worker()`, call `inject_skills()` to copy harness skills into the worktree. Pass `verbose` flag through. Log the count of injected skills.
 
 ## 3. Tests
 

@@ -8,6 +8,7 @@ from typing import Literal
 import typer
 
 from action_harness.agents import resolve_harness_agents_dir
+from action_harness.skills import inject_skills, resolve_harness_skills_dir
 from action_harness.catalog.frequency import update_frequency
 from action_harness.catalog.loader import load_catalog
 from action_harness.checkpoint import delete_checkpoint, write_checkpoint
@@ -600,6 +601,17 @@ def _run_pipeline_inner(
 
     # Resolve agent definitions directory once for all review dispatches
     harness_agents_dir = resolve_harness_agents_dir()
+
+    # Inject harness skills into worktree so workers can use them
+    harness_skills_dir = resolve_harness_skills_dir()
+    injected = inject_skills(harness_skills_dir, worktree_path, verbose=verbose)
+    if injected:
+        logger.emit(
+            "skills.injected",
+            stage="skills",
+            count=len(injected),
+            skills=injected,
+        )
 
     # Label issue as in-progress (best-effort)
     if issue_number is not None:

@@ -170,6 +170,20 @@ class TestSaveLoadState:
         result = load_lead_state(tmp_path, "no-repo", "no-lead")
         assert result is None
 
+    def test_load_corrupt_yaml(self, tmp_path: Path) -> None:
+        """Loading a lead with corrupt/invalid YAML returns None."""
+        state_dir = lead_state_dir(tmp_path, "repo", "bad-lead")
+        state_dir.mkdir(parents=True)
+        (state_dir / "lead.yaml").write_text("not: valid: yaml: [unclosed")
+        assert load_lead_state(tmp_path, "repo", "bad-lead") is None
+
+    def test_load_missing_fields(self, tmp_path: Path) -> None:
+        """Loading a lead.yaml with missing required fields returns None."""
+        state_dir = lead_state_dir(tmp_path, "repo", "partial")
+        state_dir.mkdir(parents=True)
+        (state_dir / "lead.yaml").write_text("name: partial\npurpose: test\n")
+        assert load_lead_state(tmp_path, "repo", "partial") is None
+
 
 # ---------------------------------------------------------------------------
 # 5.4: list_leads tests
@@ -230,19 +244,19 @@ class TestLockManagement:
 
         acquire_lock(tmp_path, state.repo_name, state.name, pid, "sess-1")
 
-        try:
+        import pytest as _pytest
+
+        with _pytest.raises(RuntimeError, match=state.name):
             acquire_lock(tmp_path, state.repo_name, state.name, pid, "sess-2")
-            raise AssertionError("Expected RuntimeError")  # noqa: TRY301
-        except RuntimeError as exc:
-            assert state.name in str(exc)
-            assert str(pid) in str(exc)
 
     def test_acquire_reclaims_stale_lock(self, tmp_path: Path) -> None:
         """acquire_lock reclaims lock from a dead PID."""
         state = _make_state()
         save_lead_state(state, tmp_path)
 
-        # Write a lock with an unlikely-to-be-alive PID
+        # Write a lock with an unlikely-to-be-alive PID.
+        # Theoretically 999999999 could be alive on some systems, but
+        # extremely unlikely in practice (max PID is typically 2^22).
         lock_path = lead_state_dir(tmp_path, state.repo_name, state.name) / "lock"
         lock_path.write_text("999999999\nold-session\n")
 
@@ -261,6 +275,24 @@ class TestLockManagement:
         save_lead_state(state, tmp_path)
         acquire_lock(tmp_path, state.repo_name, state.name, os.getpid(), "sess")
         assert is_lead_active(tmp_path, state.repo_name, state.name) is True
+
+    def test_is_lead_active_stale_cleanup(self, tmp_path: Path) -> None:
+        """is_lead_active cleans up stale lock and returns False."""
+        state = _make_state()
+        save_lead_state(state, tmp_path)
+        lock_path = lead_state_dir(tmp_path, state.repo_name, state.name) / "lock"
+        lock_path.write_text("999999999\nold-sess\n")
+        assert is_lead_active(tmp_path, state.repo_name, state.name) is False
+        assert not lock_path.exists()  # stale lock was cleaned up
+
+    def test_acquire_corrupt_lock_reclaims(self, tmp_path: Path) -> None:
+        """acquire_lock reclaims a corrupt lock file."""
+        state = _make_state()
+        save_lead_state(state, tmp_path)
+        lock_path = lead_state_dir(tmp_path, state.repo_name, state.name) / "lock"
+        lock_path.write_text("not-a-pid\n")
+        acquire_lock(tmp_path, state.repo_name, state.name, os.getpid(), "new-sess")
+        assert str(os.getpid()) in lock_path.read_text()
 
 
 # ---------------------------------------------------------------------------
@@ -338,6 +370,17 @@ class TestProvisionClone:
         path1 = provision_clone(state, harness_home)
         path2 = provision_clone(state, harness_home)
         assert path1 == path2
+
+    def test_clone_failure_raises(self, tmp_path: Path) -> None:
+        """provision_clone raises RuntimeError when git clone fails."""
+        import pytest
+
+        harness_home = tmp_path / "harness"
+        state = _make_state(repo_path="/nonexistent/repo")
+        save_lead_state(state, harness_home)
+
+        with pytest.raises(RuntimeError, match="clone"):
+            provision_clone(state, harness_home)
 
 
 # ---------------------------------------------------------------------------
@@ -470,6 +513,37 @@ class TestCLILeadRetire:
             )
         assert result.exit_code == 1
 
+    def test_retire_active_lead_refused(self, tmp_path: Path) -> None:
+        """lead retire refuses to retire an active (locked) lead."""
+        state = _make_state(name="busy-lead", repo_name="fake-repo")
+        save_lead_state(state, tmp_path)
+        acquire_lock(tmp_path, "fake-repo", "busy-lead", os.getpid(), "sess-1")
+
+        try:
+            with patch(
+                "action_harness.lead_registry.derive_repo_name",
+                return_value="fake-repo",
+            ):
+                result = runner.invoke(
+                    app,
+                    [
+                        "lead",
+                        "retire",
+                        "busy-lead",
+                        "--repo",
+                        "/tmp/fake",
+                        "--harness-home",
+                        str(tmp_path),
+                    ],
+                )
+            assert result.exit_code == 1
+            assert "currently active" in result.output
+            # State directory should still exist
+            state_dir = lead_state_dir(tmp_path, "fake-repo", "busy-lead")
+            assert state_dir.exists()
+        finally:
+            release_lock(tmp_path, "fake-repo", "busy-lead")
+
 
 # ---------------------------------------------------------------------------
 # 5.10: CLI backward compatibility test
@@ -502,8 +576,8 @@ class TestCLIBackwardCompat:
                     str(tmp_path / "harness"),
                 ],
             )
-            # The command should have tried to dispatch
-            assert mock_dispatch.called or result.exit_code == 0
+            assert result.exit_code == 0
+            assert mock_dispatch.called
 
 
 # ---------------------------------------------------------------------------
@@ -572,14 +646,14 @@ class TestResumeFallback:
             assert call_count == 2
 
             # Second call should have a different session_id
-            if len(session_ids) == 2:
-                assert session_ids[0] == original_session  # resume attempt
-                assert session_ids[1] != original_session  # new session
+            assert len(session_ids) == 2
+            assert session_ids[0] == original_session  # resume attempt
+            assert session_ids[1] != original_session  # new session
 
-                # Verify new session_id was saved
-                loaded = load_lead_state(harness_home, tmp_path.name, "default")
-                assert loaded is not None
-                assert loaded.session_id == session_ids[1]
+            # Verify new session_id was saved
+            loaded = load_lead_state(harness_home, tmp_path.name, "default")
+            assert loaded is not None
+            assert loaded.session_id == session_ids[1]
 
     def test_new_lead_uses_session_id_not_resume(self, tmp_path: Path) -> None:
         """A brand-new lead uses --session-id, not --resume."""

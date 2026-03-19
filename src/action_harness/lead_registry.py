@@ -10,7 +10,7 @@ from pathlib import Path
 
 import typer
 import yaml
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 # ---------------------------------------------------------------------------
 # LeadState model (task 1.1)
@@ -43,6 +43,7 @@ def derive_repo_name(repo_path: Path, harness_home: Path) -> str:
     2. Extract from ``git remote get-url origin`` (last path component, stripped of .git).
     3. Fall back to the directory basename.
     """
+    # Deferred import to avoid circular dependency: cli.py imports lead_registry
     from action_harness.cli import is_managed_repo
 
     # (1) Managed repo
@@ -138,7 +139,7 @@ def load_lead_state(harness_home: Path, repo_name: str, lead_name: str) -> LeadS
         raw = yaml_path.read_text(encoding="utf-8")
         data = yaml.safe_load(raw)
         return LeadState.model_validate(data)
-    except (OSError, UnicodeDecodeError, yaml.YAMLError) as exc:
+    except (OSError, UnicodeDecodeError, yaml.YAMLError, ValidationError) as exc:
         typer.echo(
             f"[lead-registry] warning: could not load lead state from {yaml_path}: {exc}",
             err=True,
@@ -236,7 +237,13 @@ def acquire_lock(
     pid: int,
     session_id: str,
 ) -> None:
-    """Acquire the lead lock. Raises RuntimeError if already held by a live process."""
+    """Acquire the lead lock. Raises RuntimeError if already held by a live process.
+
+    Note: This uses a check-then-write pattern which has a small TOCTOU race window.
+    Two processes starting within milliseconds could both acquire the lock. Acceptable
+    for the current use case (human-initiated terminal sessions). If stronger guarantees
+    are needed, switch to os.open(O_CREAT|O_EXCL) or fcntl.flock.
+    """
     lock_path = lead_state_dir(harness_home, repo_name, lead_name) / "lock"
 
     if lock_path.is_file():
@@ -244,7 +251,9 @@ def acquire_lock(
             content = lock_path.read_text(encoding="utf-8")
             lines = content.strip().split("\n")
             existing_pid = int(lines[0])
-            # Check if process is alive
+            # Check if process is alive via signal 0 (no-op signal).
+            # Known limitation: PID reuse could cause false positives on
+            # long-lived systems, but rare with 32-bit PID spaces.
             try:
                 os.kill(existing_pid, 0)
                 # Process is alive — refuse
@@ -281,7 +290,11 @@ def release_lock(harness_home: Path, repo_name: str, lead_name: str) -> None:
 
 
 def is_lead_active(harness_home: Path, repo_name: str, lead_name: str) -> bool:
-    """Check if a lead is currently active (lock held by a live process)."""
+    """Check if a lead is currently active (lock held by a live process).
+
+    Side effect: cleans up stale lock files (dead PID). This has its own
+    small TOCTOU window — acceptable for the same reasons as acquire_lock.
+    """
     lock_path = lead_state_dir(harness_home, repo_name, lead_name) / "lock"
     if not lock_path.is_file():
         return False

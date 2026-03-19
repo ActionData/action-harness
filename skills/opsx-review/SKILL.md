@@ -1,5 +1,5 @@
 ---
-name: openspec-review
+name: opsx-review
 description: Review new or changed OpenSpec artifacts using the spec-writer agent. Use when the user wants a quality review of proposals, specs, designs, or tasks.
 license: MIT
 compatibility: Requires openspec CLI.

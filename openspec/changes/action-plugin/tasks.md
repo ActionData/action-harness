@@ -1,17 +1,17 @@
 ## 1. Plugin Manifest
 
-- [ ] 1.1 Create `.claude-plugin/plugin.json` with `{"name": "action", "description": "Action-harness: self-hosting pipeline for Claude Code workers. Provides OpenSpec workflow skills, dispatch skills, and repo assessment tools."}`.
+- [x] 1.1 Create `.claude-plugin/plugin.json` with `{"name": "action", "description": "Action-harness: self-hosting pipeline for Claude Code workers. Provides OpenSpec workflow skills, dispatch skills, and repo assessment tools."}`.
 
 ## 2. Migrate Skills
 
-- [ ] 2.1 Create `skills/` directory at the repo root.
-- [ ] 2.2 Move `.claude/skills/openspec-propose/SKILL.md` to `skills/opsx-propose/SKILL.md`. Update the `name` field in frontmatter from `openspec-propose` to `opsx-propose`.
-- [ ] 2.3 Move `.claude/skills/openspec-apply-change/SKILL.md` to `skills/opsx-apply/SKILL.md`. Update the `name` field from `openspec-apply-change` to `opsx-apply`.
-- [ ] 2.4 Move `.claude/skills/openspec-review/SKILL.md` to `skills/opsx-review/SKILL.md`. Update the `name` field from `openspec-review` to `opsx-review`.
-- [ ] 2.5 Move `.claude/skills/openspec-explore/SKILL.md` to `skills/opsx-explore/SKILL.md`. Update the `name` field from `openspec-explore` to `opsx-explore`.
-- [ ] 2.6 Move `.claude/skills/openspec-archive-change/SKILL.md` to `skills/opsx-archive/SKILL.md`. Update the `name` field from `openspec-archive-change` to `opsx-archive`.
-- [ ] 2.7 Remove the empty `.claude/skills/` directory after all skills are moved.
-- [ ] 2.8 Remove `.claude/commands/opsx/` directory (legacy commands superseded by skills).
+- [x] 2.1 Create `skills/` directory at the repo root.
+- [x] 2.2 Move `.claude/skills/openspec-propose/SKILL.md` to `skills/opsx-propose/SKILL.md`. Update the `name` field in frontmatter from `openspec-propose` to `opsx-propose`.
+- [x] 2.3 Move `.claude/skills/openspec-apply-change/SKILL.md` to `skills/opsx-apply/SKILL.md`. Update the `name` field from `openspec-apply-change` to `opsx-apply`.
+- [x] 2.4 Move `.claude/skills/openspec-review/SKILL.md` to `skills/opsx-review/SKILL.md`. Update the `name` field from `openspec-review` to `opsx-review`.
+- [x] 2.5 Move `.claude/skills/openspec-explore/SKILL.md` to `skills/opsx-explore/SKILL.md`. Update the `name` field from `openspec-explore` to `opsx-explore`.
+- [x] 2.6 Move `.claude/skills/openspec-archive-change/SKILL.md` to `skills/opsx-archive/SKILL.md`. Update the `name` field from `openspec-archive-change` to `opsx-archive`.
+- [x] 2.7 Remove the empty `.claude/skills/` directory after all skills are moved.
+- [x] 2.8 Remove `.claude/commands/opsx/` directory (legacy commands superseded by skills).
 
 ## 3. Migrate Interactive Agents
 

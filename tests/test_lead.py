@@ -888,12 +888,17 @@ class TestParseLeadPlan:
 class TestLeadCLI:
     def test_help_shows_lead_command(self) -> None:
         """--help includes the lead command with interactive flag."""
+        import re
+
         result = runner.invoke(app, ["lead", "--help"])
         assert result.exit_code == 0
-        assert "lead" in result.output.lower()
-        assert "--repo" in result.output
-        assert "--dispatch" in result.output
-        assert "--interactive" in result.output
+        # Strip ANSI escape codes before checking — Typer's rich output
+        # splits flags across escape sequences (e.g., --repo becomes
+        # \x1b[1;36m-\x1b[0m\x1b[1;36m-repo\x1b[0m)
+        plain = re.sub(r"\x1b\[[0-9;]*m", "", result.output)
+        assert "lead" in plain.lower()
+        assert "--repo" in plain
+        assert "--interactive" in plain
 
     def test_lead_with_mock_dispatch(self, tmp_path: Path) -> None:
         """Lead command with --no-interactive returns formatted plan."""

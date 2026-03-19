@@ -295,25 +295,25 @@ def test_list_repos_projects_with_config_gating(tmp_path: Path) -> None:
 
 def test_is_managed_repo(tmp_path: Path) -> None:
     """9.8: _is_managed_repo returns True for projects/<name>/repo/ path."""
-    from action_harness.cli import _is_managed_repo
+    from action_harness.cli import is_managed_repo
 
     harness_home = tmp_path / "harness"
     project_repo = harness_home / "projects" / "my-app" / "repo"
     project_repo.mkdir(parents=True)
 
-    assert _is_managed_repo(project_repo, harness_home) is True
+    assert is_managed_repo(project_repo, harness_home) is True
 
 
 def test_is_managed_repo_false_for_local(tmp_path: Path) -> None:
     """9.8: _is_managed_repo returns False for local paths."""
-    from action_harness.cli import _is_managed_repo
+    from action_harness.cli import is_managed_repo
 
     harness_home = tmp_path / "harness"
     harness_home.mkdir()
     local_repo = tmp_path / "my-local-repo"
     local_repo.mkdir()
 
-    assert _is_managed_repo(local_repo, harness_home) is False
+    assert is_managed_repo(local_repo, harness_home) is False
 
 
 # ── 9.9: Test clean removes workspace from project dir ───────────────

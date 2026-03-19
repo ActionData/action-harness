@@ -72,10 +72,7 @@ def dispatch_openspec_review(
         f"run structural checks, perform semantic review, and archive if ready."
     )
 
-    session_name = (
-        f"[action-harness] OpenSpec Review: {change_name}"
-        f" (repo: {worktree_path.name})"
-    )
+    session_name = f"[action-harness] OpenSpec Review: {change_name} (repo: {worktree_path.name})"
     cmd = [
         "claude",
         "-p",

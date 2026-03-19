@@ -67,6 +67,14 @@ Priority order. Each is an OpenSpec change the harness implements on itself.
 - `stage-hooks` — Pre/post hooks on pipeline stages for observability and custom logic.
 - `deduplicate-run-stats` — Consolidate duplicate run stat computation in lead context gathering.
 
+### In progress
+
+- `always-on-webhook` — GitHub webhook server (`harness serve`), HMAC verification, event routing, serial queue per repo, Slack notifications. PR #58.
+- `composable-stages` — Extract pipeline stages into a composable protocol with typed inputs/outputs.
+- `flow-templates` — Declarative YAML pipeline definitions for different task shapes.
+- `stage-hooks` — Pre/post hooks on pipeline stages for observability and custom logic.
+- `deduplicate-run-stats` — Consolidate duplicate run stat computation in lead context gathering.
+
 ### Up next
 
 #### Named Leads (4-phase)

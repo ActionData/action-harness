@@ -1,8 +1,7 @@
-# lead-interactive Specification
+# lead-interactive Specification (Delta)
 
-## Purpose
-TBD - created by archiving change lead-interactive. Update Purpose after archive.
-## Requirements
+## MODIFIED Requirements
+
 ### Requirement: Interactive lead session with repo context
 The `harness lead start --repo <path>` command SHALL spawn an interactive Claude Code session by default, pre-loaded with the lead persona and gathered repo context. The lead persona SHALL instruct the agent to greet the user with a role explanation, capability overview, and state-aware suggestions. When a named lead has a clone, the session SHALL target the clone directory. Session management SHALL use `--session-id` on first start and `--resume` on subsequent starts.
 
@@ -40,6 +39,8 @@ The `--interactive` flag and `--dispatch` flag SHALL NOT be used together.
 - **WHEN** the user runs `harness lead start --repo ./my-repo --interactive --dispatch`
 - **THEN** the harness SHALL exit with an error: "--interactive and --dispatch are mutually exclusive"
 
+## ADDED Requirements
+
 ### Requirement: Named lead sessions target their clone
 Named leads (non-default) SHALL run against their provisioned git clone rather than the original `--repo` path, providing workspace isolation for independent git operations.
 
@@ -57,4 +58,3 @@ The bare `harness lead` invocation (without the `start` subcommand) SHALL contin
 #### Scenario: Bare lead command
 - **WHEN** the user runs `harness lead --repo ./my-repo` (no `start` subcommand)
 - **THEN** the harness SHALL treat this identically to `harness lead start --repo ./my-repo` — spawning the default lead interactively
-

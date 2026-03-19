@@ -21,7 +21,9 @@ def resolve_harness_skills_dir() -> Path:
     # (src/action_harness/ is typically 2–3 levels deep).
     for _ in range(10):
         candidate = current / "skills"
-        if candidate.is_dir():
+        # Require .claude-plugin/plugin.json as a marker to avoid false
+        # positives from incidental skills/ directories in parent paths.
+        if candidate.is_dir() and (current / ".claude-plugin" / "plugin.json").is_file():
             typer.echo(
                 f"[skills] resolved harness skills dir (source): {candidate}",
                 err=True,

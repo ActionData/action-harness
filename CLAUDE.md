@@ -116,7 +116,7 @@ Agent prompts are stored as markdown files with YAML frontmatter. Two directorie
 
 **What belongs in HARNESS.md:**
 - Eval commands and test instructions for autonomous workers
-- Skill invocations the worker should use (e.g., `opsx:apply`)
+- Skill invocations the worker should use (e.g., `action:opsx-apply`)
 - Retry hints for flaky tests or known issues
 - Path restrictions or files to avoid
 - Migration context or temporary workarounds

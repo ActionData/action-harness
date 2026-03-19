@@ -135,11 +135,11 @@ The `lead` command becomes a Typer sub-app with three subcommands:
 - `harness lead list` — list all leads for a repo with status
 - `harness lead retire` — remove a lead (delete clone, archive state)
 
-**Backward compatibility:** The current `harness lead --repo .` invocation (no subcommand) must continue to work. This is achieved by making `start` the default callback of the sub-app — when no subcommand is provided, Typer invokes the callback. The `start` command accepts the same flags as the current `lead` command plus `--name` and `--purpose`.
+**Backward compatibility:** The current `harness lead --repo .` invocation (no subcommand) must continue to work.
 
-Implementation approach: Define `lead_app = typer.Typer()` and register it on the main app via `app.add_typer(lead_app, name="lead")`. The `start` subcommand gets the `@lead_app.callback(invoke_without_command=True)` decorator so it runs when no subcommand is given.
+Implementation approach: Define `lead_app = typer.Typer()` and register it on the main app via `app.add_typer(lead_app, name="lead")`. The `start` logic is a registered `@lead_app.command(name="start")`. A separate `@lead_app.callback(invoke_without_command=True)` checks `ctx.invoked_subcommand` — when `None`, it forwards to `start`. The current positional `prompt` argument is converted to `--initial-prompt` option to avoid Typer sub-app parsing conflicts (Typer may interpret subcommand names as positional argument values).
 
-**Rationale:** Typer's `invoke_without_command=True` callback pattern is the standard way to add subcommands while preserving the bare-command behavior. The user sees `harness lead --repo .` working exactly as before.
+**Rationale:** A callback-only approach with a positional argument would cause Typer to misparse `harness lead start` (interpreting "start" as the prompt value). Splitting into `@lead_app.command("start")` + `@lead_app.callback(invoke_without_command=True)` avoids this while still preserving bare `harness lead --repo .`.
 
 ### D8: Default lead behavior
 
@@ -160,8 +160,11 @@ When `--name` is omitted, the lead name is `"default"`. The default lead:
 **[Risk] Clone disk usage.** Full git clones duplicate the entire repo history.
 **Mitigation:** `git clone --no-tags --single-branch` to reduce initial size. Users can `retire` leads they no longer need. Future: shallow clones for large repos.
 
-**[Risk] Typer sub-app backward compatibility.** The `invoke_without_command=True` callback approach may interact unexpectedly with Typer's argument parsing, especially for the positional `prompt` argument.
-**Mitigation:** Test the exact invocations `harness lead --repo .`, `harness lead --repo . "prompt"`, and `harness lead start --repo . --name foo` to verify all parse correctly.
+**[Risk] Typer sub-app backward compatibility.** Sub-app routing with positional arguments causes Typer misparse.
+**Mitigation:** Convert positional `prompt` to `--initial-prompt` option. Test the exact invocations `harness lead --repo .`, `harness lead --repo . --initial-prompt "prompt"`, and `harness lead start --repo . --name foo` to verify all parse correctly.
+
+**[Risk] Orphaned claude process on `kill -9`.** If the harness process is `kill -9`'d, the `finally` block doesn't run, leaving a stale lock AND an orphaned `claude` process still running on the clone. On next start, stale detection reclaims the lock (harness PID is dead), but the orphaned claude may still be running.
+**Mitigation:** This is rare in practice (`kill -9` is exceptional). The orphaned claude process will eventually exit on its own. If this becomes a real problem, the lock file could store both the harness PID and the claude subprocess PID, checking both on stale detection.
 
 **[Risk] Session resume fails silently.** Claude Code may change `--resume` behavior across versions.
 **Mitigation:** Always check exit code. On non-zero from `--resume`, fall back to `--session-id` with a new UUID. Log the fallback clearly.

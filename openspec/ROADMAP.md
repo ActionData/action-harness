@@ -57,10 +57,26 @@ Priority order. Each is an OpenSpec change the harness implements on itself.
 
 - [x] `openspec-prerequisites` — `harness ready` command with machine-readable prerequisites in `.openspec.yaml`. Dependency graph computation, lead context integration.
 
+### In progress
+
+- `always-on-webhook` — GitHub webhook server (`harness serve`), HMAC verification, event routing, serial queue per repo, Slack notifications. PR #58.
+- `composable-stages` — Extract pipeline stages into a composable protocol with typed inputs/outputs.
+- `flow-templates` — Declarative YAML pipeline definitions for different task shapes.
+- `stage-hooks` — Pre/post hooks on pipeline stages for observability and custom logic.
+- `deduplicate-run-stats` — Consolidate duplicate run stat computation in lead context gathering.
+
 ### Up next
 
-1. `always-on` — Unified interactive + autonomous planning agent. `harness lead --repo <path> "prompt"` spawns a Claude Code session with repo context (roadmap, issues, catalog) to draft OpenSpec proposals, create issues, and optionally dispatch harness runs. Phase 1: on-demand for any repo. Phase 2: event-driven (GitHub issue triggers). Phase 3: scheduled triage. Same agent in all modes — only the trigger differs. Must handle target repos with and without OpenSpec (bootstrap `openspec init` + create changes, or fall back to `--prompt` mode). See `docs/explore/repo-lead.md`.
-1. `openspec-prerequisites` — Machine-readable prerequisites for dependency-aware dispatching. Enables repo-lead to answer "what's ready to work on?" without parsing roadmap prose. Exact mechanism TBD after repo-lead surfaces how the harness interacts with target repo OpenSpec setup — may be harness-side config, OpenSpec upstream contribution, or Beads integration. Inspired by Beads `bd ready`. See `docs/research/gastown-comparison.md`.
-1. `always-on` — Event-driven intake from webhooks, recurring maintenance, Slack escalation. Subsumes repo-lead Phase 2 (events) and Phase 3 (scheduled). Requires server mode, event loop.
-2. `merge-queue` — Batch-then-bisect merge queue for concurrent pipeline runs. Rebase PRs as a stack, test the tip, bisect on failure. Prevents "all pass individually but conflict together" when repo-lead dispatches concurrent changes. Inspired by Gastown Refinery / Bors. Requires repo-lead + concurrent dispatch. See `docs/research/gastown-comparison.md`.
-4. `ephemeral-observability` — Per-worktree observability stack (Vector → VictoriaLogs/Metrics/Traces) for target apps that emit telemetry. Lets workers query logs (LogsQL), metrics (PromQL), and traces (TraceQL) to validate runtime behavior — not just exit codes. Torn down when task completes. Requires repo-profiling to detect when a target app is a running service. Inspired by OpenAI's Codex harness architecture.
+#### Named Leads (4-phase)
+
+Persistent, purpose-built lead agents that accumulate expertise over time. Inspired by Gastown's "crew" concept.
+
+1. `named-lead-registry` — Lead identity, full git clones per lead, session resume, single-instance locking, CLI (`lead start/list/retire`). Foundation for all subsequent phases.
+2. `lead-memory` — Per-lead `memory.md` self-updated by the lead. Injected on session start via `gather_lead_context`. Post-compaction re-injection via two-hook pattern (PostCompact flag + UserPromptSubmit injection).
+3. `lead-inbox` — Per-lead inbox for async messaging between leads. Skills (`/action:inbox:check/clear/send/history`). Configurable `auto_wake` per lead. *(stub — design after phases 1-2)*
+4. `lead-webhook-routing` — Route webhook events to named leads via default-lead triage or direct config mapping. *(stub — design after inbox)*
+
+#### Future
+
+- `merge-queue` — Batch-then-bisect merge queue for concurrent pipeline runs. Rebase PRs as a stack, test the tip, bisect on failure. Prevents "all pass individually but conflict together" when repo-lead dispatches concurrent changes. Inspired by Gastown Refinery / Bors. Requires named leads + concurrent dispatch.
+- `ephemeral-observability` — Per-worktree observability stack (Vector → VictoriaLogs/Metrics/Traces) for target apps that emit telemetry. Lets workers query logs (LogsQL), metrics (PromQL), and traces (TraceQL) to validate runtime behavior — not just exit codes. Torn down when task completes. Requires repo-profiling to detect when a target app is a running service.

@@ -130,6 +130,19 @@ class OpenSpecReviewResult(StageResult):
     human_tasks_remaining: int = 0
 
 
+class PreflightResult(StageResult):
+    """Result from pre-dispatch preflight checks.
+
+    Each check is recorded in ``checks`` (name -> pass/fail).
+    ``failed_checks`` lists the names of checks that failed, for
+    actionable error messaging.
+    """
+
+    stage: Literal["preflight"] = "preflight"
+    checks: dict[str, bool] = {}
+    failed_checks: list[str] = []
+
+
 class MergeResult(StageResult):
     """Result from the auto-merge stage.
 
@@ -180,6 +193,7 @@ StageResultUnion = Annotated[
     | WorkerResult
     | EvalResult
     | PrResult
+    | PreflightResult
     | OpenSpecReviewResult
     | ReviewResult
     | MergeResult,

@@ -1,14 +1,14 @@
 ## 1. PreflightResult Model
 
-- [ ] 1.1 Add `PreflightResult(StageResult)` to `models.py` with fields: `stage: Literal["preflight"] = "preflight"`, `checks: dict[str, bool]` (check name -> pass/fail), `failed_checks: list[str]` (names of failed checks for error messaging). Add `PreflightResult` to `StageResultUnion`.
+- [x] 1.1 Add `PreflightResult(StageResult)` to `models.py` with fields: `stage: Literal["preflight"] = "preflight"`, `checks: dict[str, bool]` (check name -> pass/fail), `failed_checks: list[str]` (names of failed checks for error messaging). Add `PreflightResult` to `StageResultUnion`.
 
 ## 2. Preflight Module
 
-- [ ] 2.1 Create `src/action_harness/preflight.py` with a `run_preflight()` function that accepts `worktree_path: Path`, `eval_commands: list[str]`, `change_name: str | None` (None for prompt mode), `repo_path: Path`, and `verbose: bool`. Returns `PreflightResult`. The function runs four checks in order: `check_worktree_clean`, `check_git_remote`, `check_eval_tools`, and `check_prerequisites` (only when `change_name` is not None). Each check logs entry/exit to stderr. Overall success requires all checks to pass.
-- [ ] 2.2 Implement `check_worktree_clean(worktree_path) -> bool`: runs `git status --porcelain` in the worktree. Returns True if output is empty (clean). Logs warning with dirty file list on failure.
-- [ ] 2.3 Implement `check_git_remote(worktree_path, verbose) -> bool`: runs `git ls-remote --exit-code origin HEAD` with timeout=30. Returns True on exit code 0. Catches `TimeoutExpired`, `FileNotFoundError`, `OSError`. Logs the actual error on failure.
-- [ ] 2.4 Implement `check_eval_tools(eval_commands) -> tuple[bool, list[str]]`: extracts the first token (tool binary) from each eval command via `shlex.split`, deduplicates, and checks each with `shutil.which()`. Returns (all_found, missing_tools). Logs which tools are missing.
-- [ ] 2.5 Implement `check_prerequisites(change_name, repo_path) -> bool`: imports and calls `read_prerequisites()` and `is_prerequisite_satisfied()` from `prerequisites.py`. Returns True if all prerequisites are satisfied or if no prerequisites exist. Logs unmet prerequisites.
+- [x] 2.1 Create `src/action_harness/preflight.py` with a `run_preflight()` function that accepts `worktree_path: Path`, `eval_commands: list[str]`, `change_name: str | None` (None for prompt mode), `repo_path: Path`, and `verbose: bool`. Returns `PreflightResult`. The function runs four checks in order: `check_worktree_clean`, `check_git_remote`, `check_eval_tools`, and `check_prerequisites` (only when `change_name` is not None). Each check logs entry/exit to stderr. Overall success requires all checks to pass.
+- [x] 2.2 Implement `check_worktree_clean(worktree_path) -> bool`: runs `git status --porcelain` in the worktree. Returns True if output is empty (clean). Logs warning with dirty file list on failure.
+- [x] 2.3 Implement `check_git_remote(worktree_path, verbose) -> bool`: runs `git ls-remote --exit-code origin HEAD` with timeout=30. Returns True on exit code 0. Catches `TimeoutExpired`, `FileNotFoundError`, `OSError`. Logs the actual error on failure.
+- [x] 2.4 Implement `check_eval_tools(eval_commands) -> tuple[bool, list[str]]`: extracts the first token (tool binary) from each eval command via `shlex.split`, deduplicates, and checks each with `shutil.which()`. Returns (all_found, missing_tools). Logs which tools are missing.
+- [x] 2.5 Implement `check_prerequisites(change_name, repo_path) -> bool`: imports and calls `read_prerequisites()` and `is_prerequisite_satisfied()` from `prerequisites.py`. Returns True if all prerequisites are satisfied or if no prerequisites exist. Logs unmet prerequisites.
 
 ## 3. Pipeline Integration
 

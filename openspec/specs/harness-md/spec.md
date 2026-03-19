@@ -27,7 +27,7 @@ The harness SHALL inject the contents of HARNESS.md into the worker's system pro
 
 #### Scenario: System prompt unchanged without HARNESS.md
 - **WHEN** no HARNESS.md file is present
-- **THEN** the system prompt is identical to the current behavior (change name + opsx:apply instructions)
+- **THEN** the system prompt is identical to the current behavior (change name + opsx-apply instructions)
 
 ### Requirement: HARNESS.md is freeform markdown
 The harness SHALL treat HARNESS.md as opaque markdown content with no required structure or frontmatter.

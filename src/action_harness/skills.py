@@ -13,15 +13,17 @@ INJECTED_MARKER = ".harness-injected"
 def resolve_harness_skills_dir() -> Path:
     """Resolve the path to the harness's Claude Code skills directory.
 
-    Walks up from this file to find `.claude/skills/` in the repo root.
+    Walks up from this file to find `skills/` in the plugin root.
     Falls back to importlib.resources for installed-as-package support.
     """
     current = Path(__file__).resolve().parent
     # Cap at 10 levels — sufficient for any reasonable repo layout
     # (src/action_harness/ is typically 2–3 levels deep).
     for _ in range(10):
-        candidate = current / ".claude" / "skills"
-        if candidate.is_dir():
+        candidate = current / "skills"
+        # Require .claude-plugin/plugin.json as a marker to avoid false
+        # positives from incidental skills/ directories in parent paths.
+        if candidate.is_dir() and (current / ".claude-plugin" / "plugin.json").is_file():
             typer.echo(
                 f"[skills] resolved harness skills dir (source): {candidate}",
                 err=True,

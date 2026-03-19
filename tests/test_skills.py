@@ -1,6 +1,7 @@
 """Tests for skill discovery and injection."""
 
 import json
+import shutil
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -255,18 +256,84 @@ class TestInjectSkills:
         assert result == ["my-skill"]
         assert (worktree / ".claude" / "skills" / "my-skill").is_dir()
 
+    def test_idempotent_reinjection(self, tmp_path: Path) -> None:
+        """inject_skills is idempotent — second call skips already-injected skills."""
+        source = tmp_path / "source" / "skills"
+        source.mkdir(parents=True)
+        _make_skill(source, "skill-a")
+
+        worktree = tmp_path / "worktree"
+        worktree.mkdir()
+
+        first = inject_skills(source, worktree)
+        assert first == ["skill-a"]
+
+        second = inject_skills(source, worktree)
+        assert second == []
+
+        # Marker and gitignore still intact
+        marker = worktree / ".claude" / "skills" / INJECTED_MARKER
+        assert marker.exists()
+        gitignore = worktree / ".claude" / "skills" / ".gitignore"
+        assert gitignore.exists()
+
+    def test_partial_copytree_failure(self, tmp_path: Path) -> None:
+        """inject_skills continues past a single skill copy failure."""
+        source = tmp_path / "source" / "skills"
+        source.mkdir(parents=True)
+        _make_skill(source, "good-skill")
+        _make_skill(source, "bad-skill")
+
+        worktree = tmp_path / "worktree"
+        worktree.mkdir()
+
+        original_copytree = shutil.copytree
+
+        def failing_copytree(src: str, dst: str, *args: object, **kwargs: object) -> str:
+            if "bad-skill" in src:
+                raise OSError("simulated copy failure")
+            return original_copytree(src, dst)
+
+        with patch("action_harness.skills.shutil.copytree", side_effect=failing_copytree):
+            result = inject_skills(source, worktree)
+
+        # good-skill was injected, bad-skill was not
+        assert result == ["good-skill"]
+        assert (worktree / ".claude" / "skills" / "good-skill").is_dir()
+        assert not (worktree / ".claude" / "skills" / "bad-skill").exists()
+
+    def test_gitignore_no_substring_false_positive(self, tmp_path: Path) -> None:
+        """Gitignore dedup uses line matching, not substring matching."""
+        source = tmp_path / "source" / "skills"
+        source.mkdir(parents=True)
+        _make_skill(source, "foo")
+
+        worktree = tmp_path / "worktree"
+        target_skills = worktree / ".claude" / "skills"
+        target_skills.mkdir(parents=True)
+        # Existing gitignore has "foobar/" which should NOT prevent "foo/"
+        gitignore = target_skills / ".gitignore"
+        gitignore.write_text("foobar/\n")
+
+        inject_skills(source, worktree)
+
+        content = gitignore.read_text()
+        lines = content.splitlines()
+        assert "foo/" in lines, "foo/ should be added despite foobar/ existing"
+
 
 class TestPipelineSkillInjection:
     """Verify inject_skills is called during pipeline execution."""
 
-    def test_inject_skills_called_with_worktree_path(self, tmp_path: Path) -> None:
-        """Pipeline calls inject_skills with the worktree path before dispatch."""
+    def test_inject_skills_called_after_worktree_before_dispatch(self, tmp_path: Path) -> None:
+        """Pipeline calls inject_skills after worktree creation, before worker dispatch."""
         from action_harness.pipeline import run_pipeline
 
         repo = tmp_path / "repo"
         repo.mkdir()
         (repo / ".git").mkdir()
 
+        call_order: list[str] = []
         mock = MagicMock()
 
         def side_effect(cmd: list[str], **kwargs: object) -> MagicMock:
@@ -274,11 +341,15 @@ class TestPipelineSkillInjection:
             result.returncode = 0
             result.stderr = ""
             if cmd[0] == "claude":
+                call_order.append("worker_dispatch")
                 result.stdout = json.dumps({"cost_usd": 0.01, "result": "ok"})
             elif cmd[0] == "git" and "rev-list" in cmd:
                 result.stdout = "1\n"
             elif cmd[0] == "git" and "symbolic-ref" in cmd:
                 result.stdout = "refs/remotes/origin/main\n"
+            elif cmd[0] == "git" and "worktree" in cmd and "add" in cmd:
+                call_order.append("worktree_create")
+                result.stdout = ""
             elif cmd[0] == "gh" and "pr" in cmd and "create" in cmd:
                 result.stdout = "https://github.com/test/repo/pull/1\n"
             else:
@@ -287,17 +358,27 @@ class TestPipelineSkillInjection:
 
         mock.side_effect = side_effect
 
+        def mock_inject_fn(source: Path, worktree: Path, **kwargs: object) -> list[str]:
+            call_order.append("skill_injection")
+            return ["test-skill"]
+
         with (
             patch("action_harness.pipeline.subprocess.run", mock),
             patch("action_harness.worker.subprocess.run", mock),
             patch("action_harness.evaluator.subprocess.run", mock),
             patch("action_harness.pr.subprocess.run", mock),
             patch("action_harness.worktree.subprocess.run", mock),
-            patch("action_harness.protection.load_protected_patterns", return_value=[]),
             patch(
-                "action_harness.pipeline.inject_skills", return_value=["test-skill"]
+                "action_harness.protection.load_protected_patterns",
+                return_value=[],
+            ),
+            patch(
+                "action_harness.pipeline.inject_skills",
+                side_effect=mock_inject_fn,
             ) as mock_inject,
-            patch("action_harness.pipeline.resolve_harness_skills_dir") as mock_resolve,
+            patch(
+                "action_harness.pipeline.resolve_harness_skills_dir",
+            ) as mock_resolve,
         ):
             mock_resolve.return_value = tmp_path / "fake-skills"
             run_pipeline(
@@ -309,9 +390,20 @@ class TestPipelineSkillInjection:
                 prompt="Test prompt",
             )
 
+        # Verify inject_skills was called
         mock_inject.assert_called_once()
         call_args = mock_inject.call_args
-        # First positional arg is the source dir
         assert call_args[0][0] == tmp_path / "fake-skills"
-        # Second positional arg is the worktree path (a Path object)
-        assert isinstance(call_args[0][1], Path)
+        # Second arg is the worktree path — verify it's under the repo
+        worktree_arg = call_args[0][1]
+        assert isinstance(worktree_arg, Path)
+        assert "harness" in str(worktree_arg) or "test-change" in str(worktree_arg)
+
+        # Verify ordering: worktree created before skills injected,
+        # skills injected before worker dispatched
+        wt_idx = call_order.index("worktree_create")
+        sk_idx = call_order.index("skill_injection")
+        wd_idx = call_order.index("worker_dispatch")
+        assert wt_idx < sk_idx < wd_idx, (
+            f"Expected worktree < injection < dispatch, got: {call_order}"
+        )

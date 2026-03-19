@@ -17,6 +17,8 @@ def resolve_harness_skills_dir() -> Path:
     Falls back to importlib.resources for installed-as-package support.
     """
     current = Path(__file__).resolve().parent
+    # Cap at 10 levels — sufficient for any reasonable repo layout
+    # (src/action_harness/ is typically 2–3 levels deep).
     for _ in range(10):
         candidate = current / ".claude" / "skills"
         if candidate.is_dir():
@@ -84,7 +86,8 @@ def inject_skills(
 
     Skips any skill directory that already exists in the target (target repo
     skills take precedence). Writes a .harness-injected marker listing
-    injected skill names.
+    injected skill names. Idempotent — safe to call multiple times on the
+    same worktree (existing dirs are skipped, gitignore deduplicates).
 
     Returns list of injected skill names. Returns empty list on errors
     (non-fatal — the worker can still run without skills).
@@ -138,7 +141,7 @@ def inject_skills(
     if injected:
         marker_path = target_skills_dir / INJECTED_MARKER
         gitignore_path = target_skills_dir / ".gitignore"
-        gitignore_entries = [INJECTED_MARKER] + injected
+        gitignore_entries = [INJECTED_MARKER] + [f"{s}/" for s in injected]
         try:
             marker_path.write_text(
                 "\n".join(injected) + "\n",
@@ -148,27 +151,26 @@ def inject_skills(
             if not gitignore_path.exists():
                 gitignore_path.write_text(
                     "# Harness-injected skills — do not commit\n"
-                    + "\n".join(f"{e}/" if e != INJECTED_MARKER else e for e in gitignore_entries)
+                    + "\n".join(gitignore_entries)
                     + "\n",
                     encoding="utf-8",
                 )
             else:
-                # Append our entries to existing .gitignore
+                # Append entries not already present (line-by-line to
+                # avoid substring false positives like "foo/" matching
+                # "foobar/").
                 existing = gitignore_path.read_text(encoding="utf-8")
-                new_entries = [
-                    e
-                    for e in gitignore_entries
-                    if (f"{e}/" if e != INJECTED_MARKER else e) not in existing
-                ]
+                existing_lines = set(existing.splitlines())
+                new_entries = [e for e in gitignore_entries if e not in existing_lines]
                 if new_entries:
                     gitignore_path.write_text(
                         existing.rstrip("\n")
                         + "\n# Harness-injected skills — do not commit\n"
-                        + "\n".join(f"{e}/" if e != INJECTED_MARKER else e for e in new_entries)
+                        + "\n".join(new_entries)
                         + "\n",
                         encoding="utf-8",
                     )
-        except OSError as exc:
+        except (OSError, UnicodeDecodeError) as exc:
             typer.echo(
                 f"[skills] warning: could not write marker/gitignore: {exc}",
                 err=True,

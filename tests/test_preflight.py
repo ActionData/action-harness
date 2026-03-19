@@ -13,59 +13,64 @@ from action_harness.preflight import (
     run_preflight,
 )
 
+_GIT_TIMEOUT = 120
+
+
+def _init_git_repo(path: Path) -> None:
+    """Initialize a git repo with an initial commit."""
+    run = subprocess.run
+    run(["git", "init"], cwd=path, capture_output=True, check=True, timeout=_GIT_TIMEOUT)
+    run(
+        ["git", "config", "user.email", "t@t.com"],
+        cwd=path,
+        capture_output=True,
+        check=True,
+        timeout=_GIT_TIMEOUT,
+    )
+    run(
+        ["git", "config", "user.name", "T"],
+        cwd=path,
+        capture_output=True,
+        check=True,
+        timeout=_GIT_TIMEOUT,
+    )
+    (path / "f.txt").write_text("x")
+    run(["git", "add", "."], cwd=path, capture_output=True, check=True, timeout=_GIT_TIMEOUT)
+    run(
+        ["git", "commit", "-m", "init"],
+        cwd=path,
+        capture_output=True,
+        check=True,
+        timeout=_GIT_TIMEOUT,
+    )
+
+
+def _init_test_repo(tmp_path: Path) -> Path:
+    """Create a test repo with pyproject.toml, src/, and an OpenSpec change."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "pyproject.toml").write_text('[project]\nname = "test"\nversion = "0.1.0"\n')
+    change_dir = repo / "openspec" / "changes" / "test-change"
+    change_dir.mkdir(parents=True)
+    (change_dir / "tasks.md").write_text("- [ ] 1.1 Add feature\n")
+    (repo / "src").mkdir()
+    _init_git_repo(repo)
+    return repo
+
+
 # --- check_worktree_clean ---
 
 
 def test_worktree_clean_returns_true_on_clean(tmp_path: Path) -> None:
     """Clean worktree passes the check."""
-    subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
-    subprocess.run(
-        ["git", "config", "user.email", "t@t.com"],
-        cwd=tmp_path,
-        capture_output=True,
-        check=True,
-    )
-    subprocess.run(
-        ["git", "config", "user.name", "T"],
-        cwd=tmp_path,
-        capture_output=True,
-        check=True,
-    )
-    (tmp_path / "f.txt").write_text("x")
-    subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
-    subprocess.run(
-        ["git", "commit", "-m", "init"],
-        cwd=tmp_path,
-        capture_output=True,
-        check=True,
-    )
+    _init_git_repo(tmp_path)
     result = check_worktree_clean(tmp_path)
     assert result is True
 
 
 def test_worktree_clean_returns_false_on_dirty(tmp_path: Path) -> None:
     """Dirty worktree fails the check."""
-    subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
-    subprocess.run(
-        ["git", "config", "user.email", "t@t.com"],
-        cwd=tmp_path,
-        capture_output=True,
-        check=True,
-    )
-    subprocess.run(
-        ["git", "config", "user.name", "T"],
-        cwd=tmp_path,
-        capture_output=True,
-        check=True,
-    )
-    (tmp_path / "f.txt").write_text("x")
-    subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
-    subprocess.run(
-        ["git", "commit", "-m", "init"],
-        cwd=tmp_path,
-        capture_output=True,
-        check=True,
-    )
+    _init_git_repo(tmp_path)
     # Create uncommitted change
     (tmp_path / "dirty.txt").write_text("dirty")
     result = check_worktree_clean(tmp_path)
@@ -75,6 +80,16 @@ def test_worktree_clean_returns_false_on_dirty(tmp_path: Path) -> None:
 def test_worktree_clean_handles_subprocess_error() -> None:
     """Returns False when git status fails."""
     with patch("action_harness.preflight.subprocess.run", side_effect=OSError("no git")):
+        result = check_worktree_clean(Path("/nonexistent"))
+    assert result is False
+
+
+def test_worktree_clean_returns_false_on_nonzero_exit() -> None:
+    """Returns False when git status returns a non-zero exit code."""
+    mock_result = MagicMock()
+    mock_result.returncode = 128
+    mock_result.stderr = "fatal: not a git repository"
+    with patch("action_harness.preflight.subprocess.run", return_value=mock_result):
         result = check_worktree_clean(Path("/nonexistent"))
     assert result is False
 
@@ -247,22 +262,10 @@ def test_prerequisites_returns_true_when_no_change_dir(tmp_path: Path) -> None:
 def test_run_preflight_all_pass(tmp_path: Path) -> None:
     """All checks passing returns success."""
     with (
-        patch(
-            "action_harness.preflight.check_worktree_clean",
-            return_value=True,
-        ),
-        patch(
-            "action_harness.preflight.check_git_remote",
-            return_value=True,
-        ),
-        patch(
-            "action_harness.preflight.check_eval_tools",
-            return_value=(True, []),
-        ),
-        patch(
-            "action_harness.preflight.check_prerequisites",
-            return_value=True,
-        ),
+        patch("action_harness.preflight.check_worktree_clean", return_value=True),
+        patch("action_harness.preflight.check_git_remote", return_value=True),
+        patch("action_harness.preflight.check_eval_tools", return_value=(True, [])),
+        patch("action_harness.preflight.check_prerequisites", return_value=True),
     ):
         result = run_preflight(
             worktree_path=tmp_path,
@@ -283,22 +286,10 @@ def test_run_preflight_all_pass(tmp_path: Path) -> None:
 def test_run_preflight_failure_reports_failed_checks(tmp_path: Path) -> None:
     """Failed checks are reported in the result."""
     with (
-        patch(
-            "action_harness.preflight.check_worktree_clean",
-            return_value=True,
-        ),
-        patch(
-            "action_harness.preflight.check_git_remote",
-            return_value=False,
-        ),
-        patch(
-            "action_harness.preflight.check_eval_tools",
-            return_value=(False, ["npm"]),
-        ),
-        patch(
-            "action_harness.preflight.check_prerequisites",
-            return_value=True,
-        ),
+        patch("action_harness.preflight.check_worktree_clean", return_value=True),
+        patch("action_harness.preflight.check_git_remote", return_value=False),
+        patch("action_harness.preflight.check_eval_tools", return_value=(False, ["npm"])),
+        patch("action_harness.preflight.check_prerequisites", return_value=True),
     ):
         result = run_preflight(
             worktree_path=tmp_path,
@@ -318,21 +309,10 @@ def test_run_preflight_failure_reports_failed_checks(tmp_path: Path) -> None:
 def test_run_preflight_skips_prerequisites_in_prompt_mode(tmp_path: Path) -> None:
     """Prerequisites check is skipped when change_name is None (prompt mode)."""
     with (
-        patch(
-            "action_harness.preflight.check_worktree_clean",
-            return_value=True,
-        ),
-        patch(
-            "action_harness.preflight.check_git_remote",
-            return_value=True,
-        ),
-        patch(
-            "action_harness.preflight.check_eval_tools",
-            return_value=(True, []),
-        ),
-        patch(
-            "action_harness.preflight.check_prerequisites",
-        ) as mock_prereqs,
+        patch("action_harness.preflight.check_worktree_clean", return_value=True),
+        patch("action_harness.preflight.check_git_remote", return_value=True),
+        patch("action_harness.preflight.check_eval_tools", return_value=(True, [])),
+        patch("action_harness.preflight.check_prerequisites") as mock_prereqs,
     ):
         result = run_preflight(
             worktree_path=tmp_path,
@@ -350,36 +330,11 @@ def test_run_preflight_skips_prerequisites_in_prompt_mode(tmp_path: Path) -> Non
 
 
 def test_preflight_failure_prevents_worker_dispatch(tmp_path: Path) -> None:
-    """When preflight fails, worker dispatch should not be called."""
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    subprocess.run(["git", "init"], cwd=repo, capture_output=True, check=True)
-    subprocess.run(
-        ["git", "config", "user.email", "t@t.com"],
-        cwd=repo,
-        capture_output=True,
-        check=True,
-    )
-    subprocess.run(
-        ["git", "config", "user.name", "T"],
-        cwd=repo,
-        capture_output=True,
-        check=True,
-    )
-    (repo / "pyproject.toml").write_text('[project]\nname = "test"\nversion = "0.1.0"\n')
+    """When preflight fails, worker dispatch should not be called.
 
-    change_dir = repo / "openspec" / "changes" / "test-change"
-    change_dir.mkdir(parents=True)
-    (change_dir / "tasks.md").write_text("- [ ] 1.1 Add feature\n")
-
-    (repo / "src").mkdir()
-    subprocess.run(["git", "add", "."], cwd=repo, capture_output=True, check=True)
-    subprocess.run(
-        ["git", "commit", "-m", "init"],
-        cwd=repo,
-        capture_output=True,
-        check=True,
-    )
+    Also verifies the PreflightResult is recorded in the manifest stages.
+    """
+    repo = _init_test_repo(tmp_path)
 
     failed_preflight = PreflightResult(
         success=False,
@@ -404,39 +359,15 @@ def test_preflight_failure_prevents_worker_dispatch(tmp_path: Path) -> None:
     assert pr_result.success is False
     assert "Preflight failed" in (pr_result.error or "")
     mock_worker.assert_not_called()
+    # Verify PreflightResult is in stages list
+    preflight_stages = [s for s in manifest.stages if isinstance(s, PreflightResult)]
+    assert len(preflight_stages) == 1
+    assert preflight_stages[0].success is False
 
 
 def test_skip_preflight_bypasses_checks(tmp_path: Path) -> None:
     """When skip_preflight=True, preflight is not run."""
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    subprocess.run(["git", "init"], cwd=repo, capture_output=True, check=True)
-    subprocess.run(
-        ["git", "config", "user.email", "t@t.com"],
-        cwd=repo,
-        capture_output=True,
-        check=True,
-    )
-    subprocess.run(
-        ["git", "config", "user.name", "T"],
-        cwd=repo,
-        capture_output=True,
-        check=True,
-    )
-    (repo / "pyproject.toml").write_text('[project]\nname = "test"\nversion = "0.1.0"\n')
-
-    change_dir = repo / "openspec" / "changes" / "test-change"
-    change_dir.mkdir(parents=True)
-    (change_dir / "tasks.md").write_text("- [ ] 1.1 Add feature\n")
-
-    (repo / "src").mkdir()
-    subprocess.run(["git", "add", "."], cwd=repo, capture_output=True, check=True)
-    subprocess.run(
-        ["git", "commit", "-m", "init"],
-        cwd=repo,
-        capture_output=True,
-        check=True,
-    )
+    repo = _init_test_repo(tmp_path)
 
     with (
         patch("action_harness.pipeline.run_preflight") as mock_preflight,
@@ -464,3 +395,84 @@ def test_skip_preflight_bypasses_checks(tmp_path: Path) -> None:
         )
 
     mock_preflight.assert_not_called()
+
+
+def test_checkpoint_resume_skips_preflight(tmp_path: Path) -> None:
+    """On checkpoint resume, preflight should be skipped."""
+    from action_harness.models import PipelineCheckpoint
+
+    repo = _init_test_repo(tmp_path)
+
+    # Create a fake worktree dir for the checkpoint to reference
+    wt_path = tmp_path / "worktree"
+    wt_path.mkdir()
+    _init_git_repo(wt_path)
+
+    checkpoint = PipelineCheckpoint(
+        run_id="test-run",
+        change_name="test-change",
+        repo_path=str(repo.resolve()),
+        completed_stage="worktree",
+        worktree_path=str(wt_path),
+        branch="harness/test-change",
+        timestamp="2026-01-01T00:00:00+00:00",
+    )
+
+    with (
+        patch("action_harness.pipeline.run_preflight") as mock_preflight,
+        patch("action_harness.pipeline.dispatch_worker") as mock_worker,
+        patch("action_harness.pipeline.run_eval"),
+        patch("action_harness.pipeline.create_pr"),
+        patch("action_harness.pipeline.cleanup_worktree"),
+    ):
+        mock_worker.return_value = WorkerResult(
+            success=False,
+            stage="worker",
+            error="mock failure",
+            duration_seconds=1.0,
+            commits_ahead=0,
+        )
+
+        from action_harness.pipeline import run_pipeline
+
+        run_pipeline(
+            change_name="test-change",
+            repo=repo,
+            max_retries=0,
+            checkpoint=checkpoint,
+        )
+
+    mock_preflight.assert_not_called()
+
+
+def test_prompt_mode_skips_prerequisite_check(tmp_path: Path) -> None:
+    """In prompt mode (change_name derived from slug), prerequisites are skipped."""
+    repo = _init_test_repo(tmp_path)
+
+    with (
+        patch("action_harness.preflight.check_worktree_clean", return_value=True),
+        patch("action_harness.preflight.check_git_remote", return_value=True),
+        patch("action_harness.preflight.check_eval_tools", return_value=(True, [])),
+        patch("action_harness.preflight.check_prerequisites") as mock_prereqs,
+        patch("action_harness.pipeline.dispatch_worker") as mock_worker,
+        patch("action_harness.pipeline.cleanup_worktree"),
+    ):
+        mock_worker.return_value = WorkerResult(
+            success=False,
+            stage="worker",
+            error="mock failure",
+            duration_seconds=1.0,
+            commits_ahead=0,
+        )
+
+        from action_harness.pipeline import run_pipeline
+
+        run_pipeline(
+            change_name="prompt-fix-bug",
+            repo=repo,
+            max_retries=0,
+            prompt="Fix the bug in auth module",
+        )
+
+    # Prerequisites check should not be called in prompt mode
+    mock_prereqs.assert_not_called()

@@ -108,12 +108,18 @@ def check_eval_tools(eval_commands: list[str]) -> tuple[bool, list[str]]:
     )
     seen: set[str] = set()
     missing: list[str] = []
+    skipped_count = 0
 
+    # Only checks the first token of each command — misses tools invoked via
+    # env/shell wrappers (e.g., `env FOO=bar pytest`). Sufficient for the
+    # common case; the eval stage catches wrapper issues at runtime.
     for cmd in eval_commands:
         try:
             tokens = shlex.split(cmd)
         except ValueError:
-            # Malformed command — skip rather than crash preflight
+            # Malformed command — skip rather than crash preflight.
+            # If ALL commands are malformed, we warn loudly below.
+            skipped_count += 1
             typer.echo(
                 f"[preflight] eval_tools: warning — could not parse command: {cmd}",
                 err=True,
@@ -128,6 +134,16 @@ def check_eval_tools(eval_commands: list[str]) -> tuple[bool, list[str]]:
 
         if shutil.which(tool) is None:
             missing.append(tool)
+
+    # If every command was unparseable, no tools were checked — warn loudly.
+    # Preflight still passes (vacuously) because the eval stage will surface
+    # the real error when it tries to run the commands.
+    if skipped_count > 0 and len(seen) == 0 and eval_commands:
+        typer.echo(
+            f"[preflight] eval_tools: warning — all {skipped_count} command(s) "
+            f"were unparseable, no tools verified",
+            err=True,
+        )
 
     if missing:
         typer.echo(
@@ -146,6 +162,11 @@ def check_prerequisites(change_name: str, repo_path: Path) -> bool:
     Reads prerequisites from the change's ``.openspec.yaml`` and checks
     each via ``is_prerequisite_satisfied()``. Returns True if all are met
     or if no prerequisites exist.
+
+    Note: reads from ``repo_path`` (the main checkout), not the worktree.
+    This is correct because preflight runs on freshly created worktrees
+    branched from HEAD of the default branch, so the main repo and worktree
+    have identical OpenSpec state at this point.
     """
     typer.echo(f"[preflight] checking prerequisites for '{change_name}'", err=True)
     change_dir = repo_path / "openspec" / "changes" / change_name
@@ -197,6 +218,11 @@ def run_preflight(
 
     Returns a ``PreflightResult`` with per-check pass/fail details.
     Overall success requires all checks to pass.
+
+    Design note: all checks run even after an early failure (no short-circuit).
+    This is intentional — the full check map in PreflightResult gives operators
+    a complete diagnostic picture in one pass rather than requiring re-runs
+    to discover each successive problem.
     """
     typer.echo("[preflight] starting pre-dispatch checks", err=True)
 

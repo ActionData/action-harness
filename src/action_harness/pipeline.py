@@ -561,6 +561,8 @@ def _run_pipeline_inner(
     # Pre-dispatch preflight checks.
     # Skip on checkpoint resume — preflight already passed on the original run,
     # and transient issues (e.g., git remote flake) should not kill a resumed pipeline.
+    # When preflight is skipped (flag or resume), no PreflightResult is added to
+    # stages. This is intentional — the manifest accurately reflects what ran.
     if skip_preflight:
         typer.echo("[pipeline] skipping preflight checks (--skip-preflight)", err=True)
     elif checkpoint is not None:
@@ -569,6 +571,10 @@ def _run_pipeline_inner(
         actual_eval_cmds = eval_commands or list(BOOTSTRAP_EVAL_COMMANDS)
         # In prompt mode, change_name is used as a label but there are no
         # OpenSpec artifacts — pass None to skip prerequisite checks.
+        # This is also correct for --issue mode: if the issue references an
+        # OpenSpec change, prompt is None and prerequisites are checked; if
+        # the issue falls back to prompt mode, prompt is set and prereqs are
+        # correctly skipped.
         preflight_change = None if prompt is not None else change_name
         preflight_result = run_preflight(
             worktree_path=worktree_path,
@@ -589,6 +595,10 @@ def _run_pipeline_inner(
                 f"[pipeline] preflight failed: {', '.join(preflight_result.failed_checks)}",
                 err=True,
             )
+            # cleanup_worktree removes the worktree dir but preserves the
+            # branch ref by default, consistent with other early-exit paths
+            # (eval failure, worker failure). The branch can be inspected or
+            # garbage-collected by `git worktree prune` / `harness clean`.
             cleanup_worktree(repo, worktree_path, branch, verbose=verbose)
             return PrResult(
                 success=False,

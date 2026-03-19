@@ -448,6 +448,9 @@ class TestCLILeadList:
             with patch(
                 "action_harness.lead_registry.derive_repo_name",
                 return_value="fake-repo",
+            ), patch(
+                "action_harness.repo.resolve_repo",
+                return_value=(Path("/tmp/fake"), "fake-repo"),
             ):
                 result = runner.invoke(
                     app,
@@ -476,6 +479,9 @@ class TestCLILeadRetire:
         with patch(
             "action_harness.lead_registry.derive_repo_name",
             return_value="fake-repo",
+        ), patch(
+            "action_harness.repo.resolve_repo",
+            return_value=(Path("/tmp/fake"), "fake-repo"),
         ):
             result = runner.invoke(
                 app,
@@ -498,6 +504,9 @@ class TestCLILeadRetire:
         with patch(
             "action_harness.lead_registry.derive_repo_name",
             return_value="fake-repo",
+        ), patch(
+            "action_harness.repo.resolve_repo",
+            return_value=(Path("/tmp/fake"), "fake-repo"),
         ):
             result = runner.invoke(
                 app,
@@ -523,6 +532,9 @@ class TestCLILeadRetire:
             with patch(
                 "action_harness.lead_registry.derive_repo_name",
                 return_value="fake-repo",
+            ), patch(
+                "action_harness.repo.resolve_repo",
+                return_value=(Path("/tmp/fake"), "fake-repo"),
             ):
                 result = runner.invoke(
                     app,

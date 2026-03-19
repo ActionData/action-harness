@@ -1557,7 +1557,7 @@ app.add_typer(lead_app, name="lead")
 @lead_app.callback(invoke_without_command=True)
 def lead_callback(
     ctx: typer.Context,
-    repo: Path | None = typer.Option(
+    repo: str | None = typer.Option(
         None,
         help="Path, GitHub shorthand (owner/repo), or URL (HTTPS/SSH) of the target repository",
     ),
@@ -1642,7 +1642,7 @@ def lead_callback(
 
 @lead_app.command(name="start")
 def lead_start(
-    repo: Path = typer.Option(
+    repo: str = typer.Option(
         ...,
         help="Path, GitHub shorthand (owner/repo), or URL (HTTPS/SSH) of the target repository",
     ),
@@ -1731,16 +1731,16 @@ def lead_start(
     resolved_home = _resolve_harness_home(harness_home)
 
     # Resolve repo: accepts local path, GitHub shorthand, HTTPS URL, or SSH URL
-    from action_harness.repo import resolve_repo as resolve_repo_source
+    from action_harness.repo import resolve_repo
 
     try:
-        repo, _repo_name = resolve_repo_source(str(repo), resolved_home)
+        resolved_repo, _repo_name = resolve_repo(repo, resolved_home)
     except ValidationError as e:
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(code=1) from None
 
     try:
-        _validate_common(repo)
+        _validate_common(resolved_repo)
     except ValidationError as e:
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(code=1) from None
@@ -1749,20 +1749,20 @@ def lead_start(
     # so we can distinguish first-start (--session-id) from resume (--resume).
     from action_harness.lead_registry import derive_repo_name, load_lead_state
 
-    pre_existing_repo_name = derive_repo_name(repo, resolved_home)
+    pre_existing_repo_name = derive_repo_name(resolved_repo, resolved_home)
     is_resume = load_lead_state(resolved_home, pre_existing_repo_name, name) is not None
 
     # Resolve or create the lead
     state = resolve_or_create_lead(
         harness_home=resolved_home,
-        repo_path=repo,
+        repo_path=resolved_repo,
         lead_name=name,
         purpose=purpose,
         provision_clone_flag=(name != "default"),
     )
 
     # Determine effective repo path: use clone if available
-    effective_repo = repo
+    effective_repo = resolved_repo
     if state.clone_path is not None and Path(state.clone_path).is_dir():
         effective_repo = Path(state.clone_path)
         typer.echo(f"[lead] using clone at {effective_repo}", err=True)
@@ -1944,9 +1944,9 @@ def lead_start(
 
 @lead_app.command(name="list")
 def lead_list(
-    repo: Path = typer.Option(
+    repo: str = typer.Option(
         ...,
-        help="Path to the target repository",
+        help="Path, GitHub shorthand (owner/repo), or URL (HTTPS/SSH) of the target repository",
     ),
     harness_home: Path | None = typer.Option(
         None,
@@ -1968,9 +1968,15 @@ def lead_list(
         is_lead_active,
         list_leads,
     )
+    from action_harness.repo import resolve_repo
 
     resolved_home = _resolve_harness_home(harness_home)
-    repo_name = derive_repo_name(repo.resolve(), resolved_home)
+    try:
+        resolved_repo, _repo_name = resolve_repo(repo, resolved_home)
+    except ValidationError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=1) from None
+    repo_name = derive_repo_name(resolved_repo, resolved_home)
     leads = list_leads(resolved_home, repo_name)
 
     if not leads:
@@ -1997,9 +2003,9 @@ def lead_list(
 @lead_app.command(name="retire")
 def lead_retire(
     name: str = typer.Argument(help="Name of the lead to retire"),
-    repo: Path = typer.Option(
+    repo: str = typer.Option(
         ...,
-        help="Path to the target repository",
+        help="Path, GitHub shorthand (owner/repo), or URL (HTTPS/SSH) of the target repository",
     ),
     harness_home: Path | None = typer.Option(
         None,
@@ -2022,9 +2028,15 @@ def lead_retire(
         lead_state_dir,
         load_lead_state,
     )
+    from action_harness.repo import resolve_repo
 
     resolved_home = _resolve_harness_home(harness_home)
-    repo_name = derive_repo_name(repo.resolve(), resolved_home)
+    try:
+        resolved_repo, _repo_name = resolve_repo(repo, resolved_home)
+    except ValidationError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=1) from None
+    repo_name = derive_repo_name(resolved_repo, resolved_home)
     state = load_lead_state(resolved_home, repo_name, name)
 
     if state is None:

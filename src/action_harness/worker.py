@@ -47,7 +47,8 @@ def read_harness_md(worktree_path: Path) -> str | None:
 def build_system_prompt(change_name: str | None = None, harness_md: str | None = None) -> str:
     """Build the system prompt for a Claude Code worker.
 
-    When change_name is provided, returns the OpenSpec-specific opsx-apply prompt.
+
+    When change_name is provided, returns the OpenSpec-specific action:opsx-apply prompt.
     When change_name is None, returns a generic implementation prompt for freeform tasks.
 
     When harness_md is provided (read from a HARNESS.md file in the target repo),
@@ -65,7 +66,8 @@ def build_system_prompt(change_name: str | None = None, harness_md: str | None =
     else:
         prompt = (
             f"You are implementing the OpenSpec change '{change_name}'. "
-            f"Run the opsx-apply skill to implement all tasks for this change. "
+
+            f"Run the action:opsx-apply skill to implement all tasks for this change. "
             f"Commit your work incrementally as you complete each task. "
             f"After implementation, exercise the feature you built and report "
             f"what you tested and observed."
@@ -183,10 +185,12 @@ def dispatch_worker(
             system_prompt = build_system_prompt(change_name=None, harness_md=harness_md)
             user_prompt = prompt
         else:
-            # OpenSpec change mode: opsx-apply system prompt
+
+            # OpenSpec change mode: action:opsx-apply system prompt
             system_prompt = build_system_prompt(change_name, harness_md=harness_md)
             user_prompt = (
-                f"Implement the OpenSpec change '{change_name}' using the opsx-apply skill."
+
+                f"Implement the OpenSpec change '{change_name}' using the action:opsx-apply skill."
             )
 
         # Inject catalog worker rules into the system prompt

@@ -563,11 +563,13 @@ def dispatch_lead_interactive(
         cmd.extend(["--session-id", session_id])
         typer.echo(f"[lead] session mode: new (session_id={session_id})", err=True)
 
-    # When the user explicitly provides a prompt, use it as-is.
-    # Otherwise, build a deterministic greeting from the gathered context.
+    # When resuming, the conversation history already contains the original
+    # greeting — don't re-send it. Only pass a prompt if the user explicitly
+    # provided one (new input for the resumed session).
+    is_resuming = resume and session_id is not None
     if prompt is not None and prompt.strip():
         cmd.insert(1, prompt)
-    else:
+    elif not is_resuming:
         greeting = build_greeting(context)
         cmd.insert(1, greeting)
 

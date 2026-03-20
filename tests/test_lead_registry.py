@@ -23,6 +23,7 @@ from action_harness.lead_registry import (
     release_lock,
     resolve_or_create_lead,
     save_lead_state,
+    sync_repo,
 )
 
 runner = CliRunner()
@@ -736,6 +737,74 @@ class TestResumeFallback:
 # ---------------------------------------------------------------------------
 # 5.12: Integration smoke test
 # ---------------------------------------------------------------------------
+
+
+class TestSyncRepo:
+    def test_clone_resets_to_origin(self, tmp_path: Path) -> None:
+        """Clone mode fetches and hard-resets to origin/default-branch."""
+        repo = tmp_path / "repo"
+        repo.mkdir()
+
+        fetch_called = False
+        reset_called = False
+        reset_target = None
+
+        def mock_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+            nonlocal fetch_called, reset_called, reset_target
+            if "fetch" in cmd:
+                fetch_called = True
+            if "symbolic-ref" in cmd:
+                return subprocess.CompletedProcess(
+                    cmd, 0, stdout="refs/remotes/origin/main\n"
+                )
+            if "reset" in cmd:
+                reset_called = True
+                reset_target = cmd[-1]
+            return subprocess.CompletedProcess(cmd, 0, stdout="")
+
+        with patch("action_harness.lead_registry.subprocess.run", side_effect=mock_run):
+            sync_repo(repo, is_clone=True)
+
+        assert fetch_called
+        assert reset_called
+        assert reset_target == "origin/main"
+
+    def test_user_repo_warns_when_behind(self, tmp_path: Path) -> None:
+        """User working tree fetches and warns if behind, but does not reset."""
+        repo = tmp_path / "repo"
+        repo.mkdir()
+
+        reset_called = False
+
+        def mock_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+            nonlocal reset_called
+            if "symbolic-ref" in cmd:
+                return subprocess.CompletedProcess(
+                    cmd, 0, stdout="refs/remotes/origin/main\n"
+                )
+            if "reset" in cmd:
+                reset_called = True
+            if "rev-list" in cmd:
+                return subprocess.CompletedProcess(cmd, 0, stdout="3\n")
+            return subprocess.CompletedProcess(cmd, 0, stdout="")
+
+        with patch("action_harness.lead_registry.subprocess.run", side_effect=mock_run):
+            sync_repo(repo, is_clone=False)
+
+        assert not reset_called  # Must not reset user's working tree
+
+    def test_fetch_failure_does_not_raise(self, tmp_path: Path) -> None:
+        """Fetch failure is logged but does not raise."""
+        repo = tmp_path / "repo"
+        repo.mkdir()
+
+        def mock_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+            if "fetch" in cmd:
+                return subprocess.CompletedProcess(cmd, 1, stderr="network error")
+            return subprocess.CompletedProcess(cmd, 0, stdout="")
+
+        with patch("action_harness.lead_registry.subprocess.run", side_effect=mock_run):
+            sync_repo(repo, is_clone=True)  # Should not raise
 
 
 class TestIntegrationSmoke:

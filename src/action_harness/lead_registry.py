@@ -374,3 +374,120 @@ def provision_clone(state: LeadState, harness_home: Path) -> Path:
         err=True,
     )
     return clone_dir
+
+
+# ---------------------------------------------------------------------------
+# Repo sync
+# ---------------------------------------------------------------------------
+
+
+def _get_default_branch(repo_path: Path) -> str | None:
+    """Return the default branch name (e.g., 'main') from origin HEAD, or None."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(repo_path), "symbolic-ref", "refs/remotes/origin/HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        if result.returncode == 0:
+            # refs/remotes/origin/main -> main
+            return result.stdout.strip().split("/")[-1]
+    except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
+        pass
+    return None
+
+
+def sync_repo(repo_path: Path, *, is_clone: bool) -> None:
+    """Fetch origin and update the working tree to the latest default branch.
+
+    For harness-owned clones (``is_clone=True``): hard-resets to
+    ``origin/<default-branch>`` so the clone always reflects remote HEAD.
+
+    For user working trees (``is_clone=False``): fetches only. Logs a
+    warning if the local branch is behind origin but does not modify
+    the working tree.
+
+    Never raises — sync failures are logged and must not block the lead.
+    """
+    typer.echo(f"[lead] syncing repo at {repo_path}", err=True)
+
+    # Fetch origin
+    try:
+        fetch_result = subprocess.run(
+            ["git", "-C", str(repo_path), "fetch", "origin"],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        if fetch_result.returncode != 0:
+            typer.echo(
+                f"[lead] warning: git fetch failed: {fetch_result.stderr.strip()[:200]}",
+                err=True,
+            )
+            return
+    except (FileNotFoundError, OSError, subprocess.TimeoutExpired) as exc:
+        typer.echo(f"[lead] warning: git fetch failed: {exc}", err=True)
+        return
+
+    default_branch = _get_default_branch(repo_path)
+    if default_branch is None:
+        typer.echo("[lead] warning: could not determine default branch", err=True)
+        return
+
+    if is_clone:
+        # Hard-reset clone to latest remote state
+        try:
+            reset_result = subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(repo_path),
+                    "reset",
+                    "--hard",
+                    f"origin/{default_branch}",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            if reset_result.returncode != 0:
+                typer.echo(
+                    f"[lead] warning: git reset failed: {reset_result.stderr.strip()[:200]}",
+                    err=True,
+                )
+            else:
+                typer.echo(
+                    f"[lead] synced clone to origin/{default_branch}",
+                    err=True,
+                )
+        except (FileNotFoundError, OSError, subprocess.TimeoutExpired) as exc:
+            typer.echo(f"[lead] warning: git reset failed: {exc}", err=True)
+    else:
+        # User working tree — just check if behind
+        try:
+            behind_result = subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(repo_path),
+                    "rev-list",
+                    "--count",
+                    f"HEAD..origin/{default_branch}",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            if behind_result.returncode == 0:
+                behind_count = int(behind_result.stdout.strip())
+                if behind_count > 0:
+                    typer.echo(
+                        f"[lead] warning: local branch is {behind_count} "
+                        f"commit(s) behind origin/{default_branch}",
+                        err=True,
+                    )
+                else:
+                    typer.echo(f"[lead] repo is up to date with origin/{default_branch}", err=True)
+        except (FileNotFoundError, OSError, subprocess.TimeoutExpired, ValueError):
+            pass

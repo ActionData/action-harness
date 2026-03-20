@@ -1711,7 +1711,6 @@ def lead_start(
         release_lock,
         resolve_or_create_lead,
         save_lead_state,
-        sync_repo,
     )
 
     # Detect if --interactive was explicitly provided via click context
@@ -1774,10 +1773,6 @@ def lead_start(
         )
 
     harness_agents_dir = resolve_harness_agents_dir()
-
-    # 0. Sync repo to latest remote state before gathering context
-    is_clone = state.clone_path is not None and effective_repo == Path(state.clone_path)
-    sync_repo(effective_repo, is_clone=is_clone)
 
     # 1. Gather context
     typer.echo("Gathering repo context...", err=True)

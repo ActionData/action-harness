@@ -202,10 +202,11 @@ def cleanup_worktree(
         )
 
     # Clean up the directory:
-    # - Temp dirs: parent has prefix "ah-", remove parent
+    # - Temp dirs: parent has prefix "ah-" (or legacy "action-harness-"), remove parent
     # - Harness-home workspace dirs: remove the worktree directory itself
     parent = worktree_path.parent
-    if parent.name.startswith("ah-") and parent.exists():
+    is_temp = parent.name.startswith("ah-") or parent.name.startswith("action-harness-")
+    if is_temp and parent.exists():
         shutil.rmtree(parent, ignore_errors=True)
     elif worktree_path.exists():
         shutil.rmtree(worktree_path, ignore_errors=True)

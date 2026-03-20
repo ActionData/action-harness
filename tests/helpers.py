@@ -37,5 +37,6 @@ def cleanup_worktrees(repo: Path) -> None:
                 )
                 # Clean up parent temp directory
                 parent = wt_path.parent
-                if parent.name.startswith("ah-") and parent.exists():
+                is_temp = parent.name.startswith("ah-") or parent.name.startswith("action-harness-")
+                if is_temp and parent.exists():
                     shutil.rmtree(parent, ignore_errors=True)

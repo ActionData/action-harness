@@ -11,7 +11,7 @@ INJECTED_MARKER = ".harness-injected"
 
 
 def resolve_harness_skills_dir() -> Path:
-    """Resolve the path to the harness's Claude Code skills directory.
+    """Resolve the path to the harness's plugin skills directory.
 
     Walks up from this file to find `skills/` in the plugin root.
     Falls back to importlib.resources for installed-as-package support.
@@ -84,7 +84,7 @@ def inject_skills(
     worktree_path: Path,
     verbose: bool = False,
 ) -> list[str]:
-    """Copy harness skills into a target worktree's .claude/skills/ directory.
+    """Copy harness plugin skills into a target worktree's .claude/skills/ directory.
 
     Skips any skill directory that already exists in the target (target repo
     skills take precedence). Writes a .harness-injected marker listing

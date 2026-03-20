@@ -410,7 +410,7 @@ def sync_repo(repo_path: Path, *, is_clone: bool) -> None:
 
     Never raises — sync failures are logged and must not block the lead.
     """
-    typer.echo(f"[lead] syncing repo at {repo_path}", err=True)
+    typer.echo(f"[lead-registry] sync_repo: syncing {repo_path}", err=True)
 
     # Fetch origin
     try:
@@ -422,17 +422,25 @@ def sync_repo(repo_path: Path, *, is_clone: bool) -> None:
         )
         if fetch_result.returncode != 0:
             typer.echo(
-                f"[lead] warning: git fetch failed: {fetch_result.stderr.strip()[:200]}",
+                f"[lead-registry] sync_repo: warning: git fetch failed: "
+                f"{fetch_result.stderr.strip()[:200]}",
                 err=True,
             )
             return
     except (FileNotFoundError, OSError, subprocess.TimeoutExpired) as exc:
-        typer.echo(f"[lead] warning: git fetch failed: {exc}", err=True)
+        typer.echo(
+            f"[lead-registry] sync_repo: warning: git fetch failed: {exc}",
+            err=True,
+        )
         return
 
     default_branch = _get_default_branch(repo_path)
     if default_branch is None:
-        typer.echo("[lead] warning: could not determine default branch", err=True)
+        typer.echo(
+            "[lead-registry] sync_repo: warning: could not determine default branch "
+            "(try: git remote set-head origin --auto)",
+            err=True,
+        )
         return
 
     if is_clone:
@@ -453,16 +461,20 @@ def sync_repo(repo_path: Path, *, is_clone: bool) -> None:
             )
             if reset_result.returncode != 0:
                 typer.echo(
-                    f"[lead] warning: git reset failed: {reset_result.stderr.strip()[:200]}",
+                    f"[lead-registry] sync_repo: warning: git reset failed: "
+                    f"{reset_result.stderr.strip()[:200]}",
                     err=True,
                 )
             else:
                 typer.echo(
-                    f"[lead] synced clone to origin/{default_branch}",
+                    f"[lead-registry] sync_repo: synced clone to origin/{default_branch}",
                     err=True,
                 )
         except (FileNotFoundError, OSError, subprocess.TimeoutExpired) as exc:
-            typer.echo(f"[lead] warning: git reset failed: {exc}", err=True)
+            typer.echo(
+                f"[lead-registry] sync_repo: warning: git reset failed: {exc}",
+                err=True,
+            )
     else:
         # User working tree — just check if behind
         try:
@@ -483,11 +495,17 @@ def sync_repo(repo_path: Path, *, is_clone: bool) -> None:
                 behind_count = int(behind_result.stdout.strip())
                 if behind_count > 0:
                     typer.echo(
-                        f"[lead] warning: local branch is {behind_count} "
-                        f"commit(s) behind origin/{default_branch}",
+                        f"[lead-registry] sync_repo: warning: local branch is "
+                        f"{behind_count} commit(s) behind origin/{default_branch}",
                         err=True,
                     )
                 else:
-                    typer.echo(f"[lead] repo is up to date with origin/{default_branch}", err=True)
-        except (FileNotFoundError, OSError, subprocess.TimeoutExpired, ValueError):
-            pass
+                    typer.echo(
+                        f"[lead-registry] sync_repo: up to date with origin/{default_branch}",
+                        err=True,
+                    )
+        except (FileNotFoundError, OSError, subprocess.TimeoutExpired, ValueError) as exc:
+            typer.echo(
+                f"[lead-registry] sync_repo: warning: behind-check failed: {exc}",
+                err=True,
+            )

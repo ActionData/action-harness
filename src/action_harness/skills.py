@@ -20,6 +20,11 @@ def resolve_harness_skills_dir() -> Path:
     # Cap at 10 levels — sufficient for any reasonable repo layout
     # (src/action_harness/ is typically 2–3 levels deep).
     for _ in range(10):
+        # NOTE: "skills/" is a generic name — the walk-up could match a
+        # non-harness skills/ dir if this file lives inside a nested repo.
+        # In practice, the walk starts from src/action_harness/ (2 levels
+        # deep) and hits the repo-root skills/ before escaping. If this
+        # becomes a problem, add a sentinel check (e.g., .claude-plugin/).
         candidate = current / "skills"
         # Require .claude-plugin/plugin.json as a marker to avoid false
         # positives from incidental skills/ directories in parent paths.

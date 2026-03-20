@@ -25,7 +25,7 @@ When retrying after an eval failure, the harness SHALL use `--resume <session_id
 
 #### Scenario: Eval retry with resume
 - **WHEN** eval fails and the prior `WorkerResult` has a `session_id` and context usage is below 60%
-- **THEN** the retry dispatch SHALL include `--resume <session_id>` and the user prompt SHALL be the eval feedback only (not the full opsx:apply instruction)
+- **THEN** the retry dispatch SHALL include `--resume <session_id>` and the user prompt SHALL be the eval feedback only (not the full opsx-apply instruction)
 
 #### Scenario: Eval retry without resume (context exhausted)
 - **WHEN** eval fails and the prior dispatch used more than 60% of the context window

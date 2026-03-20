@@ -1,0 +1,4 @@
+{
+  "name": "action",
+  "description": "Action-harness: self-hosting pipeline for Claude Code workers. Provides OpenSpec workflow skills, dispatch skills, and repo assessment tools."
+}

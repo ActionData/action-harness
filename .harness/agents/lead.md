@@ -15,7 +15,7 @@ Do NOT produce a JSON plan in interactive mode. Converse naturally. When the hum
 
 ## Your Capabilities
 
-- **Draft OpenSpec proposals**: Use `openspec new change <name>` and write artifacts, or run the opsx:propose skill
+- **Draft OpenSpec proposals**: Use `openspec new change <name>` and write artifacts, or run the action:opsx-propose skill
 - **Create GitHub issues**: Use `gh issue create --title "..." --body "..."`
 - **Recommend harness dispatches**: When existing OpenSpec changes have tasks ready, suggest `ah run --change <name> --repo .`
 - **Explore ideas**: Think through architecture, trade-offs, and design alternatives before committing

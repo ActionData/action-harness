@@ -491,6 +491,61 @@ class TestDispatchLeadInteractive:
         assert "my-repo" in cmd[1]
         assert "feature-a" in cmd[1]
 
+    def test_resume_skips_greeting(self, tmp_path: Path) -> None:
+        """Resuming a session does not re-send the greeting as a positional arg."""
+        repo_path = tmp_path / "repo"
+        repo_path.mkdir()
+        agents_dir = tmp_path / "agents"
+        agents_dir.mkdir()
+        (agents_dir / "lead.md").write_text("---\nname: lead\n---\nPersona")
+        ctx = LeadContext(
+            full_text="ctx",
+            repo_name="my-repo",
+            active_changes=["feature-a"],
+        )
+
+        with patch("action_harness.lead.subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 0
+            dispatch_lead_interactive(
+                repo_path=repo_path,
+                prompt=None,
+                context=ctx,
+                harness_agents_dir=agents_dir,
+                session_id="abc123",
+                resume=True,
+            )
+
+        cmd = mock_run.call_args[0][0]
+        assert cmd[0] == "claude"
+        # No positional prompt/greeting — resumed session already has it
+        assert cmd[1] == "--system-prompt"
+        assert "--resume" in cmd
+        assert "abc123" in cmd
+
+    def test_resume_with_explicit_prompt_passes_it(self, tmp_path: Path) -> None:
+        """Resuming with an explicit user prompt still passes it."""
+        repo_path = tmp_path / "repo"
+        repo_path.mkdir()
+        agents_dir = tmp_path / "agents"
+        agents_dir.mkdir()
+        (agents_dir / "lead.md").write_text("---\nname: lead\n---\nPersona")
+        ctx = LeadContext(full_text="ctx", repo_name="my-repo")
+
+        with patch("action_harness.lead.subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 0
+            dispatch_lead_interactive(
+                repo_path=repo_path,
+                prompt="Focus on tests",
+                context=ctx,
+                harness_agents_dir=agents_dir,
+                session_id="abc123",
+                resume=True,
+            )
+
+        cmd = mock_run.call_args[0][0]
+        assert cmd[1] == "Focus on tests"
+        assert "--resume" in cmd
+
 
 # ---------------------------------------------------------------------------
 # Greeting builder tests

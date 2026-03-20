@@ -208,7 +208,7 @@ def run(
 
     Provide exactly one of `--change`, `--prompt`, or `--issue`:
 
-    - `--change NAME` implements an OpenSpec change via opsx:apply. The change
+    - `--change NAME` implements an OpenSpec change via opsx-apply. The change
       must exist at REPO/openspec/changes/NAME/.
     - `--prompt TEXT` sends a freeform task description directly to the worker.
       No OpenSpec artifacts are needed. The pipeline skips the OpenSpec review
@@ -1573,7 +1573,7 @@ def lead_callback(
         help="Auto-dispatch recommended changes via harness run (implies --no-interactive)",
     ),
     permission_mode: str = typer.Option(
-        "default",
+        "bypassPermissions",
         "--permission-mode",
         help="Claude Code permission mode (default, plan, bypassPermissions)",
     ),
@@ -1658,7 +1658,7 @@ def lead_start(
         help="Auto-dispatch recommended changes via harness run (implies --no-interactive)",
     ),
     permission_mode: str = typer.Option(
-        "default",
+        "bypassPermissions",
         "--permission-mode",
         help="Claude Code permission mode (default, plan, bypassPermissions)",
     ),
@@ -1711,6 +1711,7 @@ def lead_start(
         release_lock,
         resolve_or_create_lead,
         save_lead_state,
+        sync_repo,
     )
 
     # Detect if --interactive was explicitly provided via click context
@@ -1773,6 +1774,10 @@ def lead_start(
         )
 
     harness_agents_dir = resolve_harness_agents_dir()
+
+    # 0. Sync repo to latest remote state before gathering context
+    is_clone = state.clone_path is not None and effective_repo == Path(state.clone_path)
+    sync_repo(effective_repo, is_clone=is_clone)
 
     # 1. Gather context
     typer.echo("Gathering repo context...", err=True)

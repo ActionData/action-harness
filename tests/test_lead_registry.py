@@ -23,6 +23,7 @@ from action_harness.lead_registry import (
     release_lock,
     resolve_or_create_lead,
     save_lead_state,
+    sync_repo,
 )
 
 runner = CliRunner()
@@ -736,6 +737,79 @@ class TestResumeFallback:
 # ---------------------------------------------------------------------------
 # 5.12: Integration smoke test
 # ---------------------------------------------------------------------------
+
+
+class TestSyncRepo:
+    def test_clone_resets_to_origin(self, tmp_path: Path, capsys: object) -> None:
+        """Clone mode fetches and hard-resets to origin/default-branch."""
+        repo = tmp_path / "repo"
+        repo.mkdir()
+
+        fetch_called = False
+        reset_cmd: list[str] = []
+
+        def mock_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+            nonlocal fetch_called, reset_cmd
+            if "fetch" in cmd:
+                fetch_called = True
+            if "symbolic-ref" in cmd:
+                return subprocess.CompletedProcess(cmd, 0, stdout="refs/remotes/origin/main\n")
+            if "reset" in cmd:
+                reset_cmd = list(cmd)
+            return subprocess.CompletedProcess(cmd, 0, stdout="")
+
+        with patch("action_harness.lead_registry.subprocess.run", side_effect=mock_run):
+            sync_repo(repo, is_clone=True)
+
+        assert fetch_called
+        assert "--hard" in reset_cmd
+        assert reset_cmd[-1] == "origin/main"
+
+    def test_user_repo_warns_when_behind(self, tmp_path: Path, capsys: object) -> None:
+        """User working tree fetches and warns if behind, but does not reset."""
+        repo = tmp_path / "repo"
+        repo.mkdir()
+
+        reset_called = False
+
+        def mock_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+            nonlocal reset_called
+            if "symbolic-ref" in cmd:
+                return subprocess.CompletedProcess(cmd, 0, stdout="refs/remotes/origin/main\n")
+            if "reset" in cmd:
+                reset_called = True
+            if "rev-list" in cmd:
+                return subprocess.CompletedProcess(cmd, 0, stdout="3\n")
+            return subprocess.CompletedProcess(cmd, 0, stdout="")
+
+        with patch("action_harness.lead_registry.subprocess.run", side_effect=mock_run):
+            sync_repo(repo, is_clone=False)
+
+        assert not reset_called  # Must not reset user's working tree
+        captured = capsys.readouterr()  # type: ignore[union-attr]
+        assert "3 commit(s) behind origin/main" in captured.err
+
+    def test_fetch_failure_does_not_raise(self, tmp_path: Path, capsys: object) -> None:
+        """Fetch failure is logged and no further git commands are executed."""
+        repo = tmp_path / "repo"
+        repo.mkdir()
+
+        commands_after_fetch: list[str] = []
+
+        def mock_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+            if "fetch" in cmd:
+                return subprocess.CompletedProcess(cmd, 1, stderr="network error")
+            # Track any command called after fetch
+            commands_after_fetch.append(" ".join(cmd))
+            return subprocess.CompletedProcess(cmd, 0, stdout="")
+
+        with patch("action_harness.lead_registry.subprocess.run", side_effect=mock_run):
+            sync_repo(repo, is_clone=True)  # Should not raise
+
+        assert not commands_after_fetch  # No further git commands after fetch failure
+        captured = capsys.readouterr()  # type: ignore[union-attr]
+        assert "git fetch failed" in captured.err
+        assert "network error" in captured.err
 
 
 class TestIntegrationSmoke:

@@ -67,6 +67,10 @@ Priority order. Each is an OpenSpec change the harness implements on itself.
 - `flow-templates` — Declarative YAML pipeline definitions for different task shapes.
 - `stage-hooks` — Pre/post hooks on pipeline stages for observability and custom logic.
 - `deduplicate-run-stats` — Consolidate duplicate run stat computation in lead context gathering.
+- `repo-onboarding` — Idempotent onboarding flow for target repos: openspec init, HARNESS.md scaffold with profiler-detected eval commands, config.yaml registration. Two entry points: explicit `harness onboard` command and lead auto-detection.
+- `lead-sync-status` — Statusline indicator showing when local repo is behind origin, plus `/sync` command to pull latest. Keeps lead sessions current without restarting.
+- `persistent-lead` — Tmux-backed lead sessions that survive terminal disconnects. Lifecycle commands: start, stop, attach, reset, status. `--no-detach` fallback for current behavior.
+- `cost-tracking` — Track and report API costs per pipeline run.
 
 ### Up next
 

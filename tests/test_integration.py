@@ -40,7 +40,7 @@ def _approved_review_result() -> OpenSpecReviewResult:
 def test_repo(tmp_path: Path) -> Generator[Path]:
     """Create a temporary git repo with pyproject.toml, a test, and an OpenSpec change.
 
-    Cleans up any worktrees created in /tmp/action-harness-* after the test.
+    Cleans up any worktrees created in /tmp/ah-* after the test.
     """
     repo = tmp_path / "repo"
     repo.mkdir()

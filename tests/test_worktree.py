@@ -14,7 +14,7 @@ from action_harness.worktree import cleanup_worktree, create_worktree
 def git_repo(tmp_path: Path) -> Generator[Path]:
     """Create a real git repo with an initial commit.
 
-    Cleans up any worktrees created in /tmp/action-harness-* after the test.
+    Cleans up any worktrees created in /tmp/ah-* after the test.
     """
     subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
     subprocess.run(
@@ -121,7 +121,7 @@ class TestCreateWorktree:
         assert result.worktree_path == workspace_dir
         assert workspace_dir.exists()
         # Should NOT be in /tmp
-        assert "/tmp" not in str(workspace_dir) or "action-harness-" not in str(workspace_dir)
+        assert "/tmp" not in str(workspace_dir) or "ah-" not in str(workspace_dir)
 
         # Verify it's actually a worktree
         check = subprocess.run(

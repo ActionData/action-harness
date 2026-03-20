@@ -9,7 +9,7 @@ def cleanup_worktrees(repo: Path) -> None:
     """Remove all worktrees registered with a repo and their temp directories.
 
     Prunes stale metadata, then force-removes each non-main worktree and its
-    parent directory if it's an action-harness-* temp dir.
+    parent directory if it's an ah-* temp dir.
     """
     subprocess.run(
         ["git", "worktree", "prune"],
@@ -37,5 +37,6 @@ def cleanup_worktrees(repo: Path) -> None:
                 )
                 # Clean up parent temp directory
                 parent = wt_path.parent
-                if parent.name.startswith("action-harness-") and parent.exists():
+                is_temp = parent.name.startswith("ah-") or parent.name.startswith("action-harness-")
+                if is_temp and parent.exists():
                     shutil.rmtree(parent, ignore_errors=True)

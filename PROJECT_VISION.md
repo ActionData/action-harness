@@ -88,7 +88,7 @@ minimal blocking gates, fix forward.
 
 The minimum loop that can work on itself:
 
-1. **CLI intake** — `action-harness run --change <name> --repo <path>` accepts
+1. **CLI intake** — `ah run --change <name> --repo <path>` accepts
    an OpenSpec change name and a repo path.
 
 2. **Worktree isolation** — Create a git worktree with branch
@@ -189,7 +189,7 @@ abstractions when patterns repeat.
 ## Success criteria
 
 **Bootstrap is done when:**
-- `action-harness run --change <name> --repo .` creates a worktree, dispatches
+- `ah run --change <name> --repo .` creates a worktree, dispatches
   a code agent, runs eval, retries on failure, and opens a PR — on its own
   codebase.
 - A human can review and merge the PR.

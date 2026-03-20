@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [project.scripts]
-action-harness = "action_harness.cli:app"
+ah = "action_harness.cli:app"
 
 [dependency-groups]
 dev = [

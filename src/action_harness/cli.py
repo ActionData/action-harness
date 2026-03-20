@@ -1573,7 +1573,7 @@ def lead_callback(
         help="Auto-dispatch recommended changes via harness run (implies --no-interactive)",
     ),
     permission_mode: str = typer.Option(
-        "default",
+        "bypassPermissions",
         "--permission-mode",
         help="Claude Code permission mode (default, plan, bypassPermissions)",
     ),
@@ -1658,7 +1658,7 @@ def lead_start(
         help="Auto-dispatch recommended changes via harness run (implies --no-interactive)",
     ),
     permission_mode: str = typer.Option(
-        "default",
+        "bypassPermissions",
         "--permission-mode",
         help="Claude Code permission mode (default, plan, bypassPermissions)",
     ),

@@ -1,4 +1,4 @@
-"""CLI entrypoint for action-harness."""
+"""CLI entrypoint for ah."""
 
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ from action_harness.review_agents import TOLERANCE_THRESHOLD
 from action_harness.slugify import slugify_prompt
 
 app = typer.Typer(
-    name="action-harness",
+    name="ah",
     add_completion=False,
     rich_markup_mode="markdown",
 )
@@ -35,7 +35,7 @@ app = typer.Typer(
 
 def _version_callback(value: bool) -> None:
     if value:
-        typer.echo(f"action-harness {__version__}")
+        typer.echo(f"ah {__version__}")
         raise typer.Exit()
 
 
@@ -204,7 +204,7 @@ def run(
         False, "--dry-run", help="Validate and print plan without executing"
     ),
 ) -> None:
-    """Run the action-harness pipeline from an OpenSpec change, freeform prompt, or GitHub issue.
+    """Run the ah pipeline from an OpenSpec change, freeform prompt, or GitHub issue.
 
     Provide exactly one of `--change`, `--prompt`, or `--issue`:
 
@@ -358,7 +358,7 @@ def run(
                 resolved_home / "projects" / project_name / "workspaces" / task_label
             )
         else:
-            workspace_path = f"/tmp/action-harness-*/{task_label}"
+            workspace_path = f"/tmp/ah-*/{task_label}"
         if issue is not None:
             resolved_mode = "change" if change is not None else "prompt"
             typer.echo(f"Dry-run plan for issue #{issue} (resolved as {resolved_mode}):")
@@ -476,11 +476,11 @@ def clean(
 
     Examples:
 
-        action-harness clean --repo user/app --change fix-bug
+        ah clean --repo user/app --change fix-bug
 
-        action-harness clean --repo user/app
+        ah clean --repo user/app
 
-        action-harness clean --all
+        ah clean --all
     """
     if not all_workspaces and repo is None:
         typer.echo("Error: specify --repo or --all", err=True)
@@ -615,11 +615,11 @@ def assess(
 
     Examples:
 
-        action-harness assess --repo .
+        ah assess --repo .
 
-        action-harness assess --repo ./my-project --json
+        ah assess --repo ./my-project --json
 
-        action-harness assess --repo . --deep --propose
+        ah assess --repo . --deep --propose
     """
     from datetime import UTC, datetime
     from typing import Literal
@@ -787,11 +787,11 @@ def report(
 
     Examples:
 
-        action-harness report --repo .
+        ah report --repo .
 
-        action-harness report --repo . --since 30d
+        ah report --repo . --since 30d
 
-        action-harness report --repo . --json
+        ah report --repo . --json
     """
     import json as json_mod
 
@@ -1239,11 +1239,11 @@ def progress(
 
     Examples:
 
-        action-harness progress --repo .
+        ah progress --repo .
 
-        action-harness progress --repo . --run 2026-03-17T01-00-00-my-change
+        ah progress --repo . --run 2026-03-17T01-00-00-my-change
 
-        action-harness progress --repo . --json
+        ah progress --repo . --json
     """
     from datetime import datetime
 
@@ -1330,7 +1330,7 @@ def tag_shipped_cmd(
 
     Examples:
 
-        action-harness tag-shipped --repo . --pr https://github.com/o/r/pull/1 --label add-logging
+        ah tag-shipped --repo . --pr https://github.com/o/r/pull/1 --label add-logging
     """
     from action_harness.tags import tag_shipped
 
@@ -1370,9 +1370,9 @@ def rollback(
 
     Examples:
 
-        action-harness rollback --repo .
+        ah rollback --repo .
 
-        action-harness rollback --repo . --to harness/pre-merge/add-logging
+        ah rollback --repo . --to harness/pre-merge/add-logging
     """
     from action_harness.tags import get_latest_tag
 
@@ -1471,9 +1471,9 @@ def history(
 
     Examples:
 
-        action-harness history --repo .
+        ah history --repo .
 
-        action-harness history --repo . --json
+        ah history --repo . --json
     """
     import json as json_mod
 
@@ -1515,9 +1515,9 @@ def ready(
 
     Examples:
 
-        action-harness ready --repo .
+        ah ready --repo .
 
-        action-harness ready --repo . --json
+        ah ready --repo . --json
     """
     import json as json_mod
 
@@ -1612,13 +1612,13 @@ def lead_callback(
 
     Examples:
 
-        action-harness lead --repo .
+        ah lead --repo .
 
-        action-harness lead start --repo . --name infra --purpose "Infrastructure work"
+        ah lead start --repo . --name infra --purpose "Infrastructure work"
 
-        action-harness lead list --repo .
+        ah lead list --repo .
 
-        action-harness lead retire my-lead --repo .
+        ah lead retire my-lead --repo .
     """
     if ctx.invoked_subcommand is not None:
         return
@@ -1691,11 +1691,11 @@ def lead_start(
 
     Examples:
 
-        action-harness lead start --repo .
+        ah lead start --repo .
 
-        action-harness lead start --repo . --name infra --purpose "Infrastructure"
+        ah lead start --repo . --name infra --purpose "Infrastructure"
 
-        action-harness lead start --repo . --initial-prompt "Focus on test gaps"
+        ah lead start --repo . --initial-prompt "Focus on test gaps"
     """
     import uuid as uuid_mod
 
@@ -1901,7 +1901,7 @@ def lead_start(
                 try:
                     result = subprocess.run(
                         [
-                            "action-harness",
+                            "ah",
                             "run",
                             "--change",
                             d.change,
@@ -1961,7 +1961,7 @@ def lead_list(
 
     Examples:
 
-        action-harness lead list --repo .
+        ah lead list --repo .
     """
     from action_harness.lead_registry import (
         derive_repo_name,
@@ -2020,7 +2020,7 @@ def lead_retire(
 
     Examples:
 
-        action-harness lead retire my-lead --repo .
+        ah lead retire my-lead --repo .
     """
     from action_harness.lead_registry import (
         derive_repo_name,

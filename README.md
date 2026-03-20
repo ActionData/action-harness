@@ -35,13 +35,13 @@ uv sync
 
 ```bash
 # Run an OpenSpec change against a repo
-action-harness run --change <change-name> --repo <path>
+ah run --change <change-name> --repo <path>
 
 # Run against the harness's own codebase
-action-harness run --change <change-name> --repo .
+ah run --change <change-name> --repo .
 ```
 
-Use `action-harness run --help` for the full set of flags (model, effort, budget, permission mode, etc).
+Use `ah run --help` for the full set of flags (model, effort, budget, permission mode, etc).
 
 ### Development
 

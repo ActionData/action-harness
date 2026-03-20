@@ -965,9 +965,7 @@ class TestLeadCLI:
         assert result.exit_code == 0
         assert "my-change" in result.output
         # Verify harness run was called (among other subprocess calls from assessment)
-        harness_calls = [
-            c for c in mock_dispatch_run.call_args_list if c[0][0][0] == "action-harness"
-        ]
+        harness_calls = [c for c in mock_dispatch_run.call_args_list if c[0][0][0] == "ah"]
         assert len(harness_calls) == 1
         call_cmd = harness_calls[0][0][0]
         assert "run" in call_cmd

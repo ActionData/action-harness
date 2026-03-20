@@ -541,7 +541,7 @@ def dispatch_lead_interactive(
         typer.echo(f"[lead] agent file not found: {exc}", err=True)
         return 1
 
-    session_name = f"[action-harness] Lead (repo: {context.repo_name or repo_path.name})"
+    session_name = f"[ah] Lead (repo: {context.repo_name or repo_path.name})"
 
     cmd = [
         "claude",
@@ -631,7 +631,7 @@ def dispatch_lead(
     system_prompt = persona
     user_prompt = f"{context}\n\n## Your Task\n\n{prompt}"
 
-    session_name = f"[action-harness] Lead (repo: {repo_path.name})"
+    session_name = f"[ah] Lead (repo: {repo_path.name})"
 
     cmd = [
         "claude",

@@ -75,13 +75,13 @@ echo "$HARNESS_WEBHOOK_SECRET"
 ### Start the server
 
 ```bash
-HARNESS_WEBHOOK_SECRET=<your-secret> action-harness serve --port 8080
+HARNESS_WEBHOOK_SECRET=<your-secret> ah serve --port 8080
 ```
 
 Or with a custom harness home:
 
 ```bash
-HARNESS_WEBHOOK_SECRET=<your-secret> action-harness serve \
+HARNESS_WEBHOOK_SECRET=<your-secret> ah serve \
   --port 8080 \
   --harness-home ~/harness
 ```
@@ -104,7 +104,7 @@ Create `~/Library/LaunchAgents/com.actionharness.serve.plist`:
         <string>run</string>
         <string>--project</string>
         <string>/path/to/action-harness</string>
-        <string>action-harness</string>
+        <string>ah</string>
         <string>serve</string>
         <string>--port</string>
         <string>8080</string>

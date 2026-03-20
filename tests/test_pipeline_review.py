@@ -136,7 +136,7 @@ def _low_only_review_results() -> list[ReviewResult]:
 def test_repo(tmp_path: Path) -> Generator[Path]:
     """Create a temporary git repo for testing.
 
-    Cleans up any worktrees created in /tmp/action-harness-* after the test.
+    Cleans up any worktrees created in /tmp/ah-* after the test.
     """
     repo = tmp_path / "repo"
     repo.mkdir()

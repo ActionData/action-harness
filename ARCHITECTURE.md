@@ -7,7 +7,7 @@
 │                        Human Operator                           │
 │                   (intent, judgment, taste)                      │
 └──────────────────────────┬──────────────────────────────────────┘
-                           │ action-harness run
+                           │ ah run
                            ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                     CLI (cli.py)                                │
@@ -99,7 +99,7 @@ src/action_harness/
 ## Pipeline control flow
 
 ```
-action-harness run --change <name> --repo <path>
+ah run --change <name> --repo <path>
 │
 ├─ 0. CHECKPOINT CHECK (if --resume latest)
 │     Load last checkpoint from .action-harness/checkpoints/

@@ -1395,7 +1395,7 @@ def _run_pipeline_inner(
     typer.echo("[pipeline] complete (success)", err=True)
 
     # Clean up temp-dir worktrees on success. Managed workspaces (workspace_dir
-    # is not None) are preserved — cleaned via `action-harness clean`.
+    # is not None) are preserved — cleaned via `ah clean`.
     if workspace_dir is None:
         cleanup_worktree(repo, worktree_path, branch, verbose=verbose)
 

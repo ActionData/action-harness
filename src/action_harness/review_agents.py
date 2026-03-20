@@ -131,9 +131,7 @@ def dispatch_single_review(
     if extra_context is not None:
         user_prompt = f"{user_prompt}\n\n{extra_context}"
 
-    session_name = (
-        f"[action-harness] Review: {agent_name} PR#{pr_number} (repo: {worktree_path.name})"
-    )
+    session_name = f"[ah] Review: {agent_name} PR#{pr_number} (repo: {worktree_path.name})"
     cmd = [
         "claude",
         "-p",

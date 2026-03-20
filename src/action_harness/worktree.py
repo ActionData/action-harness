@@ -136,7 +136,7 @@ def create_worktree(
         workspace_dir.parent.mkdir(parents=True, exist_ok=True)
         worktree_path = workspace_dir
     else:
-        worktree_dir = Path(tempfile.mkdtemp(prefix="action-harness-"))
+        worktree_dir = Path(tempfile.mkdtemp(prefix="ah-"))
         worktree_path = worktree_dir / change_name
 
     if verbose:
@@ -184,7 +184,7 @@ def cleanup_worktree(
 
     On terminal failure: remove worktree, preserve branch for inspection.
     On success with temp dirs: cleaned up after all stages. Managed workspaces:
-    preserved, cleaned via action-harness clean.
+    preserved, cleaned via ah clean.
     """
     typer.echo(f"[worktree] cleaning up {worktree_path}", err=True)
 
@@ -202,10 +202,10 @@ def cleanup_worktree(
         )
 
     # Clean up the directory:
-    # - Temp dirs: parent has prefix "action-harness-", remove parent
+    # - Temp dirs: parent has prefix "ah-", remove parent
     # - Harness-home workspace dirs: remove the worktree directory itself
     parent = worktree_path.parent
-    if parent.name.startswith("action-harness-") and parent.exists():
+    if parent.name.startswith("ah-") and parent.exists():
         shutil.rmtree(parent, ignore_errors=True)
     elif worktree_path.exists():
         shutil.rmtree(worktree_path, ignore_errors=True)

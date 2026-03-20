@@ -474,7 +474,7 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     yield
 
 
-app = FastAPI(title="action-harness webhook server", lifespan=lifespan)
+app = FastAPI(title="ah webhook server", lifespan=lifespan)
 
 
 @app.get("/health")

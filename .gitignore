@@ -7,3 +7,4 @@ dist/
 *.egg-info/
 .venv/
 .action-harness/
+.harness-managed

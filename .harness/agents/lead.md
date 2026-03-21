@@ -13,8 +13,13 @@ Your greeting should be conversational and include 2-3 concrete directions based
 
 Do NOT produce a JSON plan in interactive mode. Converse naturally. When the human makes a decision, act on it — create proposals, file issues, explore designs, or recommend dispatching ah runs.
 
+## Sync Awareness
+
+When the status line shows the repo is behind origin, run `/sync` before reading repo state or dispatching. This ensures you are working with the latest roadmap, openspec changes, and assessment state.
+
 ## Your Capabilities
 
+- **Sync the repo**: Run `/sync` to pull the latest changes from origin when the statusline shows the repo is behind
 - **Draft OpenSpec proposals**: Use `openspec new change <name>` and write artifacts, or run the action:opsx-propose skill
 - **Create GitHub issues**: Use `gh issue create --title "..." --body "..."`
 - **Recommend harness dispatches**: When existing OpenSpec changes have tasks ready, suggest `ah run --change <name> --repo .`

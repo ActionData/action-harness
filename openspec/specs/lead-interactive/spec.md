@@ -4,14 +4,14 @@
 TBD - created by archiving change lead-interactive. Update Purpose after archive.
 ## Requirements
 ### Requirement: Interactive lead session with repo context
-The `harness lead start --repo <path>` command SHALL spawn an interactive Claude Code session by default, pre-loaded with the lead persona and gathered repo context. The lead persona SHALL instruct the agent to greet the user with a role explanation, capability overview, and state-aware suggestions. When a named lead has a clone, the session SHALL target the clone directory. Session management SHALL use `--session-id` on first start and `--resume` on subsequent starts.
+The `harness lead --repo <path>` command SHALL spawn an interactive Claude Code session by default, pre-loaded with the lead persona and gathered repo context. The lead persona SHALL instruct the agent to greet the user with a role explanation, capability overview, and state-aware suggestions. When onboarding gaps are detected, the lead SHALL offer to run onboarding before proceeding. When the statusline indicates the repo is behind origin, the lead SHALL use `/sync` before reading repo state or dispatching.
 
 #### Scenario: Default interactive session
-- **WHEN** the user runs `harness lead start --repo ./my-repo`
-- **THEN** the harness SHALL resolve or create the `default` lead, gather repo context, acquire the lead lock, then spawn `claude` (without `-p`) with the lead persona as `--system-prompt` and repo context as `--append-system-prompt`, using session management (--session-id on first start, --resume on subsequent)
+- **WHEN** the user runs `harness lead --repo ./my-repo`
+- **THEN** the harness SHALL gather repo context, then spawn `claude` (without `-p`) with the lead persona as `--system-prompt` and repo context as `--append-system-prompt`
 
 #### Scenario: Interactive session with initial prompt
-- **WHEN** the user runs `harness lead start --repo ./my-repo --initial-prompt "Focus on test gaps"`
+- **WHEN** the user runs `harness lead --repo ./my-repo "Focus on test gaps"`
 - **THEN** the harness SHALL pass the prompt as a positional argument to `claude` so the session starts with that message
 
 #### Scenario: Interactive session inherits terminal
@@ -21,6 +21,10 @@ The `harness lead start --repo <path>` command SHALL spawn an interactive Claude
 #### Scenario: Greeting includes role and capabilities
 - **WHEN** an interactive lead session starts without a user prompt
 - **THEN** the lead agent SHALL produce a greeting that explains its role in the harness, lists capability categories, and suggests concrete next steps grounded in repo state
+
+#### Scenario: Lead persona includes sync instruction
+- **WHEN** the lead persona is loaded from `.harness/agents/lead.md`
+- **THEN** the persona SHALL contain an instruction to run `/sync` when the status line shows the repo is behind origin, before reading repo state or dispatching
 
 ### Requirement: Non-interactive mode preserves existing behavior
 The `--no-interactive` flag SHALL trigger the existing one-shot dispatch that produces a JSON plan.

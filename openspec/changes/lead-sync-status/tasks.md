@@ -6,10 +6,10 @@
 
 ## 2. Sync Command
 
-- [ ] 2.1 Create `.claude/commands/sync.md` custom slash command that detects whether the repo is a harness-owned clone (`.harness-managed` marker file in repo root) or a user working tree
-- [ ] 2.2 For user working trees: check for uncommitted changes first (abort with warning if dirty), then run `git pull --ff-only`, report result, handle diverged-branch failure with actionable suggestion
-- [ ] 2.3 For harness clones: run `git fetch origin && git reset --hard origin/<default-branch>`, report result
-- [ ] 2.4 After sync, report summary: number of new commits pulled
+- [x] 2.1 Create `.claude/commands/sync.md` custom slash command that detects whether the repo is a harness-owned clone (`.harness-managed` marker file in repo root) or a user working tree
+- [x] 2.2 For user working trees: check for uncommitted changes first (abort with warning if dirty), then run `git pull --ff-only`, report result, handle diverged-branch failure with actionable suggestion
+- [x] 2.3 For harness clones: run `git fetch origin && git reset --hard origin/<default-branch>`, report result
+- [x] 2.4 After sync, report summary: number of new commits pulled
 
 ## 3. Lead Persona Update
 

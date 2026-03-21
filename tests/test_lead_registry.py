@@ -342,6 +342,11 @@ class TestProvisionClone:
         )
         assert result.returncode == 0
 
+        # Verify .harness-managed marker file was created
+        marker = clone_dir / ".harness-managed"
+        assert marker.is_file()
+        assert "managed by the action-harness" in marker.read_text(encoding="utf-8")
+
     def test_clone_idempotent(self, tmp_path: Path) -> None:
         """Calling provision_clone twice returns same path without error."""
         source = tmp_path / "source-repo"

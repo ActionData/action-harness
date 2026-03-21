@@ -43,21 +43,28 @@ CACHE_TTL=30  # seconds
 # --- Read cache or fetch remote SHA ---------------------------------------
 now=$(date +%s)
 remote_sha=""
+cache_hit=false
 
 if [[ -f "$CACHE_FILE" ]]; then
     cache_ts=$(head -1 "$CACHE_FILE" 2>/dev/null || echo 0)
     age=$(( now - cache_ts ))
     if (( age < CACHE_TTL )); then
-        remote_sha=$(tail -1 "$CACHE_FILE" 2>/dev/null || echo "")
+        cached_value=$(sed -n '2p' "$CACHE_FILE" 2>/dev/null || echo "")
+        if [[ "$cached_value" == "NETWORK_ERROR" ]]; then
+            echo "? sync unknown"
+            exit 0
+        fi
+        remote_sha="$cached_value"
+        cache_hit=true
     fi
 fi
 
-if [[ -z "$remote_sha" ]]; then
+if [[ "$cache_hit" == false ]]; then
     # Network call — ls-remote is lightweight (single HTTP request)
     remote_sha=$(git ls-remote origin "refs/heads/${DEFAULT_BRANCH}" 2>/dev/null | cut -f1) || true
     if [[ -z "$remote_sha" ]]; then
-        # Network failure — write empty cache so we don't retry for CACHE_TTL
-        printf '%s\n' "$now" "" > "$CACHE_FILE" 2>/dev/null || true
+        # Network failure — cache sentinel so we don't retry for CACHE_TTL
+        printf '%s\nNETWORK_ERROR\n' "$now" > "$CACHE_FILE" 2>/dev/null || true
         echo "? sync unknown"
         exit 0
     fi

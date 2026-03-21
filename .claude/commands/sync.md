@@ -41,7 +41,16 @@ git pull --ff-only
 If `git pull --ff-only` **fails** (exit code non-zero), report:
 > ❌ Fast-forward failed — your branch has diverged from origin. Try `git pull --rebase` or resolve manually.
 
-## 5. Report summary
+## 5. Invalidate statusline cache
+
+After sync completes (success or failure), delete the statusline cache file so the next statusline invocation gets a fresh remote check:
+```bash
+REPO_ROOT=$(git rev-parse --show-toplevel)
+REPO_HASH=$(printf '%s' "$REPO_ROOT" | shasum -a 256 | cut -c1-12)
+rm -f "/tmp/harness-sync-cache-${REPO_HASH}"
+```
+
+## 6. Report summary
 
 After a successful sync, compare the new `origin/<default-branch>` SHA to `BEFORE_SHA`:
 - If they are the same: report "Already up to date."

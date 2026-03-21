@@ -369,6 +369,19 @@ def provision_clone(state: LeadState, harness_home: Path) -> Path:
             f"git clone failed (exit {clone_result.returncode}): {clone_result.stderr.strip()}"
         )
 
+    # Create .harness-managed marker so /sync can detect harness-owned clones
+    marker_path = clone_dir / ".harness-managed"
+    try:
+        marker_path.write_text(
+            "This clone is managed by the action-harness lead registry.\n",
+            encoding="utf-8",
+        )
+    except OSError as exc:
+        typer.echo(
+            f"[lead-registry] provision_clone: warning: could not create marker: {exc}",
+            err=True,
+        )
+
     typer.echo(
         f"[lead-registry] provision_clone: clone complete at {clone_dir}",
         err=True,

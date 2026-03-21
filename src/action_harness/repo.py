@@ -264,18 +264,20 @@ def resolve_repo(repo_arg: str, harness_home: Path, verbose: bool = False) -> tu
         return local_path.resolve(), local_path.resolve().name
 
     # Bare project name — check if harness_home/projects/<repo_arg>/repo/.git exists
-    bare_project_repo = harness_home / "projects" / repo_arg / "repo"
-    if (bare_project_repo / ".git").exists():
-        typer.echo(f"[repo] resolved bare name '{repo_arg}' to {bare_project_repo}", err=True)
-        return bare_project_repo, repo_arg
+    # Reject path separators to prevent traversal outside the projects directory
+    if "/" not in repo_arg and "\\" not in repo_arg and ".." not in repo_arg:
+        bare_project_repo = harness_home / "projects" / repo_arg / "repo"
+        if (bare_project_repo / ".git").exists():
+            typer.echo(f"[repo] resolved bare name '{repo_arg}' to {bare_project_repo}", err=True)
+            return bare_project_repo.resolve(), repo_arg
 
     # Remote reference — parse, locate/clone, return
     try:
         owner, repo_name, clone_url = _parse_repo_ref(repo_arg)
-    except ValidationError:
+    except ValidationError as e:
         raise ValidationError(
             f'Cannot parse repo reference: {repo_arg}. Run "ah repos" to see available repos.'
-        )
+        ) from e
 
     # For shorthand input, detect auth protocol and swap URL if needed
     if _is_shorthand(repo_arg):

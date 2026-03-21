@@ -36,7 +36,8 @@ DEFAULT_BRANCH=$(detect_default_branch) || exit 0
 
 # --- Cache setup ----------------------------------------------------------
 REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
-REPO_HASH=$(printf '%s' "$REPO_ROOT" | shasum -a 256 | cut -c1-12)
+# Portable SHA-256: prefer sha256sum (Linux), fall back to shasum (macOS)
+REPO_HASH=$(printf '%s' "$REPO_ROOT" | (sha256sum 2>/dev/null || shasum -a 256) | cut -c1-12)
 CACHE_FILE="/tmp/harness-sync-cache-${REPO_HASH}"
 CACHE_TTL=30  # seconds
 
@@ -68,7 +69,9 @@ if [[ "$cache_hit" == false ]]; then
         echo "? sync unknown"
         exit 0
     fi
-    # Write to cache
+    # Write to cache.
+    # Note: this write is not atomic — concurrent invocations could read a
+    # partial file. Acceptable because the worst case is one extra ls-remote.
     printf '%s\n%s\n' "$now" "$remote_sha" > "$CACHE_FILE" 2>/dev/null || true
 fi
 
@@ -78,6 +81,9 @@ local_sha=$(git rev-parse "origin/${DEFAULT_BRANCH}" 2>/dev/null) || {
     exit 0
 }
 
+# Note: this comparison only detects "remote moved ahead". If local is ahead
+# or diverged, it still shows "behind origin". This is intentional — the
+# question we answer is "has main moved on origin?", not full ref topology.
 if [[ "$local_sha" == "$remote_sha" ]]; then
     echo "✓ in sync"
 else

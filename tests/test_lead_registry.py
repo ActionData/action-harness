@@ -377,6 +377,44 @@ class TestProvisionClone:
         path2 = provision_clone(state, harness_home)
         assert path1 == path2
 
+    def test_idempotent_clone_creates_marker_if_missing(self, tmp_path: Path) -> None:
+        """Second call to provision_clone creates marker if it was missing."""
+        source = tmp_path / "source-repo"
+        source.mkdir()
+        subprocess.run(["git", "init"], cwd=source, capture_output=True, timeout=120)
+        subprocess.run(
+            [
+                "git",
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@test.com",
+                "commit",
+                "--allow-empty",
+                "-m",
+                "init",
+            ],
+            cwd=source,
+            capture_output=True,
+            timeout=120,
+        )
+
+        harness_home = tmp_path / "harness"
+        state = _make_state(repo_path=str(source))
+        save_lead_state(state, harness_home)
+
+        clone_dir = provision_clone(state, harness_home)
+        marker = clone_dir / ".harness-managed"
+        assert marker.is_file()
+
+        # Delete marker and re-provision — should recreate it
+        marker.unlink()
+        assert not marker.exists()
+
+        provision_clone(state, harness_home)
+        assert marker.is_file()
+        assert "managed by the action-harness" in marker.read_text(encoding="utf-8")
+
     def test_clone_failure_raises(self, tmp_path: Path) -> None:
         """provision_clone raises RuntimeError when git clone fails."""
         import pytest

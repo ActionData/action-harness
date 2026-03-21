@@ -46,7 +46,7 @@ If `git pull --ff-only` **fails** (exit code non-zero), report:
 After sync completes (success or failure), delete the statusline cache file so the next statusline invocation gets a fresh remote check:
 ```bash
 REPO_ROOT=$(git rev-parse --show-toplevel)
-REPO_HASH=$(printf '%s' "$REPO_ROOT" | shasum -a 256 | cut -c1-12)
+REPO_HASH=$(printf '%s' "$REPO_ROOT" | (sha256sum 2>/dev/null || shasum -a 256) | cut -c1-12)
 rm -f "/tmp/harness-sync-cache-${REPO_HASH}"
 ```
 

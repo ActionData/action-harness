@@ -25,13 +25,23 @@ def _run_statusline(
     )
 
 
-def _init_repo_with_remote(tmp_path: Path) -> tuple[Path, Path]:
+def _init_repo_with_remote(tmp_path: Path, *, branch: str = "main") -> tuple[Path, Path]:
     """Create a bare remote and a clone, returning (clone_dir, remote_dir)."""
     remote = tmp_path / "remote.git"
-    subprocess.run(["git", "init", "--bare", str(remote)], capture_output=True, timeout=120)
+    subprocess.run(
+        ["git", "init", "--bare", f"--initial-branch={branch}", str(remote)],
+        capture_output=True,
+        timeout=120,
+        check=True,
+    )
 
     clone = tmp_path / "repo"
-    subprocess.run(["git", "clone", str(remote), str(clone)], capture_output=True, timeout=120)
+    subprocess.run(
+        ["git", "clone", str(remote), str(clone)],
+        capture_output=True,
+        timeout=120,
+        check=True,
+    )
 
     # Create an initial commit so refs exist
     subprocess.run(
@@ -49,12 +59,14 @@ def _init_repo_with_remote(tmp_path: Path) -> tuple[Path, Path]:
         cwd=str(clone),
         capture_output=True,
         timeout=120,
+        check=True,
     )
     subprocess.run(
-        ["git", "push", "origin", "main"],
+        ["git", "push", "origin", branch],
         cwd=str(clone),
         capture_output=True,
         timeout=120,
+        check=True,
     )
     # Set origin/HEAD so default branch detection works
     subprocess.run(
@@ -62,6 +74,7 @@ def _init_repo_with_remote(tmp_path: Path) -> tuple[Path, Path]:
         cwd=str(clone),
         capture_output=True,
         timeout=120,
+        check=True,
     )
 
     return clone, remote
@@ -97,7 +110,7 @@ class TestStatuslineNoRemote:
         """Statusline should silently exit when there is no 'origin' remote."""
         repo = tmp_path / "repo"
         repo.mkdir()
-        subprocess.run(["git", "init"], cwd=str(repo), capture_output=True, timeout=120)
+        subprocess.run(["git", "init"], cwd=str(repo), capture_output=True, timeout=120, check=True)
 
         result = _run_statusline(str(repo))
         assert result.returncode == 0
@@ -126,6 +139,7 @@ class TestStatuslineBehind:
             ["git", "clone", str(remote), str(clone2)],
             capture_output=True,
             timeout=120,
+            check=True,
         )
         subprocess.run(
             [
@@ -142,12 +156,14 @@ class TestStatuslineBehind:
             cwd=str(clone2),
             capture_output=True,
             timeout=120,
+            check=True,
         )
         subprocess.run(
             ["git", "push", "origin", "main"],
             cwd=str(clone2),
             capture_output=True,
             timeout=120,
+            check=True,
         )
 
         _clear_cache(clone)
@@ -235,9 +251,28 @@ class TestStatuslineDefaultBranchFallback:
             cwd=str(clone),
             capture_output=True,
             timeout=120,
+            check=True,
         )
 
         result = _run_statusline(str(clone))
         assert result.returncode == 0
         # Should still work via fallback
+        assert "in sync" in result.stdout or "behind" in result.stdout
+
+    def test_falls_back_to_master(self, tmp_path: Path) -> None:
+        """When origin/HEAD is not set and no origin/main, falls back to origin/master."""
+        clone, _remote = _init_repo_with_remote(tmp_path, branch="master")
+        _clear_cache(clone)
+
+        # Remove the symbolic-ref so fallback chain kicks in
+        subprocess.run(
+            ["git", "remote", "set-head", "origin", "--delete"],
+            cwd=str(clone),
+            capture_output=True,
+            timeout=120,
+            check=True,
+        )
+
+        result = _run_statusline(str(clone))
+        assert result.returncode == 0
         assert "in sync" in result.stdout or "behind" in result.stdout

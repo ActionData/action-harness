@@ -321,6 +321,23 @@ def is_lead_active(harness_home: Path, repo_name: str, lead_name: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
+def _ensure_harness_managed_marker(clone_dir: Path) -> None:
+    """Create the .harness-managed marker if it doesn't already exist."""
+    marker_path = clone_dir / ".harness-managed"
+    if marker_path.exists():
+        return
+    try:
+        marker_path.write_text(
+            "This clone is managed by the action-harness lead registry.\n",
+            encoding="utf-8",
+        )
+    except OSError as exc:
+        typer.echo(
+            f"[lead-registry] provision_clone: warning: could not create marker: {exc}",
+            err=True,
+        )
+
+
 def provision_clone(state: LeadState, harness_home: Path) -> Path:
     """Provision a full git clone for a named lead.
 
@@ -333,6 +350,8 @@ def provision_clone(state: LeadState, harness_home: Path) -> Path:
             f"[lead-registry] provision_clone: clone already exists at {clone_dir}",
             err=True,
         )
+        # Ensure marker exists even for clones created before this feature
+        _ensure_harness_managed_marker(clone_dir)
         return clone_dir
 
     # Determine clone source: prefer remote URL over local path
@@ -370,17 +389,7 @@ def provision_clone(state: LeadState, harness_home: Path) -> Path:
         )
 
     # Create .harness-managed marker so /sync can detect harness-owned clones
-    marker_path = clone_dir / ".harness-managed"
-    try:
-        marker_path.write_text(
-            "This clone is managed by the action-harness lead registry.\n",
-            encoding="utf-8",
-        )
-    except OSError as exc:
-        typer.echo(
-            f"[lead-registry] provision_clone: warning: could not create marker: {exc}",
-            err=True,
-        )
+    _ensure_harness_managed_marker(clone_dir)
 
     typer.echo(
         f"[lead-registry] provision_clone: clone complete at {clone_dir}",

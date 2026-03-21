@@ -18,6 +18,6 @@
 
 ## 4. Configuration
 
-- [ ] 4.1 Add statusline configuration to `.claude/settings.json` with `"statusLine": {"type": "command", "command": ".harness/statusline.sh"}`
+- [x] 4.1 Add statusline configuration to `.claude/settings.json` with `"statusLine": {"type": "command", "command": ".harness/statusline.sh"}`
 - [ ] 4.2 Add `.harness-managed` marker file creation to `provision_clone` in `lead_registry.py` so harness-owned clones are identifiable
 - [ ] 4.3 Verify statusline script works in a live lead session — indicator appears, updates after responses, cache prevents excessive network calls

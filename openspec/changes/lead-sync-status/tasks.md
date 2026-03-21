@@ -13,8 +13,8 @@
 
 ## 3. Lead Persona Update
 
-- [ ] 3.1 Add sync instruction to `.harness/agents/lead.md`: "When the status line shows the repo is behind origin, run `/sync` before reading repo state or dispatching"
-- [ ] 3.2 Add `/sync` to the lead's capabilities list in the persona
+- [x] 3.1 Add sync instruction to `.harness/agents/lead.md`: "When the status line shows the repo is behind origin, run `/sync` before reading repo state or dispatching"
+- [x] 3.2 Add `/sync` to the lead's capabilities list in the persona
 
 ## 4. Configuration
 

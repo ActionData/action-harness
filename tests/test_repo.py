@@ -146,6 +146,64 @@ class TestResolveRepo:
                 resolve_repo("user/nonexistent", harness_home)
 
 
+class TestResolveRepoBareProjectName:
+    """Test resolve_repo — bare project name resolution."""
+
+    def test_bare_name_resolves_existing_project(self, tmp_path: Path) -> None:
+        """Bare name that matches an existing project returns its repo path."""
+        harness_home = tmp_path / "harness"
+        repo_dir = harness_home / "projects" / "my-app" / "repo"
+        repo_dir.mkdir(parents=True)
+        (repo_dir / ".git").mkdir()
+
+        path, name = resolve_repo("my-app", harness_home)
+        assert path == repo_dir.resolve()
+        assert name == "my-app"
+
+    def test_bare_name_miss_with_improved_error(self, tmp_path: Path) -> None:
+        """Bare name that doesn't match a project and can't be parsed shows improved error."""
+        harness_home = tmp_path / "harness"
+
+        with pytest.raises(
+            ValidationError,
+            match=r'Cannot parse repo reference: not-a-repo.*Run "ah repos" to see available repos',
+        ):
+            resolve_repo("not-a-repo", harness_home)
+
+    def test_bare_name_without_git_dir_falls_through(self, tmp_path: Path) -> None:
+        """Bare name with project dir but no .git falls through to parse."""
+        harness_home = tmp_path / "harness"
+        # Create the project dir structure but no .git
+        repo_dir = harness_home / "projects" / "my-app" / "repo"
+        repo_dir.mkdir(parents=True)
+
+        # "my-app" is not a valid repo ref, so it should raise with improved error
+        with pytest.raises(
+            ValidationError,
+            match=r'Cannot parse repo reference: my-app.*Run "ah repos"',
+        ):
+            resolve_repo("my-app", harness_home)
+
+    def test_bare_name_with_path_traversal_skips_lookup(self, tmp_path: Path) -> None:
+        """Bare name containing path separators or '..' skips bare-name resolution."""
+        harness_home = tmp_path / "harness"
+        # Create a .git at the traversed path so it would match without the guard
+        escaped_dir = harness_home / "projects" / ".." / ".." / "etc" / "repo"
+        escaped_dir.mkdir(parents=True)
+        (escaped_dir / ".git").mkdir()
+
+        # Should NOT resolve via bare-name; falls through to _parse_repo_ref which rejects it
+        with pytest.raises(ValidationError, match=r'Run "ah repos"'):
+            resolve_repo("../../etc", harness_home)
+
+    def test_bare_name_with_backslash_traversal_skips_lookup(self, tmp_path: Path) -> None:
+        """Bare name containing backslash path separators skips bare-name resolution."""
+        harness_home = tmp_path / "harness"
+
+        with pytest.raises(ValidationError, match=r'Run "ah repos"'):
+            resolve_repo("..\\..\\etc", harness_home)
+
+
 class TestGetRepoDir:
     """Test _get_repo_dir — default path, collision detection, fallback."""
 

@@ -21,7 +21,7 @@ Use `typer.echo(..., err=True)` for all diagnostic output. Never use `print()` o
 
 ## OpenSpec changes
 
-When implementing an OpenSpec change, use the `action:opsx-apply` skill to work through the task list. Commit incrementally after completing each task or logical group of tasks.
+When implementing an OpenSpec change, use the `opsx-apply` skill to work through the task list. Commit incrementally after completing each task or logical group of tasks.
 
 ## Code conventions
 

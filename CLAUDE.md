@@ -100,7 +100,8 @@ Agent prompts are stored as markdown files with YAML frontmatter. Two directorie
 | `openspec-reviewer.md` | OpenSpec lifecycle validation, structural checks, semantic review |
 | `spec-writer.md` | Writes and reviews proposals, specs, designs, task breakdowns |
 
-**`agents/`** — plugin agents available to Claude Code in interactive sessions. These appear in Claude Code's agent picker when the plugin is installed and run in the current working directory (not in worktrees).
+
+**`agents/`** — plugin agents available to Claude Code in interactive sessions. These are bundled with the `action` plugin and appear in Claude Code's agent picker. They run in the current working directory (not in worktrees).
 
 | Agent | Purpose |
 |-------|---------|
@@ -108,7 +109,8 @@ Agent prompts are stored as markdown files with YAML frontmatter. Two directorie
 
 **When to add agents:**
 - Pipeline agents (autonomous, dispatched by harness) → `.harness/agents/`
-- Interactive agents (conversational, invoked by human via Claude Code) → `agents/`
+
+- Interactive agents (conversational, invoked by human via Claude Code) → `agents/` (plugin agents)
 
 ## HARNESS.md convention
 
@@ -116,7 +118,7 @@ Agent prompts are stored as markdown files with YAML frontmatter. Two directorie
 
 **What belongs in HARNESS.md:**
 - Eval commands and test instructions for autonomous workers
-- Skill invocations the worker should use (e.g., `action:opsx-apply`)
+- Skill invocations the worker should use (e.g., `opsx-apply`)
 - Retry hints for flaky tests or known issues
 - Path restrictions or files to avoid
 - Migration context or temporary workarounds

@@ -95,7 +95,7 @@ The minimum loop that can work on itself:
    `harness/<change-name>`. Agent works there, never the main checkout.
 
 3. **Code agent dispatch** — Launch Claude Code CLI in the worktree with a
-   system prompt instructing it to run `opsx:apply` on the change.
+   system prompt instructing it to run `opsx-apply` on the change.
 
 4. **Evaluation** — Run eval commands (pytest, ruff, mypy) as subprocesses.
    Binary pass/fail from exit codes.

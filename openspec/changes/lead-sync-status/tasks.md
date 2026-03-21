@@ -1,8 +1,8 @@
 ## 1. Statusline Script
 
-- [ ] 1.1 Create `.harness/statusline.sh` script that detects the default branch (`git symbolic-ref refs/remotes/origin/HEAD`, fallback `main` then `master`), runs `git ls-remote origin refs/heads/<default-branch>` (with cache), compares to local `git rev-parse origin/<default-branch>`, and outputs a sync status indicator
-- [ ] 1.2 Implement 30-second cache using a temp file at `/tmp/harness-sync-cache-<hash>` where hash is SHA-256 of the absolute repo path truncated to 12 hex characters, storing remote SHA and timestamp
-- [ ] 1.3 Handle edge cases: not a git repo (omit indicator), no remote (omit indicator), network failure (show neutral indicator), default branch detection failure (try `main` then `master`)
+- [x] 1.1 Create `.harness/statusline.sh` script that detects the default branch (`git symbolic-ref refs/remotes/origin/HEAD`, fallback `main` then `master`), runs `git ls-remote origin refs/heads/<default-branch>` (with cache), compares to local `git rev-parse origin/<default-branch>`, and outputs a sync status indicator
+- [x] 1.2 Implement 30-second cache using a temp file at `/tmp/harness-sync-cache-<hash>` where hash is SHA-256 of the absolute repo path truncated to 12 hex characters, storing remote SHA and timestamp
+- [x] 1.3 Handle edge cases: not a git repo (omit indicator), no remote (omit indicator), network failure (show neutral indicator), default branch detection failure (try `main` then `master`)
 
 ## 2. Sync Command
 

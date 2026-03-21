@@ -196,6 +196,13 @@ class TestResolveRepoBareProjectName:
         with pytest.raises(ValidationError, match=r'Run "ah repos"'):
             resolve_repo("../../etc", harness_home)
 
+    def test_bare_name_with_backslash_traversal_skips_lookup(self, tmp_path: Path) -> None:
+        """Bare name containing backslash path separators skips bare-name resolution."""
+        harness_home = tmp_path / "harness"
+
+        with pytest.raises(ValidationError, match=r'Run "ah repos"'):
+            resolve_repo("..\\..\\etc", harness_home)
+
 
 class TestGetRepoDir:
     """Test _get_repo_dir — default path, collision detection, fallback."""

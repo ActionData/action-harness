@@ -252,9 +252,12 @@ def _clone_or_fetch(clone_url: str, repo_dir: Path, verbose: bool) -> None:
 def resolve_repo(repo_arg: str, harness_home: Path, verbose: bool = False) -> tuple[Path, str]:
     """Resolve a --repo argument to (local_path, repo_name).
 
-    If repo_arg is an existing local directory, return it directly.
-    If it's a GitHub shorthand, HTTPS URL, or SSH URL, clone or locate
-    the repo under harness_home/projects/<name>/repo/ and return the clone path.
+    Resolution order:
+    1. Local path — if repo_arg is an existing directory, return it directly.
+    2. Bare project name — if harness_home/projects/<repo_arg>/repo/.git exists,
+       return that path and repo_arg as the name (no clone/fetch).
+    3. Remote reference — parse as GitHub shorthand, HTTPS URL, or SSH URL,
+       clone or locate under harness_home/projects/<name>/repo/.
 
     Raises ValidationError if the repo cannot be resolved or cloned.
     """
@@ -264,11 +267,16 @@ def resolve_repo(repo_arg: str, harness_home: Path, verbose: bool = False) -> tu
         return local_path.resolve(), local_path.resolve().name
 
     # Bare project name — check if harness_home/projects/<repo_arg>/repo/.git exists
-    # Reject path separators to prevent traversal outside the projects directory
+    # Reject path separators to prevent traversal outside the projects directory.
+    # NOTE: The ".." check is a substring match, so project names containing ".."
+    # (e.g., "foo..bar") are rejected. This is acceptable — such names are
+    # pathological and not worth special-casing.
     if "/" not in repo_arg and "\\" not in repo_arg and ".." not in repo_arg:
         bare_project_repo = harness_home / "projects" / repo_arg / "repo"
         if (bare_project_repo / ".git").exists():
             typer.echo(f"[repo] resolved bare name '{repo_arg}' to {bare_project_repo}", err=True)
+            # repo_arg is used as-is for the name — it passed the traversal
+            # guard above, so it's a simple name without path components.
             return bare_project_repo.resolve(), repo_arg
 
     # Remote reference — parse, locate/clone, return
